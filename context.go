@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"html/template"
 	"net/http"
 	"path/filepath"
@@ -235,6 +236,11 @@ func (context *Context) Encode(action string, result interface{}) error {
 		Context:  context,
 		Result:   result,
 	}
+
+	if layout, ok := context.Request.URL.Query()["display"]; ok {
+		encoder.Layout = "display." + layout[0]
+	}
+
 	return context.Admin.Encode(context.Writer, encoder)
 }
 

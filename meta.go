@@ -21,6 +21,7 @@ type Meta struct {
 	Type            string
 	Label           string
 	FieldName       string
+	EncodedName 	string
 	Setter          func(resource interface{}, metaValue *resource.MetaValue, context *qor.Context)
 	Valuer          func(interface{}, *qor.Context) interface{}
 	FormattedValuer func(interface{}, *qor.Context) interface{}
@@ -115,6 +116,7 @@ func (meta *Meta) updateMeta() {
 		meta.Meta = &resource.Meta{
 			Name:            meta.Name,
 			FieldName:       meta.FieldName,
+			EncodedName:     meta.EncodedName,
 			Setter:          meta.Setter,
 			Valuer:          meta.Valuer,
 			FormattedValuer: meta.FormattedValuer,
@@ -126,6 +128,7 @@ func (meta *Meta) updateMeta() {
 	} else {
 		meta.Meta.Name = meta.Name
 		meta.Meta.FieldName = meta.FieldName
+		meta.Meta.EncodedName = meta.EncodedName
 		meta.Meta.Setter = meta.Setter
 		meta.Meta.Valuer = meta.Valuer
 		meta.Meta.FormattedValuer = meta.FormattedValuer

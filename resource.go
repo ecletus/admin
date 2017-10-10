@@ -36,6 +36,7 @@ type Resource struct {
 	showSections   []*Section
 	isSetShowAttrs bool
 	cachedMetas    *map[string][]*Meta
+	customSections *map[string]*[]*Section
 }
 
 // Meta register meta for admin resource
@@ -328,6 +329,39 @@ func (res *Resource) getAttrs(attrs []string) []string {
 	}
 	return attrs
 }
+
+func (res *Resource) GetCustomAttrs(name string) ([]*Section, bool) {
+	if res.customSections == nil {
+		return nil, false
+	}
+	sections, ok := (*res.customSections)[name]
+	fmt.Println(name)
+	if ok {
+		return *sections, ok
+	} else {
+		return nil, false
+	}
+}
+
+// IndexAttrs set attributes will be shown in the index page
+//     // show given attributes in the index page
+//     order.IndexAttrs("User", "PaymentAmount", "ShippedAt", "CancelledAt", "State", "ShippingAddress")
+//     // show all attributes except `State` in the index page
+//     order.IndexAttrs("-State")
+func (res *Resource) CustomAttrs(name string, values ...interface{}) []*Section {
+	if res.customSections == nil {
+		res.customSections = &map[string]*[]*Section{}
+	}
+
+	sections := &[]*Section{}
+	res.setSections(sections, values...)
+	(*res.customSections)[name] = sections
+	fmt.Println(sections)
+
+	return *sections
+}
+
+
 
 // IndexAttrs set attributes will be shown in the index page
 //     // show given attributes in the index page

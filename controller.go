@@ -30,6 +30,7 @@ func (ac *Controller) Dashboard(context *Context) {
 
 // Index render index page
 func (ac *Controller) Index(context *Context) {
+	context.Readonly()
 	result, err := context.FindMany()
 	context.AddError(err)
 
@@ -66,13 +67,13 @@ func (ac *Controller) SearchCenter(context *Context) {
 
 // New render new page
 func (ac *Controller) New(context *Context) {
-	context.Execute("new", context.Resource.NewStruct())
+	context.Execute("new", context.Resource.NewStruct(context.Context.Site))
 }
 
 // Create create data
 func (ac *Controller) Create(context *Context) {
 	res := context.Resource
-	result := res.NewStruct()
+	result := res.NewStruct(context.Context.Site)
 	if context.AddError(res.Decode(context.Context, result)); !context.HasError() {
 		context.AddError(res.CallSave(result, context.Context))
 	}
@@ -100,7 +101,7 @@ func (ac *Controller) renderSingleton(context *Context) (interface{}, bool, erro
 	var err error
 
 	if context.Resource.Config.Singleton {
-		result = context.Resource.NewStruct()
+		result = context.Resource.NewStruct(context.Context.Site)
 		if err = context.Resource.CallFindMany(result, context.Context); err == gorm.ErrRecordNotFound {
 			context.Execute("new", result)
 			return nil, true, nil
@@ -113,6 +114,7 @@ func (ac *Controller) renderSingleton(context *Context) (interface{}, bool, erro
 
 // Show render show page
 func (ac *Controller) Show(context *Context) {
+	context.Readonly()
 	result, rendered, err := ac.renderSingleton(context)
 	if rendered {
 		return
@@ -148,7 +150,7 @@ func (ac *Controller) Update(context *Context) {
 
 	// If singleton Resource
 	if context.Resource.Config.Singleton {
-		result = context.Resource.NewStruct()
+		result = context.Resource.NewStruct(context.Context.Site)
 		context.Resource.CallFindMany(result, context.Context)
 	} else {
 		result, err = context.FindOne()
@@ -157,7 +159,8 @@ func (ac *Controller) Update(context *Context) {
 
 	res := context.Resource
 	if !context.HasError() {
-		if context.AddError(res.Decode(context.Context, result)); !context.HasError() {
+		decerror := res.Decode(context.Context, result)
+		if context.AddError(decerror); !context.HasError() {
 			context.AddError(res.CallSave(result, context.Context))
 		}
 	}
@@ -184,7 +187,7 @@ func (ac *Controller) Delete(context *Context) {
 	res := context.Resource
 	status := http.StatusOK
 
-	if context.AddError(res.CallDelete(res.NewStruct(), context.Context)); context.HasError() {
+	if context.AddError(res.CallDelete(res.NewStruct(context.Context.Site), context.Context)); context.HasError() {
 		context.Flash(string(context.t("qor_admin.form.failed_to_delete", "Failed to delete {{.Name}}", res)), "error")
 		status = http.StatusNotFound
 	}
@@ -199,6 +202,14 @@ func (ac *Controller) Delete(context *Context) {
 // Action handle action related requests
 func (ac *Controller) Action(context *Context) {
 	var action = ac.action
+
+	if action.Available != nil {
+		if !action.Available(context) {
+			context.Writer.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	}
+
 	if context.Request.Method == "GET" {
 		context.Execute("action", action)
 	} else {
@@ -212,7 +223,7 @@ func (ac *Controller) Action(context *Context) {
 		}
 
 		if action.Resource != nil {
-			result := action.Resource.NewStruct()
+			result := action.Resource.NewStruct(context.Context.Site)
 			action.Resource.Decode(context.Context, result)
 			actionArgument.Argument = result
 		}

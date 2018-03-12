@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+	"fmt"
+	"strings"
 
 	"github.com/jinzhu/gorm"
 	"github.com/qor/qor"
@@ -19,9 +21,12 @@ import (
 type Meta struct {
 	Name            string
 	Type            string
+	TypeHander      func(context *Context, meta *Meta) string
+	Enabled         func(context *Context, meta *Meta) bool
 	Label           string
 	FieldName       string
-	EncodedName 	string
+	FieldLabel      bool
+	EncodedName     string
 	Setter          func(resource interface{}, metaValue *resource.MetaValue, context *qor.Context)
 	Valuer          func(interface{}, *qor.Context) interface{}
 	FormattedValuer func(interface{}, *qor.Context) interface{}
@@ -29,10 +34,32 @@ type Meta struct {
 	Permission      *roles.Permission
 	Config          MetaConfigInterface
 
-	Metas      []resource.Metaor
-	Collection interface{}
+	Metas        []resource.Metaor
+	Collection   interface{}
 	*resource.Meta
 	baseResource *Resource
+	EditName     string
+}
+
+func (meta *Meta) GetType(context *Context) string {
+	if meta.TypeHander != nil {
+		return meta.TypeHander(context, meta)
+	}
+	return meta.Type
+}
+
+func (meta *Meta) GetLabelPair() (string, string) {
+	name := meta.Name
+
+	if meta.FieldLabel && meta.FieldName != "" {
+		name = meta.FieldName
+	}
+
+	if meta.EditName != "" {
+		return meta.baseResource.GetMeta(meta.EditName).GetLabelPair()
+	}
+
+	return fmt.Sprintf("%v.attributes.%v", meta.baseResource.I18nPrefix, name), meta.Label
 }
 
 // metaConfig meta config
@@ -112,6 +139,9 @@ func (meta Meta) HasPermission(mode roles.PermissionMode, context *qor.Context) 
 }
 
 func (meta *Meta) updateMeta() {
+	if meta.EditName == "-#" {
+		meta.EditName = strings.TrimSuffix(meta.Name, "ID")
+	}
 	if meta.Meta == nil {
 		meta.Meta = &resource.Meta{
 			Name:            meta.Name,
@@ -124,6 +154,7 @@ func (meta *Meta) updateMeta() {
 			Resource:        meta.Resource,
 			Permission:      meta.Permission,
 			Config:          meta.Config,
+			EditName:        meta.EditName,
 		}
 	} else {
 		meta.Meta.Name = meta.Name
@@ -136,6 +167,7 @@ func (meta *Meta) updateMeta() {
 		meta.Meta.Resource = meta.Resource
 		meta.Meta.Permission = meta.Permission
 		meta.Meta.Config = meta.Config
+		meta.Meta.EditName = meta.EditName
 	}
 
 	meta.PreInitialize()
@@ -241,11 +273,11 @@ func (meta *Meta) updateMeta() {
 						if len(primaryKeys) > 0 {
 							// set current field value to blank and replace it with new value
 							field.Set(reflect.Zero(field.Type()))
-							context.GetDB().Where(primaryKeys).Find(field.Addr().Interface())
+							context.DB.Where(primaryKeys).Find(field.Addr().Interface())
 						}
 
 						if !scope.PrimaryKeyZero() {
-							context.GetDB().Model(resource).Association(meta.FieldName).Replace(field.Interface())
+							context.DB.Model(resource).Association(meta.FieldName).Replace(field.Interface())
 							field.Set(reflect.Zero(field.Type()))
 						}
 					})

@@ -46,14 +46,17 @@ func (res *Resource) Filter(filter *Filter) {
 	}
 
 	if filter.Type != "" {
-		res.filters = append(res.filters, filter)
+		res.filters[filter.Name] = filter
 	} else {
 		utils.ExitWithMsg("Invalid filter definition %v for resource %v", filter.Name, res.Name)
 	}
 }
 
-func (res *Resource) GetFilters() []*Filter {
-	return res.filters
+func (res *Resource) GetFilters() (filters []*Filter) {
+	for _, filter := range res.filters {
+		filters = append(filters, filter)
+	}
+	return
 }
 
 // Filter filter definiation

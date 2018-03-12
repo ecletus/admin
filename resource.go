@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/inflection"
@@ -13,7 +15,60 @@ import (
 	"github.com/qor/qor/resource"
 	"github.com/qor/qor/utils"
 	"github.com/qor/roles"
+	"github.com/moisespsena/template/html/template"
 )
+
+type SubResourceConfig struct {
+	FieldName     string
+	LabelPlural   string
+	LabelSingular string
+	IconSingular  string
+	IconPlural    string
+	Invisible     bool
+}
+
+type SubResource struct {
+	Resource *Resource
+	Config   *SubResourceConfig
+}
+
+func (res *SubResource) CreateMenu(plural bool, parentParams ...string) *Menu {
+	menu := res.Resource.CreateMenu(plural)
+	if plural {
+		if res.Config.LabelPlural != "" {
+			menu.Label = res.Config.LabelPlural
+		}
+		if res.Config.IconPlural != "" {
+			menu.Icon = res.Config.IconPlural
+		}
+	} else {
+		if res.Config.LabelSingular != "" {
+			menu.Label = res.Config.LabelSingular
+		}
+		if res.Config.IconSingular != "" {
+			menu.Icon = res.Config.IconSingular
+		}
+	}
+
+	var path []string
+	for i, r := 0, res.Resource.ParentResource; r != nil; i++ {
+		path = append(path, parentParams[i], r.ToParam())
+		r = r.ParentResource
+	}
+
+	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+		path[i], path[j] = path[j], path[i]
+	}
+
+	path = append(path, res.Resource.ToParam())
+	menu.RelativePath = strings.Join(path, "/")
+
+	return menu
+}
+
+func (res *SubResource) CreateDefaultMenu(parentParams ...string) *Menu {
+	return res.CreateMenu(!res.Resource.Config.Singleton, parentParams...)
+}
 
 // Resource is the most important thing for qor admin, every model is defined as a resource, qor admin will genetate management interface based on its definition
 type Resource struct {
@@ -24,19 +79,51 @@ type Resource struct {
 	SearchHandler  func(keyword string, context *qor.Context) *gorm.DB
 	ParentResource *Resource
 
-	admin          *Admin
-	params         string
-	mounted        bool
-	scopes         []*Scope
-	filters        []*Filter
-	sortableAttrs  *[]string
-	indexSections  []*Section
-	newSections    []*Section
-	editSections   []*Section
-	showSections   []*Section
-	isSetShowAttrs bool
-	cachedMetas    *map[string][]*Meta
-	customSections *map[string]*[]*Section
+	admin           *Admin
+	params          string
+	mounted         bool
+	scopes          []*Scope
+	filters         map[string]*Filter
+	sortableAttrs   *[]string
+	indexSections   []*Section
+	newSections     []*Section
+	editSections    []*Section
+	showSections    []*Section
+	isSetShowAttrs  bool
+	cachedMetas     *map[string][]*Meta
+	customSections  *map[string]*[]*Section
+	AdminController *Controller
+	SubResources    map[string]*SubResource
+}
+
+func (res *Resource) GetLabelKey(plural bool) string {
+	r := res.I18nPrefix + ".label"
+	if plural {
+		r += "~p"
+	} else {
+		r += "~s"
+	}
+	return r
+}
+
+func (res *Resource) GetDefaultLabel(plural bool) string {
+	if plural {
+		return inflection.Plural(res.Name)
+	} else {
+		return res.Name
+	}
+}
+
+func (res *Resource) GetLabel(context *Context, plural bool) string {
+	return string(context.t(res.GetLabelKey(plural), res.GetDefaultLabel(plural)))
+}
+
+func (res *Resource) GetActionLabelKey(action *Action) string {
+	return fmt.Sprintf("resources.%v.actions.%v", res.ToParam(), action.Label)
+}
+
+func (res *Resource) GetActionLabel(context *Context, action *Action) template.HTML {
+	return context.t(res.GetActionLabelKey(action), action.Label)
 }
 
 // Meta register meta for admin resource
@@ -45,6 +132,14 @@ func (res *Resource) Meta(meta *Meta) *Meta {
 		if meta.Type != "" {
 			oldMeta.Type = meta.Type
 			oldMeta.Config = nil
+		}
+
+		if meta.TypeHander != nil {
+			oldMeta.TypeHander = meta.TypeHander
+		}
+
+		if meta.Enabled != nil {
+			oldMeta.Enabled = meta.Enabled
 		}
 
 		if meta.Label != "" {
@@ -82,6 +177,14 @@ func (res *Resource) Meta(meta *Meta) *Meta {
 		if meta.Collection != nil {
 			oldMeta.Collection = meta.Collection
 		}
+
+		if meta.EditName != "" {
+			if meta.EditName == "-#" {
+				meta.EditName = strings.TrimSuffix(meta.Name, "ID")
+			}
+			oldMeta.EditName = meta.EditName
+		}
+
 		meta = oldMeta
 	} else {
 		res.Metas = append(res.Metas, meta)
@@ -95,6 +198,32 @@ func (res *Resource) Meta(meta *Meta) *Meta {
 // GetAdmin get admin from resource
 func (res Resource) GetAdmin() *Admin {
 	return res.admin
+}
+
+// GetURL
+func (res Resource) GetPrefix(context *Context, parentkeys ... string) string {
+	var params string
+	if res.ParentResource != nil {
+		if context == nil {
+			params = path.Join(res.ParentResource.GetPrefix(nil, parentkeys[0:len(parentkeys)-1]...), parentkeys[len(parentkeys)-1])
+		} else {
+			params = path.Join(res.ParentResource.GetPrefix(context), res.ParentResource.GetPrimaryValue(context.Request))
+		}
+	}
+	return params
+}
+
+// GetURL
+func (res Resource) GetURI(context *Context, parentkeys ... string) string {
+	return context.GenURL(path.Join(res.GetPrefix(context, parentkeys...), res.ToParam()))
+}
+
+// GetURL
+func (res Resource) GetURIForKey(context *Context, key string, parentkeys ... string) string {
+	if key == "" {
+		key = res.GetPrimaryValue(context.Request)
+	}
+	return path.Join(res.GetURI(context, parentkeys...), key)
 }
 
 // GetPrimaryValue get priamry value from request
@@ -113,12 +242,14 @@ func (res Resource) ParamIDName() string {
 // ToParam used as urls to register routes for resource
 func (res *Resource) ToParam() string {
 	if res.params == "" {
-		if value, ok := res.Value.(interface {
+		if res.Config.Param != "" {
+			res.params = res.Config.Param
+		} else if value, ok := res.Value.(interface {
 			ToParam() string
 		}); ok {
 			res.params = value.ToParam()
 		} else {
-			if res.Config.Singleton == true {
+			if res.Config.Singleton {
 				res.params = utils.ToParamString(res.Name)
 			}
 			res.params = utils.ToParamString(inflection.Plural(res.Name))
@@ -173,17 +304,43 @@ func (res *Resource) NewResource(value interface{}, config ...*Config) *Resource
 }
 
 // AddSubResource register sub-resource
-func (res *Resource) AddSubResource(fieldName string, config ...*Config) (subRes *Resource, err error) {
+func (res *Resource) AddSubResource(resourceConfig *SubResourceConfig, config ...*Config) (subRes *Resource, err error) {
 	var (
 		admin = res.GetAdmin()
 		scope = &gorm.Scope{Value: res.Value}
 	)
 
-	if field, ok := scope.FieldByName(fieldName); ok && field.Relationship != nil {
+	if field, ok := scope.FieldByName(resourceConfig.FieldName); ok && field.Relationship != nil {
 		modelType := utils.ModelType(reflect.New(field.Struct.Type).Interface())
-		subRes = admin.NewResource(reflect.New(modelType).Interface(), config...)
+
+		var cfg *Config
+		if len(config) > 0 {
+			cfg = config[0]
+		} else {
+			cfg = &Config{}
+		}
+
+		if cfg.Name == "" {
+			cfg.Name = resourceConfig.FieldName
+		}
+
+		if cfg.Param == "" {
+			cfg.Param = utils.ToParamString(cfg.Name)
+		}
+
+		subRes = admin.NewResource(reflect.New(modelType).Interface(), cfg)
+		localParam := subRes.ToParam()
 		subRes.setupParentResource(field.StructField.Name, res)
-		admin.RegisterResourceRouters(subRes, "create", "update", "read", "delete")
+		subRes.RegisterDefaultRouters()
+
+		if res.SubResources == nil {
+			res.SubResources = make(map[string]*SubResource)
+		}
+
+		sres := &SubResource{subRes, resourceConfig}
+
+		res.SubResources[localParam] = sres
+
 		return
 	}
 
@@ -202,10 +359,10 @@ func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
 
 		if primaryKey := res.GetPrimaryValue(context.Request); primaryKey != "" {
 			clone := context.Clone()
-			parentValue := parent.NewStruct()
+			parentValue := parent.NewStruct(context.Site)
 			if err = parent.FindOneHandler(parentValue, nil, clone); err == nil {
 				primaryQuerySQL, primaryParams := res.ToPrimaryQueryParams(primaryKey, context)
-				err = context.GetDB().Model(parentValue).Where(primaryQuerySQL, primaryParams...).Related(value).Error
+				err = context.DB.Model(parentValue).Where(primaryQuerySQL, primaryParams...).Related(value).Error
 			}
 		}
 		return
@@ -215,12 +372,12 @@ func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
 		var (
 			err         error
 			clone       = context.Clone()
-			parentValue = parent.NewStruct()
+			parentValue = parent.NewStruct(context.Site)
 		)
 
 		if err = parent.FindOneHandler(parentValue, nil, clone); err == nil {
 			parent.FindOneHandler(parentValue, nil, clone)
-			return context.GetDB().Model(parentValue).Related(value).Error
+			return context.DB.Model(parentValue).Related(value).Error
 		}
 		return err
 	}
@@ -229,25 +386,25 @@ func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
 		var (
 			err         error
 			clone       = context.Clone()
-			parentValue = parent.NewStruct()
+			parentValue = parent.NewStruct(context.Site)
 		)
 
 		if err = parent.FindOneHandler(parentValue, nil, clone); err == nil {
 			parent.FindOneHandler(parentValue, nil, clone)
-			return context.GetDB().Model(parentValue).Association(fieldName).Append(value).Error
+			return context.DB.Model(parentValue).Association(fieldName).Append(value).Error
 		}
 		return err
 	}
 
 	res.DeleteHandler = func(value interface{}, context *qor.Context) (err error) {
 		var clone = context.Clone()
-		var parentValue = parent.NewStruct()
+		var parentValue = parent.NewStruct(context.Site)
 		if primaryKey := res.GetPrimaryValue(context.Request); primaryKey != "" {
 			primaryQuerySQL, primaryParams := res.ToPrimaryQueryParams(primaryKey, context)
-			if err = context.GetDB().Where(primaryQuerySQL, primaryParams...).First(value).Error; err == nil {
+			if err = context.DB.Where(primaryQuerySQL, primaryParams...).First(value).Error; err == nil {
 				if err = parent.FindOneHandler(parentValue, nil, clone); err == nil {
 					parent.FindOneHandler(parentValue, nil, clone)
-					return context.GetDB().Model(parentValue).Association(fieldName).Delete(value).Error
+					return context.DB.Model(parentValue).Association(fieldName).Delete(value).Error
 				}
 			}
 		}
@@ -335,7 +492,6 @@ func (res *Resource) GetCustomAttrs(name string) ([]*Section, bool) {
 		return nil, false
 	}
 	sections, ok := (*res.customSections)[name]
-	fmt.Println(name)
 	if ok {
 		return *sections, ok
 	} else {
@@ -356,12 +512,9 @@ func (res *Resource) CustomAttrs(name string, values ...interface{}) []*Section 
 	sections := &[]*Section{}
 	res.setSections(sections, values...)
 	(*res.customSections)[name] = sections
-	fmt.Println(sections)
 
 	return *sections
 }
-
-
 
 // IndexAttrs set attributes will be shown in the index page
 //     // show given attributes in the index page
@@ -466,7 +619,7 @@ func (res *Resource) SortableAttrs(columns ...string) []string {
 			columns = res.ConvertSectionToStrings(res.indexSections)
 		}
 		res.sortableAttrs = &[]string{}
-		scope := res.GetAdmin().Config.DB.NewScope(res.Value)
+		scope := qor.FakeDB.NewScope(res.Value)
 		for _, column := range columns {
 			if field, ok := scope.FieldByName(column); ok && field.DBName != "" {
 				attrs := append(*res.sortableAttrs, column)
@@ -492,7 +645,7 @@ func (res *Resource) SearchAttrs(columns ...string) []string {
 				for _, column := range columns {
 					filterFields = append(filterFields, filterField{FieldName: column})
 				}
-				return filterResourceByFields(res, filterFields, keyword, context.GetDB(), context)
+				return filterResourceByFields(res, filterFields, keyword, context.DB, context)
 			}
 		}
 	}
@@ -582,7 +735,7 @@ func (res *Resource) GetMeta(name string) *Meta {
 	}
 
 	if fallbackMeta == nil {
-		if field, ok := res.GetAdmin().Config.DB.NewScope(res.Value).FieldByName(name); ok {
+		if field, ok := qor.FakeDB.NewScope(res.Value).FieldByName(name); ok {
 			meta := &Meta{Name: name, baseResource: res}
 			if field.IsPrimaryKey {
 				meta.Type = "hidden_primary_key"
@@ -604,11 +757,17 @@ func (res *Resource) allowedSections(sections []*Section, context *Context, role
 		for _, row := range section.Rows {
 			var editableColumns []string
 			for _, column := range row {
-				for _, role := range roles {
-					meta := res.GetMeta(column)
-					if meta != nil && meta.HasPermission(role, context.Context) {
-						editableColumns = append(editableColumns, column)
-						break
+				meta := res.GetMeta(column)
+				if meta != nil {
+					if meta.Enabled != nil && !meta.Enabled(context, meta) {
+						continue
+					}
+
+					for _, role := range roles {
+						if meta.HasPermission(role, context.Context) {
+							editableColumns = append(editableColumns, column)
+							break
+						}
 					}
 				}
 			}
@@ -616,14 +775,43 @@ func (res *Resource) allowedSections(sections []*Section, context *Context, role
 				editableRows = append(editableRows, editableColumns)
 			}
 		}
-		newSection.Rows = editableRows
-		newSections = append(newSections, &newSection)
+
+		if len(editableRows) > 0 {
+			newSection.Rows = editableRows
+			newSections = append(newSections, &newSection)
+		}
 	}
 	return newSections
 }
 
+func (res *Resource) RegisterDefaultRouters() {
+	res.admin.RegisterResourceRouters(res, "create", "update", "read", "delete")
+}
+
+func (res *Resource) CreateMenu(plural bool) *Menu {
+	menuName := res.Name
+
+	if plural {
+		menuName = inflection.Plural(menuName)
+	}
+
+	return &Menu{
+		Name:         menuName,
+		Label:        res.GetLabelKey(plural),
+		Permissioner: res,
+		Priority:     res.Config.Priority,
+		Ancestors:    res.Config.Menu,
+		RelativePath: res.ToParam(),
+	}
+}
+
+func (res *Resource) CreateDefaultMenu() *Menu {
+	return res.CreateMenu(!res.Config.Singleton)
+}
+
 func (res *Resource) configure() {
 	modelType := utils.ModelType(res.Value)
+
 	for i := 0; i < modelType.NumField(); i++ {
 		if fieldStruct := modelType.Field(i); fieldStruct.Anonymous {
 			if injector, ok := reflect.New(fieldStruct.Type).Interface().(resource.ConfigureResourceInterface); ok {
@@ -635,4 +823,51 @@ func (res *Resource) configure() {
 	if injector, ok := res.Value.(resource.ConfigureResourceInterface); ok {
 		injector.ConfigureQorResource(res)
 	}
+
+	typ := reflect.TypeOf(res.Value)
+
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	_, softDelete := typ.FieldByName("DeletedAt")
+
+	res.Action(&Action{
+		Name:   "Delete",
+		Method: "DELETE",
+		URL: func(record interface{}, context *Context) string {
+			return context.URLFor(record, res)
+		},
+		Permission: res.Config.Permission,
+		Modes:      []string{"menu_item"},
+		Visible: func(record interface{}, context *Context) bool {
+			if softDelete {
+				typ := reflect.ValueOf(record)
+
+				for typ.Kind() == reflect.Ptr {
+					typ = typ.Elem()
+				}
+
+				f := typ.FieldByName("DeletedAt")
+				if f.IsValid() {
+					v := f.Interface()
+					if t, ok := v.(time.Time); ok {
+						return t.IsZero()
+					} else if t, ok := v.(*time.Time); ok {
+						return t == nil || t.IsZero()
+					}
+				}
+				return false
+			}
+			return true
+		},
+	})
+}
+
+func (res *Resource) VisibleChildren() (r []*SubResource) {
+	for _, sub := range res.SubResources {
+		if !sub.Config.Invisible {
+			r = append(r, sub)
+		}
+	}
+	return
 }

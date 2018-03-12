@@ -86,7 +86,7 @@ func TestGetStringMetaValue(t *testing.T) {
 	UserName := "user name"
 	userRecord := &User{Name: UserName}
 	db.Create(&userRecord)
-	value := stringMeta.GetValuer()(userRecord, &qor.Context{Config: &qor.Config{DB: db}})
+	value := stringMeta.GetValuer()(userRecord, &qor.Context{Config: qor.NewConfig(db)})
 
 	if value.(string) != UserName {
 		t.Error("resource's value doesn't get")
@@ -105,7 +105,7 @@ func TestGetStructMetaValue(t *testing.T) {
 	userRecord := &User{CreditCard: creditCard}
 	db.Create(&userRecord)
 
-	value := structMeta.GetValuer()(userRecord, &qor.Context{Config: &qor.Config{DB: db}})
+	value := structMeta.GetValuer()(userRecord, &qor.Context{Config: qor.NewConfig(db)})
 	creditCardValue := reflect.Indirect(reflect.ValueOf(value))
 
 	if creditCardValue.FieldByName("Number").String() != "123456" || creditCardValue.FieldByName("Issuer").String() != "bank" {
@@ -123,7 +123,7 @@ func TestGetSliceMetaValue(t *testing.T) {
 	userRecord := &User{Addresses: []Address{*address1, *address2}}
 	db.Create(&userRecord)
 
-	value := sliceMeta.GetValuer()(userRecord, &qor.Context{Config: &qor.Config{DB: db}})
+	value := sliceMeta.GetValuer()(userRecord, &qor.Context{Config: qor.NewConfig(db)})
 	addresses := reflect.Indirect(reflect.ValueOf(value))
 
 	if addresses.Index(0).FieldByName("Address1").String() != "an address" || addresses.Index(1).FieldByName("Address1").String() != "another address" {
@@ -145,7 +145,7 @@ func TestStringMetaSetter(t *testing.T) {
 		Meta:  meta,
 	}
 
-	meta.GetSetter()(userRecord, metaValue, &qor.Context{Config: &qor.Config{DB: db}})
+	meta.GetSetter()(userRecord, metaValue, &qor.Context{Config: qor.NewConfig(db)})
 	if userRecord.Name != UserName {
 		t.Error("resource's value doesn't set")
 	}
@@ -195,7 +195,7 @@ func TestNestedField(t *testing.T) {
 	user.Meta(phoneNumMeta)
 
 	userModel.Profile = Profile{}
-	valx := phoneNumMeta.GetValuer()(userModel, &qor.Context{Config: &qor.Config{DB: db}})
+	valx := phoneNumMeta.GetValuer()(userModel, &qor.Context{Config: qor.NewConfig(db)})
 	if val, ok := valx.(string); !ok || val != profileModel.Phone.Num {
 		t.Errorf("Profile.Phone.Num: got %q; expect %q", val, profileModel.Phone.Num)
 	}
@@ -228,15 +228,15 @@ func TestNestedField(t *testing.T) {
 			},
 		},
 	}
-	profileNameMeta.GetSetter()(userModel, mvs.Values[0], &qor.Context{Config: &qor.Config{DB: db}})
+	profileNameMeta.GetSetter()(userModel, mvs.Values[0], &qor.Context{Config: qor.NewConfig(db)})
 	if userModel.Profile.Name != mvs.Values[0].Value {
 		t.Errorf("Profile.Name: got %q; expect %q", userModel.Profile.Name, mvs.Values[0].Value)
 	}
-	profileSexMeta.GetSetter()(userModel, mvs.Values[1], &qor.Context{Config: &qor.Config{DB: db}})
+	profileSexMeta.GetSetter()(userModel, mvs.Values[1], &qor.Context{Config: qor.NewConfig(db)})
 	if userModel.Profile.Sex != mvs.Values[1].Value {
 		t.Errorf("Profile.Sex: got %q; expect %q", userModel.Profile.Sex, mvs.Values[1].Value)
 	}
-	phoneNumMeta.GetSetter()(userModel, mvs.Values[2], &qor.Context{Config: &qor.Config{DB: db}})
+	phoneNumMeta.GetSetter()(userModel, mvs.Values[2], &qor.Context{Config: qor.NewConfig(db)})
 	if userModel.Profile.Phone.Num != mvs.Values[2].Value {
 		t.Errorf("Profile.Phone.Num: got %q; expect %q", userModel.Profile.Phone.Num, mvs.Values[2].Value)
 	}

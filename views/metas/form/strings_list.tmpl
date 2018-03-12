@@ -1,0 +1,19 @@
+{{$metaConfig := .Meta.Config}}
+{{$current_values := (raw_value_of .ResourceValue .Meta)}}
+
+<div class="qor-field qor-fieldset-container">
+  <label class="qor-field__label" for="{{.InputId}}">
+    {{meta_label .Meta}}
+  </label>
+
+  <div class="qor-field__block">
+    {{$meta := .Meta}}
+    {{if $current_values}}
+      <ul>
+      {{range $index, $value := $current_values }}
+          <li>{{stringify $value}}</li>
+      {{end}}
+      </ul>
+    {{end}}
+  </div>
+</div>

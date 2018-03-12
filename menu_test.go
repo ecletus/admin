@@ -11,7 +11,7 @@ func generateResourceMenu(resource *Resource) *Menu {
 }
 
 func TestMenu(t *testing.T) {
-	admin := New(&qor.Config{})
+	admin := New(qor.NewConfig(nil))
 	admin.router.Prefix = "/admin"
 
 	menu := &Menu{Name: "Dashboard", Link: "/link1"}
@@ -52,7 +52,7 @@ func TestMenu(t *testing.T) {
 }
 
 func TestMenuPriority(t *testing.T) {
-	admin := New(&qor.Config{})
+	admin := New(qor.NewConfig(nil))
 	admin.router.Prefix = "/admin"
 
 	admin.AddMenu(&Menu{Name: "Name1", Priority: 2})

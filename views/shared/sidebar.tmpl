@@ -1,6 +1,11 @@
 <div class="qor-layout__sidebar">
   <div class="sidebar-header">
-    {{t "qor_admin.layout.logo" "<a href=\"{{.Prefix}}\"><span class=\"visuallyhidden\">QOR</span></a><a href=\"/\" target=\"_blank\">View Site <i class=\"material-icons md-14\" aria-hidden=\"true\">open_in_new</i></a>" .Admin.GetRouter}}
+    {{$logo := (tt "qor_admin.layout.logo" (_tpl_funcs) "-")}}
+    {{if eq $logo "-"}}
+      {{render "shared/logo" .}}
+    {{else}}
+      {{$logo}}
+    {{end}}
   </div>
   <div class="sidebar-userinfo">
     {{if .CurrentUser}}

@@ -13,6 +13,7 @@ import (
 	"github.com/qor/qor"
 	"github.com/qor/qor/utils"
 	"github.com/qor/roles"
+	"github.com/qor/auth"
 )
 
 // Middleware is a way to filter a request and response coming into your application
@@ -97,7 +98,7 @@ func (r *Router) sortRoutes(routes []*routeHandler) {
 		if iIsWildcard != jIsWildcard {
 			return jIsWildcard
 		}
-		return len(routes[i].Path) > len(routes[j].Path)
+		return len(routes[i].Path) < len(routes[j].Path)
 	})
 }
 
@@ -126,15 +127,19 @@ func (r *Router) Delete(path string, handle requestHandler, config ...*RouteConf
 }
 
 // MountTo mount the service into mux (HTTP request multiplexer) with given path
-func (admin *Admin) MountTo(mountTo string, mux *http.ServeMux) {
+func (admin *Admin) MountTo(mountTo string, mux *http.ServeMux, interseptor... Interseptor) {
 	prefix := "/" + strings.Trim(mountTo, "/")
-	serveMux := admin.NewServeMux(prefix)
-	mux.Handle(prefix, serveMux)     // /:prefix
-	mux.Handle(prefix+"/", serveMux) // /:prefix/:xxx
+	var i Interseptor
+	if len(interseptor) > 0 {
+		i = interseptor[0]
+	}
+	s := admin.NewServeMux(prefix, i)
+	mux.Handle(prefix, s)     // /:prefix
+	mux.Handle(prefix+"/", s) // /:prefix/:xxx
 }
 
 // NewServeMux generate http.Handler for admin
-func (admin *Admin) NewServeMux(prefix string) http.Handler {
+func (admin *Admin) NewServeMux(prefix string, interseptor Interseptor) http.Handler {
 	// Register default routes & middlewares
 	router := admin.router
 	router.Prefix = prefix
@@ -180,15 +185,19 @@ func (admin *Admin) NewServeMux(prefix string) http.Handler {
 		},
 	})
 
-	return &serveMux{admin: admin}
+	return &serveMux{admin: admin, interseptor:interseptor}
 }
 
 // RegisterResourceRouters register resource to router
-func (admin *Admin) RegisterResourceRouters(res *Resource, actions ...string) {
+func (admin *Admin)  RegisterResourceRouters(res *Resource, actions ...string) {
 	var (
 		primaryKeyParams = res.ParamIDName()
 		adminController  = &Controller{Admin: admin}
 	)
+
+	if res.AdminController == nil {
+		res.AdminController = adminController
+	}
 
 	for _, action := range actions {
 		switch strings.ToLower(action) {
@@ -279,17 +288,30 @@ func (res *Resource) RegisterRoute(method string, relativePath string, handler r
 	}
 }
 
+type Interseptor func(w http.ResponseWriter, req *http.Request, serv func(w http.ResponseWriter, req *http.Request))
+
 type serveMux struct {
 	admin *Admin
+	interseptor Interseptor
+}
+
+func (serveMux *serveMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if serveMux.interseptor != nil {
+		serveMux.interseptor(w, req, serveMux.doServe)
+	} else {
+		serveMux.doServe(w, req)
+	}
 }
 
 // ServeHTTP dispatches the handler registered in the matched route
-func (serveMux *serveMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (serveMux *serveMux) doServe(w http.ResponseWriter, req *http.Request) {
 	var (
 		admin        = serveMux.admin
 		RelativePath = "/" + strings.Trim(strings.TrimPrefix(req.URL.Path, admin.router.Prefix), "/")
 		context      = admin.NewContext(w, req)
 	)
+
+	req = context.Request
 
 	// Parse Request Form
 	req.ParseMultipartForm(2 * 1024 * 1024)
@@ -299,7 +321,7 @@ func (serveMux *serveMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		req.Method = strings.ToUpper(method)
 	}
 
-	if regexp.MustCompile("^/assets/.*$").MatchString(RelativePath) && strings.ToUpper(req.Method) == "GET" {
+	if regexp.MustCompile("^/(assets|themes)/.*$").MatchString(RelativePath) && strings.ToUpper(req.Method) == "GET" {
 		(&Controller{Admin: admin}).Asset(context)
 		return
 	}
@@ -311,51 +333,52 @@ func (serveMux *serveMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}()()
 
-	// Set Current User
-	var currentUser qor.CurrentUser
-	var permissionMode roles.PermissionMode
-	if admin.Auth != nil {
-		if currentUser = admin.Auth.GetCurrentUser(context); currentUser == nil {
-			http.Redirect(w, req, admin.Auth.LoginURL(context), http.StatusSeeOther)
-			return
+	auth.InterceptFuncIfAuth(admin.Auth, w, req, func(ok bool) {
+		// Set Current User
+		var currentUser qor.CurrentUser
+		var permissionMode roles.PermissionMode
+
+		if ok {
+			currentUser = admin.Auth.GetCurrentUser(context)
+			context.CurrentUser = currentUser
+			context.DB = context.DB.Set("qor:current_user", context.CurrentUser)
 		}
-		context.CurrentUser = currentUser
-		context.SetDB(context.GetDB().Set("qor:current_user", context.CurrentUser))
-	}
-	context.Roles = roles.MatchedRoles(req, currentUser)
+		context.Roles = roles.MatchedRoles(req, currentUser)
 
-	switch req.Method {
-	case "GET":
-		permissionMode = roles.Read
-	case "PUT":
-		permissionMode = roles.Update
-	case "POST":
-		permissionMode = roles.Create
-	case "DELETE":
-		permissionMode = roles.Delete
-	}
+		switch req.Method {
+		case "GET":
+			permissionMode = roles.Read
+		case "PUT":
+			permissionMode = roles.Update
+		case "POST":
+			permissionMode = roles.Create
+		case "DELETE":
+			permissionMode = roles.Delete
+		}
 
-	handlers := admin.router.routers[strings.ToUpper(req.Method)]
-	for _, handler := range handlers {
-		if params, _, ok := utils.ParamsMatch(handler.Path, RelativePath); ok && handler.HasPermission(permissionMode, context.Context) {
-			if len(params) > 0 {
-				req.URL.RawQuery = url.Values(params).Encode() + "&" + req.URL.RawQuery
-			}
-			context.RouteHandler = handler
-
-			context.setResource(handler.Config.Resource)
-			if context.Resource == nil {
-				if matches := regexp.MustCompile(path.Join(admin.router.Prefix, `([^/]+)`)).FindStringSubmatch(req.URL.Path); len(matches) > 1 {
-					context.setResource(admin.GetResource(matches[1]))
+		handlers := admin.router.routers[strings.ToUpper(req.Method)]
+		for _, handler := range handlers {
+			if params, _, ok := utils.ParamsMatch(handler.Path, RelativePath); ok && handler.HasPermission(permissionMode, context.Context) {
+				if len(params) > 0 {
+					req.URL.RawQuery = url.Values(params).Encode() + "&" + req.URL.RawQuery
 				}
+				// verificar para Edit
+				context.RouteHandler = handler
+				context.setResource(handler.Config.Resource)
+
+				if context.Resource == nil {
+					if matches := regexp.MustCompile(path.Join(admin.router.Prefix, `([^/]+)`)).FindStringSubmatch(req.URL.Path); len(matches) > 1 {
+						context.setResource(admin.GetResource(matches[1]))
+					}
+				}
+				break
 			}
+		}
+
+		// Call first middleware
+		for _, middleware := range admin.router.middlewares {
+			middleware.Handler(context, middleware)
 			break
 		}
-	}
-
-	// Call first middleware
-	for _, middleware := range admin.router.middlewares {
-		middleware.Handler(context, middleware)
-		break
-	}
+	})
 }

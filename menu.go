@@ -31,7 +31,9 @@ func (admin Admin) GetMenu(name string) *Menu {
 // Menu admin sidebar menu definiation
 type Menu struct {
 	Name         string
+	Label        string
 	Link         string
+	Icon         string
 	RelativePath string
 	Priority     int
 	Ancestors    []string
@@ -40,10 +42,27 @@ type Menu struct {
 
 	subMenus []*Menu
 	router   *Router
+	MakeLink func(context *Context)string
+}
+
+// GetLabel return menu's Label
+func (menu Menu) GetLabel() string {
+	if menu.Label != "" {
+		return menu.Label
+	}
+	return "qor_admin.menus." + menu.Name
+}
+
+// GetLabel return menu's Label
+func (menu Menu) GetIcon() string {
+	if menu.Icon != "" {
+		return menu.Icon
+	}
+	return menu.Name
 }
 
 // URL return menu's URL
-func (menu Menu) URL() string {
+func (menu Menu) RealURL() string {
 	if menu.Link != "" {
 		return menu.Link
 	}
@@ -53,6 +72,23 @@ func (menu Menu) URL() string {
 	}
 
 	return menu.RelativePath
+}
+
+// URL return menu's URL
+func (menu Menu) URL(context *Context) string {
+	if menu.MakeLink != nil {
+		return menu.MakeLink(context)
+	}
+
+	if menu.Link != "" {
+		return menu.Link
+	}
+
+	//if (menu.router != nil) && (menu.RelativePath != "") {
+	//	return "@" + path.Join(menu.router.Prefix, menu.RelativePath)
+	//}
+
+	return "@" + menu.RelativePath
 }
 
 // HasPermission check menu has permission or not

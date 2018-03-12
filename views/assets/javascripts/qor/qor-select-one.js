@@ -36,6 +36,14 @@
     this.init();
   }
 
+  function firstTextKey(obj) {
+    var keys = Object.keys(obj);
+    if (keys.length > 1 && keys[0] == "ID") {
+      return keys[1];
+    }
+    return keys[0];
+  }
+
   QorSelectOne.prototype = {
     constructor: QorSelectOne,
 
@@ -142,7 +150,7 @@
         $select = $parent.find('select'),
         $selectFeild = $parent.find(CLASS_SELECT_FIELD);
 
-      data.displayName = data.Text || data.Name || data.Title || data.Code || data[Object.keys(data)[0]];
+      data.displayName = data.Text || data.Name || data.Title || data.Code || firstTextKey(data);
       data.selectoneValue = data.primaryKey || data.ID;
 
       if (!$select.length) {

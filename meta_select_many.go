@@ -19,7 +19,7 @@ type SelectManyConfig struct {
 	SelectMode               string // select, select_async, bottom_sheet
 	Select2ResultTemplate    template.JS
 	Select2SelectionTemplate template.JS
-	RemoteDataResource       *Resource
+	RemoteDataResource       *DataResource
 	SelectOneConfig
 }
 

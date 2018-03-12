@@ -14,7 +14,7 @@ func NewDummyAdmin(keepData ...bool) *admin.Admin {
 	var (
 		db     = utils.TestDB()
 		models = []interface{}{&User{}, &CreditCard{}, &Address{}, &Language{}, &Profile{}, &Phone{}, &Company{}}
-		Admin  = admin.New(&qor.Config{DB: db})
+		Admin  = admin.New(&qor.NewConfig(db))
 	)
 
 	media.RegisterCallbacks(db)

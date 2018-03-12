@@ -15,6 +15,7 @@ type RouteConfig struct {
 	Permissioner   HasPermissioner
 	PermissionMode roles.PermissionMode
 	Values         map[interface{}]interface{}
+	Available      func(context *qor.Context) bool
 }
 
 type requestHandler func(c *Context)
@@ -46,10 +47,15 @@ func newRouteHandler(path string, handle requestHandler, configs ...*RouteConfig
 	if handler.Config.Resource != nil {
 		handler.Config.Resource.mounted = true
 	}
+
 	return &handler
 }
 
 func (handler routeHandler) HasPermission(permissionMode roles.PermissionMode, context *qor.Context) bool {
+	if handler.Config.Available != nil && !handler.Config.Available(context) {
+		return false
+	}
+
 	if handler.Config.Permissioner == nil {
 		return true
 	}

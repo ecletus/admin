@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en-US">
+<html lang="{{locale}}">
   <!--
     ,-----.    ,-----.  ,------.
     '  .-.  '  '  .-.  ' |  .--. '
@@ -10,10 +10,15 @@
   -->
   <head>
     {{$title := page_title}}
-    <title>{{if $title}}{{$title}} - {{end}}{{if .Admin.SiteName}}{{t .Admin.SiteName}}{{else}}{{t "Qor Admin"}}{{end}}</title>
+    <title>{{if $title}}{{$title}} - {{end}}{{if .Admin.SiteTitle}}{{t .Admin.SiteTitle}}{{else}}{{t "Qor Admin"}}{{end}}</title>
     <meta charset="utf-8">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- systen url prefix -->
+    <meta name="uri" content="{{url}}">
+    <meta name="static_url" content="{{admin_static_url}}">
+    <meta name="global_static_url" content="{{static_url}}">
 
     <!-- Stylesheets -->
     {{stylesheet_tag "qor_admin_default"}}

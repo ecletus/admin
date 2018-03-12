@@ -34,6 +34,10 @@ func (res *Resource) Action(action *Action) *Action {
 				a.Visible = action.Visible
 			}
 
+			if action.Available != nil {
+				a.Available = action.Available
+			}
+
 			if action.Handler != nil {
 				a.Handler = action.Handler
 			}
@@ -82,18 +86,22 @@ func (res *Resource) Action(action *Action) *Action {
 		actionController := &Controller{Admin: res.GetAdmin(), action: action}
 		primaryKeyParams := res.ParamIDName()
 
-		if action.Resource != nil {
-			// Bulk Action
-			res.RegisterRoute("GET", path.Join("!action", action.ToParam()), actionController.Action, &RouteConfig{Permissioner: action, PermissionMode: roles.Update})
-			// Single Resource Action
-			res.RegisterRoute("GET", path.Join(primaryKeyParams, action.ToParam()), actionController.Action, &RouteConfig{Permissioner: action, PermissionMode: roles.Update})
-		}
+		if action.Resource != nil || action.Handler != nil {
+			routeConfig := &RouteConfig{Permissioner: action, PermissionMode: roles.Update}
 
-		if action.Handler != nil {
-			// Bulk Action
-			res.RegisterRoute("PUT", path.Join("!action", action.ToParam()), actionController.Action, &RouteConfig{Permissioner: action, PermissionMode: roles.Update})
-			// Single Resource action
-			res.RegisterRoute("PUT", path.Join(primaryKeyParams, action.ToParam()), actionController.Action, &RouteConfig{Permissioner: action, PermissionMode: roles.Update})
+			if action.Resource != nil {
+				// Bulk Action
+				res.RegisterRoute("GET", path.Join("!action", action.ToParam()), actionController.Action, routeConfig)
+				// Single Resource Action
+				res.RegisterRoute("GET", path.Join(primaryKeyParams, action.ToParam()), actionController.Action, routeConfig)
+			}
+
+			if action.Handler != nil {
+				// Bulk Action
+				res.RegisterRoute("PUT", path.Join("!action", action.ToParam()), actionController.Action, routeConfig)
+				// Single Resource action
+				res.RegisterRoute("PUT", path.Join(primaryKeyParams, action.ToParam()), actionController.Action, routeConfig)
+			}
 		}
 	}
 
@@ -125,6 +133,7 @@ type Action struct {
 	Method      string
 	URL         func(record interface{}, context *Context) string
 	URLOpenType string
+	Available   func(context *Context) bool
 	Visible     func(record interface{}, context *Context) bool
 	Handler     func(argument *ActionArgument) error
 	Modes       []string
@@ -192,7 +201,7 @@ func (actionArgument *ActionArgument) FindSelectedRecords() []interface{} {
 	}
 
 	if len(sqls) > 0 {
-		clone.SetDB(clone.GetDB().Where(strings.Join(sqls, " OR "), sqlParams...))
+		clone.DB = clone.DB.Where(strings.Join(sqls, " OR "), sqlParams...)
 	}
 	results, _ := clone.FindMany()
 

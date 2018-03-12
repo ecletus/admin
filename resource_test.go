@@ -34,7 +34,7 @@ func TestEditAttrs(t *testing.T) {
 		EditAttrsTestCase{Params: []string{"Section:Name+Code+Description", "-Name"}, Result: []string{"Code+Description"}},
 	)
 
-	admin := New(&qor.Config{DB: db})
+	admin := New(&qor.NewConfig(db))
 	product := admin.AddResource(&Product{})
 	i := 1
 	for _, testCase := range testCases {

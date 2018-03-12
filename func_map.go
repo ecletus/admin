@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"html/template"
 	"math/rand"
 	"net/url"
 	"path"
@@ -17,6 +16,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/moisespsena/template/html/template"
+	"github.com/moisespsena/template/funcs"
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/inflection"
 	"github.com/qor/qor"
@@ -24,6 +25,16 @@ import (
 	"github.com/qor/roles"
 	"github.com/qor/session"
 )
+
+var TemplateExecutorMetaValue *template.Executor
+
+func init() {
+	t, err := template.New("qor:admin:meta_value").Parse("{{.Value}}")
+	if err != nil {
+		panic(err)
+	}
+	TemplateExecutorMetaValue = t.CreateExecutor()
+}
 
 // NewResourceContext new resource context
 func (context *Context) NewResourceContext(name ...interface{}) *Context {
@@ -65,7 +76,7 @@ func (context *Context) isNewRecord(value interface{}) bool {
 	if value == nil {
 		return true
 	}
-	return context.GetDB().NewRecord(value)
+	return context.DB.NewRecord(value)
 }
 
 func (context *Context) newResourcePath(res *Resource) string {
@@ -98,13 +109,17 @@ func (context *Context) URLFor(value interface{}, resources ...*Resource) string
 			params = path.Join(res.ParentResource.ToParam(), res.ParentResource.GetPrimaryValue(context.Request), params)
 			res = res.ParentResource
 		}
-		return path.Join(res.GetAdmin().router.Prefix, params)
+		return params
 	}
 
 	if admin, ok := value.(*Admin); ok {
-		return admin.router.Prefix
+		return context.GenURL(admin.router.Prefix)
+	} else if urler, ok := value.(interface {
+		ToURLString(*Context) string
+	}); ok {
+		return urler.ToURLString(context)
 	} else if res, ok := value.(*Resource); ok {
-		return path.Join(getPrefix(res), res.ToParam())
+		return context.GenURL(getPrefix(res), res.ToParam())
 	} else {
 		var res *Resource
 
@@ -118,11 +133,11 @@ func (context *Context) URLFor(value interface{}, resources ...*Resource) string
 
 		if res != nil {
 			if res.Config.Singleton {
-				return path.Join(getPrefix(res), res.ToParam())
+				return context.GenURL(getPrefix(res), res.ToParam())
 			}
 
 			var (
-				scope         = context.GetDB().NewScope(value)
+				scope         = context.DB.NewScope(value)
 				primaryFields []string
 				primaryValues = map[string]string{}
 			)
@@ -147,7 +162,7 @@ func (context *Context) URLFor(value interface{}, resources ...*Resource) string
 				}
 			}
 
-			urlPath := path.Join(getPrefix(res), res.ToParam(), strings.Join(primaryFields, ","))
+			urlPath := path.Join(res.ToParam(), strings.Join(primaryFields, ","))
 
 			if len(primaryValues) > 0 {
 				var primaryValueParams []string
@@ -156,15 +171,18 @@ func (context *Context) URLFor(value interface{}, resources ...*Resource) string
 				}
 				urlPath = urlPath + "?" + strings.Join(primaryValueParams, "&")
 			}
-			return urlPath
+			return context.GenURL(getPrefix(res), urlPath)
 		}
 	}
-	return ""
+	return context.GenURL("")
 }
 
 func (context *Context) linkTo(text interface{}, link interface{}) template.HTML {
 	text = reflect.Indirect(reflect.ValueOf(text)).Interface()
 	if linkStr, ok := link.(string); ok {
+		if linkStr[0:1] == "@" {
+			linkStr = context.GenURL(linkStr[1:])
+		}
 		return template.HTML(fmt.Sprintf(`<a href="%v">%v</a>`, linkStr, text))
 	}
 	return template.HTML(fmt.Sprintf(`<a href="%v">%v</a>`, context.URLFor(link), text))
@@ -236,10 +254,15 @@ func (context *Context) renderSections(value interface{}, sections []*Section, p
 
 		for _, column := range section.Rows {
 			columnsHTML := bytes.NewBufferString("")
+			var exclude int
 			for _, col := range column {
 				meta := section.Resource.GetMeta(col)
 				if meta != nil {
-					context.renderMeta(meta, value, prefix, kind, columnsHTML)
+					if meta.Enabled == nil || meta.Enabled(context, meta) {
+						context.renderMeta(meta, value, prefix, kind, columnsHTML)
+					} else {
+						exclude++
+					}
 				}
 			}
 
@@ -247,7 +270,7 @@ func (context *Context) renderSections(value interface{}, sections []*Section, p
 				Length      int
 				ColumnsHTML template.HTML
 			}{
-				Length:      len(column),
+				Length:      len(column) - exclude,
 				ColumnsHTML: template.HTML(string(columnsHTML.Bytes())),
 			})
 		}
@@ -257,19 +280,17 @@ func (context *Context) renderSections(value interface{}, sections []*Section, p
 			"Title":   template.HTML(section.Title),
 			"Rows":    rows,
 		}
-		if content, err := context.Asset("metas/section.tmpl"); err == nil {
-			if tmpl, err := template.New("section").Funcs(context.FuncMap()).Parse(string(content)); err == nil {
-				tmpl.Execute(writer, data)
-			}
+
+		if executor, err := context.GetTemplate("metas/section"); err == nil {
+			executor.Execute(writer, data, context.FuncValues())
 		}
 	}
 }
 
 func (context *Context) renderFilter(filter *Filter) template.HTML {
 	var (
-		err     error
-		content []byte
-		result  = bytes.NewBufferString("")
+		err    error
+		result = bytes.NewBufferString("")
 	)
 
 	defer func() {
@@ -279,19 +300,16 @@ func (context *Context) renderFilter(filter *Filter) template.HTML {
 		}
 	}()
 
-	if content, err = context.Asset(fmt.Sprintf("metas/filter/%v.tmpl", filter.Type)); err == nil {
-		tmpl := template.New(filter.Type + ".tmpl").Funcs(context.FuncMap())
-		if tmpl, err = tmpl.Parse(string(content)); err == nil {
-			var data = map[string]interface{}{
-				"Filter":          filter,
-				"Label":           filter.Label,
-				"InputNamePrefix": fmt.Sprintf("filters[%v]", filter.Name),
-				"Context":         context,
-				"Resource":        context.Resource,
-			}
-
-			err = tmpl.Execute(result, data)
+	if executor, err := context.GetTemplate(fmt.Sprintf("metas/filter/%v", filter.Type)); err == nil {
+		var data = map[string]interface{}{
+			"Filter":          filter,
+			"Label":           filter.Label,
+			"InputNamePrefix": fmt.Sprintf("filters[%v]", filter.Name),
+			"Context":         context,
+			"Resource":        context.Resource,
 		}
+
+		err = executor.Execute(result, data, context.FuncValues())
 	}
 
 	if err != nil {
@@ -304,7 +322,8 @@ func (context *Context) renderFilter(filter *Filter) template.HTML {
 func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []string, metaType string, writer *bytes.Buffer) {
 	var (
 		err      error
-		funcsMap = context.FuncMap()
+		funcsMap = funcs.FuncMap{}
+		executor *template.Executor
 	)
 	prefix = append(prefix, meta.Name)
 
@@ -319,7 +338,7 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 			}
 
 			if len(sections) > 0 {
-				for _, field := range context.GetDB().NewScope(value).PrimaryFields() {
+				for _, field := range context.DB.NewScope(value).PrimaryFields() {
 					if meta := sections[0].Resource.GetMeta(field.Name); meta != nil {
 						context.renderMeta(meta, value, newPrefix, kind, result)
 					}
@@ -337,38 +356,38 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 	defer func() {
 		if r := recover(); r != nil {
 			debug.PrintStack()
-			writer.WriteString(fmt.Sprintf("Get error when render template for meta %v (%v): %v", meta.Name, meta.Type, r))
+			msg := fmt.Sprintf("Get error when render template for meta %v (%v): %v", meta.Name, meta.Type, r)
+			writer.WriteString(msg)
+			println(msg)
 		}
 	}()
-
-	var (
-		tmpl    = template.New(meta.Type + ".tmpl").Funcs(funcsMap)
-		content []byte
-	)
 
 	switch {
 	case meta.Config != nil:
 		if templater, ok := meta.Config.(interface {
-			GetTemplate(context *Context, metaType string) ([]byte, error)
+			GetTemplate(context *Context, metaType string) (*template.Executor, error)
 		}); ok {
-			if content, err = templater.GetTemplate(context, metaType); err == nil {
-				tmpl, err = tmpl.Parse(string(content))
+			if executor, err = templater.GetTemplate(context, metaType); err == nil {
 				break
 			}
 		}
 		fallthrough
 	default:
-		if content, err = context.Asset(fmt.Sprintf("%v/metas/%v/%v.tmpl", meta.baseResource.ToParam(), metaType, meta.Name), fmt.Sprintf("metas/%v/%v.tmpl", metaType, meta.Type)); err == nil {
-			tmpl, err = tmpl.Parse(string(content))
-		} else if metaType == "index" {
-			tmpl, err = tmpl.Parse("{{.Value}}")
-		} else {
-			err = fmt.Errorf("haven't found %v template for meta %v", metaType, meta.Name)
+		var others []string
+		metaUserType := meta.GetType(context)
+
+		if metaUserType != "" {
+			others = append(others, fmt.Sprintf("metas/%v/%v", metaType, metaUserType))
+		}
+
+		if executor, err = context.GetTemplateOrDefault(fmt.Sprintf("%v/metas/%v/%v", meta.baseResource.ToParam(), metaType, meta.Name),
+			TemplateExecutorMetaValue, others...); err != nil {
+			err = fmt.Errorf("haven't found %v template for meta %v: %v", metaType, meta.Name, err)
 		}
 	}
 
 	if err == nil {
-		var scope = context.GetDB().NewScope(value)
+		var scope = context.DB.NewScope(value)
 		var data = map[string]interface{}{
 			"Context":       context,
 			"BaseResource":  meta.baseResource,
@@ -390,7 +409,7 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 			}).GetCollection(value, context)
 		}
 
-		err = tmpl.Execute(writer, data)
+		err = executor.Execute(writer, data, context.FuncValues(), funcsMap)
 	}
 
 	if err != nil {
@@ -500,14 +519,20 @@ func (context *Context) getMenus() (menus []*menu) {
 		mostMatchedMenu   *menu
 		mostMatchedLength int
 		addMenu           func(*menu, []*Menu)
+		path              = context.Path()
 	)
 
 	addMenu = func(parent *menu, menus []*Menu) {
 		for _, m := range menus {
-			url := m.URL()
 			if m.HasPermission(roles.Read, context.Context) {
 				var menu = &menu{Menu: m}
-				if strings.HasPrefix(context.Request.URL.Path, url) && len(url) > mostMatchedLength {
+				url := m.URL(context)
+
+				if url[0:1] == "@" {
+					url = url[1:]
+				}
+
+				if strings.HasPrefix(path, url) && len(url) > mostMatchedLength {
 					mostMatchedMenu = menu
 					mostMatchedLength = len(url)
 				}
@@ -678,26 +703,6 @@ func (context *Context) Pagination() *PaginationResult {
 	return &PaginationResult{Pagination: pagination, Pages: pages}
 }
 
-// PatchCurrentURL is a convinent wrapper for qor/utils.PatchURL
-func (context *Context) patchCurrentURL(params ...interface{}) (patchedURL string, err error) {
-	return utils.PatchURL(context.Request.URL.String(), params...)
-}
-
-// PatchURL is a convinent wrapper for qor/utils.PatchURL
-func (context *Context) patchURL(url string, params ...interface{}) (patchedURL string, err error) {
-	return utils.PatchURL(url, params...)
-}
-
-// JoinCurrentURL is a convinent wrapper for qor/utils.JoinURL
-func (context *Context) joinCurrentURL(params ...interface{}) (joinedURL string, err error) {
-	return utils.JoinURL(context.Request.URL.String(), params...)
-}
-
-// JoinURL is a convinent wrapper for qor/utils.JoinURL
-func (context *Context) joinURL(url string, params ...interface{}) (joinedURL string, err error) {
-	return utils.JoinURL(url, params...)
-}
-
 func (context *Context) themesClass() (result string) {
 	var results = map[string]bool{}
 	if context.Resource != nil {
@@ -721,18 +726,18 @@ func (context *Context) themesClass() (result string) {
 
 func (context *Context) javaScriptTag(names ...string) template.HTML {
 	var results []string
+	prefix := context.GenStaticURL(path.Join("assets", "javascripts"))
 	for _, name := range names {
-		name = path.Join(context.Admin.GetRouter().Prefix, "assets", "javascripts", name+".js")
-		results = append(results, fmt.Sprintf(`<script src="%s"></script>`, name))
+		results = append(results, fmt.Sprintf(`<script src="%s/%s.js"></script>`, prefix, name))
 	}
 	return template.HTML(strings.Join(results, ""))
 }
 
 func (context *Context) styleSheetTag(names ...string) template.HTML {
 	var results []string
+	prefix := context.GenStaticURL(path.Join("assets", "stylesheets"))
 	for _, name := range names {
-		name = path.Join(context.Admin.GetRouter().Prefix, "assets", "stylesheets", name+".css")
-		results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s">`, name))
+		results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s/%s.css">`, prefix, name))
 	}
 	return template.HTML(strings.Join(results, ""))
 }
@@ -762,7 +767,7 @@ func (context *Context) loadThemeStyleSheets() template.HTML {
 	for _, themeName := range context.getThemeNames() {
 		var file = path.Join("themes", themeName, "assets", "stylesheets", themeName+".css")
 		if _, err := context.Asset(file); err == nil {
-			results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s?theme=%s">`, path.Join(context.Admin.GetRouter().Prefix, "assets", "stylesheets", themeName+".css"), themeName))
+			results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s?theme=%s">`, context.GenStaticURL(file), themeName))
 		}
 	}
 
@@ -774,7 +779,7 @@ func (context *Context) loadThemeJavaScripts() template.HTML {
 	for _, themeName := range context.getThemeNames() {
 		var file = path.Join("themes", themeName, "assets", "javascripts", themeName+".js")
 		if _, err := context.Asset(file); err == nil {
-			results = append(results, fmt.Sprintf(`<script src="%s?theme=%s"></script>`, path.Join(context.Admin.GetRouter().Prefix, "assets", "javascripts", themeName+".js"), themeName))
+			results = append(results, fmt.Sprintf(`<script src="%s?theme=%s"></script>`, context.GenStaticURL(file), themeName))
 		}
 	}
 
@@ -789,7 +794,7 @@ func (context *Context) loadAdminJavaScripts() template.HTML {
 
 	var file = path.Join("assets", "javascripts", strings.ToLower(strings.Replace(siteName, " ", "_", -1))+".js")
 	if _, err := context.Asset(file); err == nil {
-		return template.HTML(fmt.Sprintf(`<script src="%s"></script>`, path.Join(context.Admin.GetRouter().Prefix, file)))
+		return template.HTML(fmt.Sprintf(`<script src="%s"></script>`, context.GenStaticURL(file)))
 	}
 	return ""
 }
@@ -801,8 +806,9 @@ func (context *Context) loadAdminStyleSheets() template.HTML {
 	}
 
 	var file = path.Join("assets", "stylesheets", strings.ToLower(strings.Replace(siteName, " ", "_", -1))+".css")
+
 	if _, err := context.Asset(file); err == nil {
-		return template.HTML(fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s">`, path.Join(context.Admin.GetRouter().Prefix, file)))
+		return template.HTML(fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s">`, context.GenStaticURL(file)))
 	}
 	return ""
 }
@@ -852,6 +858,7 @@ func (context *Context) loadActions(action string) template.HTML {
 
 	// before files have higher priority
 	for _, actionFile := range actionFiles {
+		actionFile = strings.TrimSuffix(actionFile, ".tmpl")
 		base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(path.Base(actionFile), "")
 
 		if _, ok := actions[base]; !ok {
@@ -862,7 +869,12 @@ func (context *Context) loadActions(action string) template.HTML {
 
 	sort.Strings(actionKeys)
 
-	var result = bytes.NewBufferString("")
+	var (
+		result   = bytes.NewBufferString("")
+		err      error
+		executor *template.Executor
+	)
+
 	for _, key := range actionKeys {
 		defer func() {
 			if r := recover(); r != nil {
@@ -873,16 +885,13 @@ func (context *Context) loadActions(action string) template.HTML {
 		}()
 
 		base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(key, "")
-		if content, err := context.Asset(actions[base]); err == nil {
-			if tmpl, err := template.New(filepath.Base(actions[base])).Funcs(context.FuncMap()).Parse(string(content)); err == nil {
-				if err := tmpl.Execute(result, context); err != nil {
-					result.WriteString(err.Error())
-					utils.ExitWithMsg(err)
-				}
-			} else {
-				result.WriteString(err.Error())
-				utils.ExitWithMsg(err)
-			}
+		if executor, err = context.GetTemplate(actions[base]); err == nil {
+			err = executor.Execute(result, context, context.FuncValues())
+		}
+		if err != nil {
+			result.WriteString(err.Error())
+			utils.ExitWithMsg(err)
+			return template.HTML("")
 		}
 	}
 
@@ -896,18 +905,20 @@ func (context *Context) logoutURL() string {
 	return ""
 }
 
-func (context *Context) t(values ...interface{}) template.HTML {
-	switch len(values) {
-	case 1:
-		return context.Admin.T(context.Context, fmt.Sprint(values[0]), fmt.Sprint(values[0]))
-	case 2:
-		return context.Admin.T(context.Context, fmt.Sprint(values[0]), fmt.Sprint(values[1]))
-	case 3:
-		return context.Admin.T(context.Context, fmt.Sprint(values[0]), fmt.Sprint(values[1]), values[2:]...)
-	default:
-		utils.ExitWithMsg("passed wrong params for T")
+func (context *Context) t(key string, defaul ... interface{}) template.HTML {
+	var defauls []string
+	for _, value := range defaul {
+		defauls = append(defauls, fmt.Sprint(value))
 	}
-	return ""
+	return context.T(key, defauls...)
+}
+
+func (context *Context) tt(key string, data interface{}, defaul ... interface{}) template.HTML {
+	var defauls []string
+	for _, value := range defaul {
+		defauls = append(defauls, fmt.Sprint(value))
+	}
+	return context.TT(key, data, defauls...)
 }
 
 func (context *Context) isSortableMeta(meta *Meta) bool {
@@ -986,12 +997,15 @@ func (context *Context) pageTitle() template.HTML {
 	}
 
 	if context.Resource == nil {
+		if context.PageTitle != "" {
+			return context.t(context.PageTitle)
+		}
 		return context.t("qor_admin.layout.title", "Admin")
 	}
 
 	if context.Action == "action" {
 		if action, ok := context.Result.(*Action); ok {
-			return context.t(fmt.Sprintf("%v.actions.%v", context.Resource.ToParam(), action.Label), action.Label)
+			return context.Resource.GetActionLabel(context, action)
 		}
 	}
 
@@ -1001,162 +1015,174 @@ func (context *Context) pageTitle() template.HTML {
 		usePlural    bool
 	)
 
-	switch context.Action {
-	case "new":
-		defaultValue = "Add {{$1}}"
-	case "edit":
-		defaultValue = "Edit {{$1}}"
-	case "show":
-		defaultValue = "{{$1}} Details"
-	default:
-		defaultValue = "{{$1}}"
+	defaultValue = context.GetActionLabel()
+
+	if defaultValue == "" {
+		defaultValue = "{{.}}"
 		if !context.Resource.Config.Singleton {
 			usePlural = true
 		}
 	}
 
-	var resourceName string
-	if usePlural {
-		resourceName = string(context.t(fmt.Sprintf("%v.name.plural", context.Resource.ToParam()), inflection.Plural(context.Resource.Name)))
-	} else {
-		resourceName = string(context.t(fmt.Sprintf("%v.name", context.Resource.ToParam()), context.Resource.Name))
-	}
+	resourceName := context.Resource.GetLabel(context, usePlural)
+	title := fmt.Sprint(context.t(titleKey, defaultValue))
 
-	return context.t(titleKey, defaultValue, resourceName)
+	return utils.RenderHtmlTemplate(title, resourceName)
+}
+
+// FuncValues return funcs FuncValues
+func (context *Context) FuncValues() *funcs.FuncValues {
+	if context.funcValues == nil {
+		v, err := funcs.CreateValuesFunc(context.FuncMaps()...)
+		if err != nil {
+			panic(err)
+		}
+		context.funcValues = v
+	}
+	return context.funcValues
 }
 
 // FuncMap return funcs map
-func (context *Context) FuncMap() template.FuncMap {
+func (context *Context) FuncMaps() []funcs.FuncMap {
+	funcMaps := []template.FuncMap{
+		template.FuncMap{
+			"qor_context":          func() *qor.Context { return context.Context },
+			"site":                 func() qor.SiteInterface { return context.Context.Site },
+			"public_url":           func(args ...string) string { return context.Context.Site.PublicURL() },
+			"public_urlf":          func(args ...interface{}) string { return context.Context.Site.PublicURLf(args...) },
+			"admin_context":        func() *Context { return context },
+			"current_user":         func() qor.CurrentUser { return context.CurrentUser },
+			"get_resource":         context.Admin.GetResource,
+			"new_resource_context": context.NewResourceContext,
+			"is_new_record":        context.isNewRecord,
+			"is_equal":             context.isEqual,
+			"is_included":          context.isIncluded,
+			"primary_key_of":       context.primaryKeyOf,
+			"unique_key_of":        context.uniqueKeyOf,
+			"formatted_value_of":   context.FormattedValueOf,
+			"raw_value_of":         context.RawValueOf,
 
-	funcMap := template.FuncMap{
-		"current_user":         func() qor.CurrentUser { return context.CurrentUser },
-		"get_resource":         context.Admin.GetResource,
-		"new_resource_context": context.NewResourceContext,
-		"is_new_record":        context.isNewRecord,
-		"is_equal":             context.isEqual,
-		"is_included":          context.isIncluded,
-		"primary_key_of":       context.primaryKeyOf,
-		"unique_key_of":        context.uniqueKeyOf,
-		"formatted_value_of":   context.FormattedValueOf,
-		"raw_value_of":         context.RawValueOf,
-
-		"t":          context.t,
-		"flashes":    func() []session.Message { return context.Admin.SessionManager.Flashes(context.Writer, context.Request) },
-		"pagination": context.Pagination,
-		"escape":     html.EscapeString,
-		"raw":        func(str string) template.HTML { return template.HTML(utils.HTMLSanitizer.Sanitize(str)) },
-		"unsafe_raw": func(str string) template.HTML { return template.HTML(str) },
-		"equal":      equal,
-		"stringify":  utils.Stringify,
-		"lower": func(value interface{}) string {
-			return strings.ToLower(fmt.Sprint(value))
-		},
-		"plural": func(value interface{}) string {
-			return inflection.Plural(fmt.Sprint(value))
-		},
-		"singular": func(value interface{}) string {
-			return inflection.Singular(fmt.Sprint(value))
-		},
-		"marshal": func(v interface{}) template.JS {
-			switch value := v.(type) {
-			case string:
-				return template.JS(value)
-			case template.HTML:
-				return template.JS(value)
-			default:
-				byt, _ := json.Marshal(v)
-				return template.JS(byt)
-			}
-		},
-
-		"render":      context.Render,
-		"render_text": context.renderText,
-		"render_with": context.renderWith,
-		"render_form": context.renderForm,
-		"render_meta": func(value interface{}, meta *Meta, types ...string) template.HTML {
-			var (
-				result = bytes.NewBufferString("")
-				typ    = "index"
-			)
-
-			for _, t := range types {
-				typ = t
-			}
-
-			context.renderMeta(meta, value, []string{}, typ, result)
-			return template.HTML(result.String())
-		},
-		"render_filter": context.renderFilter,
-		"page_title":    context.pageTitle,
-		"meta_label": func(meta *Meta) template.HTML {
-			key := fmt.Sprintf("%v.attributes.%v", meta.baseResource.ToParam(), meta.Label)
-			return context.Admin.T(context.Context, key, meta.Label)
-		},
-		"meta_placeholder": func(meta *Meta, context *Context, placeholder string) template.HTML {
-			if getPlaceholder, ok := meta.Config.(interface {
-				GetPlaceholder(*Context) (template.HTML, bool)
-			}); ok {
-				if str, ok := getPlaceholder.GetPlaceholder(context); ok {
-					return str
+			"t":          context.t,
+			"tt":         context.tt,
+			"flashes":    func() []session.Message { return context.SessionManager().Flashes() },
+			"pagination": context.Pagination,
+			"escape":     html.EscapeString,
+			"raw":        func(str string) template.HTML { return template.HTML(utils.HTMLSanitizer.Sanitize(str)) },
+			"unsafe_raw": func(str string) template.HTML { return template.HTML(str) },
+			"equal":      equal,
+			"stringify":  utils.Stringify,
+			"lower": func(value interface{}) string {
+				return strings.ToLower(fmt.Sprint(value))
+			},
+			"plural": func(value interface{}) string {
+				return inflection.Plural(fmt.Sprint(value))
+			},
+			"singular": func(value interface{}) string {
+				return inflection.Singular(fmt.Sprint(value))
+			},
+			"marshal": func(v interface{}) template.JS {
+				switch value := v.(type) {
+				case string:
+					return template.JS(value)
+				case template.HTML:
+					return template.JS(value)
+				default:
+					byt, _ := json.Marshal(v)
+					return template.JS(byt)
 				}
-			}
+			},
 
-			key := fmt.Sprintf("%v.attributes.%v.placeholder", meta.baseResource.ToParam(), meta.Label)
-			return context.Admin.T(context.Context, key, placeholder)
-		},
+			"render":      context.Render,
+			"render_text": context.renderText,
+			"render_with": context.renderWith,
+			"render_form": context.renderForm,
+			"render_meta": func(value interface{}, meta *Meta, types ...string) template.HTML {
+				var (
+					result = bytes.NewBufferString("")
+					typ    = "index"
+				)
 
-		"url_for":            context.URLFor,
-		"link_to":            context.linkTo,
-		"patch_current_url":  context.patchCurrentURL,
-		"patch_url":          context.patchURL,
-		"join_current_url":   context.joinCurrentURL,
-		"join_url":           context.joinURL,
-		"logout_url":         context.logoutURL,
-		"search_center_path": func() string { return path.Join(context.Admin.router.Prefix, "!search") },
-		"new_resource_path":  context.newResourcePath,
-		"defined_resource_show_page": func(res *Resource) bool {
-			if res != nil {
-				if r := context.Admin.GetResource(res.Name); r != nil {
-					return r.isSetShowAttrs
+				for _, t := range types {
+					typ = t
 				}
-			}
 
-			return false
+				context.renderMeta(meta, value, []string{}, typ, result)
+				return template.HTML(result.String())
+			},
+			"render_filter": context.renderFilter,
+			"page_title":    context.pageTitle,
+			"meta_label": func(meta *Meta) template.HTML {
+				key, defaul := meta.GetLabelPair()
+				return context.Admin.T(context.Context, key, defaul)
+			},
+			"meta_placeholder": func(meta *Meta, context *Context, placeholder string) template.HTML {
+				if getPlaceholder, ok := meta.Config.(interface {
+					GetPlaceholder(*Context) (template.HTML, bool)
+				}); ok {
+					if str, ok := getPlaceholder.GetPlaceholder(context); ok {
+						return str
+					}
+				}
+
+				key := fmt.Sprintf("%v.attributes.%v.placeholder", meta.baseResource.I18nPrefix, meta.Name)
+				return context.Admin.T(context.Context, key, placeholder)
+			},
+
+			"url_for":            context.URLFor,
+			"link_to":            context.linkTo,
+			"patch_current_url":  context.PatchCurrentURL,
+			"patch_url":          context.PatchURL,
+			"join_current_url":   context.JoinCurrentURL,
+			"join_url":           context.JoinURL,
+			"logout_url":         context.logoutURL,
+			"search_center_path": func() string { return context.JoinPath("!search") },
+			"new_resource_path":  context.newResourcePath,
+			"defined_resource_show_page": func(res *Resource) bool {
+				if res != nil {
+					if r := context.Admin.GetResource(res.Name); r != nil {
+						return r.isSetShowAttrs
+					}
+				}
+
+				return false
+			},
+			"get_menus":                 context.getMenus,
+			"get_scopes":                context.GetScopes,
+			"get_formatted_errors":      context.getFormattedErrors,
+			"load_actions":              context.loadActions,
+			"allowed_actions":           context.AllowedActions,
+			"is_sortable_meta":          context.isSortableMeta,
+			"index_sections":            context.indexSections,
+			"show_sections":             context.showSections,
+			"new_sections":              context.newSections,
+			"edit_sections":             context.editSections,
+			"convert_sections_to_metas": context.convertSectionToMetas,
+
+			"has_create_permission": context.hasCreatePermission,
+			"has_read_permission":   context.hasReadPermission,
+			"has_update_permission": context.hasUpdatePermission,
+			"has_delete_permission": context.hasDeletePermission,
+
+			"qor_theme_class":        context.themesClass,
+			"javascript_tag":         context.javaScriptTag,
+			"stylesheet_tag":         context.styleSheetTag,
+			"load_theme_stylesheets": context.loadThemeStyleSheets,
+			"load_theme_javascripts": context.loadThemeJavaScripts,
+			"load_admin_stylesheets": context.loadAdminStyleSheets,
+			"load_admin_javascripts": context.loadAdminJavaScripts,
+
+			"global_url":       context.GenGlobalURL,
+			"static_url":       context.GenGlobalStaticURL,
+			"url":              context.GenURL,
+			"admin_static_url": context.GenStaticURL,
+			"locale": func() string {
+				return context.Locale
+			},
 		},
-
-		"get_menus":                 context.getMenus,
-		"get_scopes":                context.GetScopes,
-		"get_formatted_errors":      context.getFormattedErrors,
-		"load_actions":              context.loadActions,
-		"allowed_actions":           context.AllowedActions,
-		"is_sortable_meta":          context.isSortableMeta,
-		"index_sections":            context.indexSections,
-		"show_sections":             context.showSections,
-		"new_sections":              context.newSections,
-		"edit_sections":             context.editSections,
-		"convert_sections_to_metas": context.convertSectionToMetas,
-
-		"has_create_permission": context.hasCreatePermission,
-		"has_read_permission":   context.hasReadPermission,
-		"has_update_permission": context.hasUpdatePermission,
-		"has_delete_permission": context.hasDeletePermission,
-
-		"qor_theme_class":        context.themesClass,
-		"javascript_tag":         context.javaScriptTag,
-		"stylesheet_tag":         context.styleSheetTag,
-		"load_theme_stylesheets": context.loadThemeStyleSheets,
-		"load_theme_javascripts": context.loadThemeJavaScripts,
-		"load_admin_stylesheets": context.loadAdminStyleSheets,
-		"load_admin_javascripts": context.loadAdminJavaScripts,
+		context.Admin.funcMaps,
 	}
 
-	for key, value := range context.Admin.funcMaps {
-		funcMap[key] = value
-	}
+	funcMaps = append(funcMaps, context.funcMaps...)
 
-	for key, value := range context.funcMaps {
-		funcMap[key] = value
-	}
-
-	return funcMap
+	return funcMaps
 }

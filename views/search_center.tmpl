@@ -10,7 +10,7 @@
 
       {{range .Result}}
         <li class="mdl-layout__tab qor-global-search--resource" data-resource="{{.Resource.ToParam}}">
-          {{t (printf "qor_admin.search_center.%v" .Resource.ToParam) .Resource.Name}}
+          {{t (printf "%v.label+" .Resource.I18nPrefix) .Resource.Name}}
         </li>
       {{end}}
     </ul>
@@ -37,7 +37,7 @@
       {{if .Results}}
         {{if (len .Results)}}
           <h2 class="qor-section-title">
-            <span>{{t (printf "qor_admin.search_center.%v" .Resource.ToParam) .Resource.Name}}</span>
+            <span>{{t (printf "%v.label+" .Resource.I18nPrefix) .Resource.Name}}</span>
             <a href="{{patch_url (url_for .Resource) "keyword" $keyword}}" class="qor-view-all">{{t "qor_admin.search_center.view_all" "View All"}}</a>
           </h2>
           <div class="qor-section__body qor-table-container">

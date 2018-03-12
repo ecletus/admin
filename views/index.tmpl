@@ -1,6 +1,13 @@
 {{$actions := load_actions "index" }}
 {{if $actions}}
   <div class="qor-page__header">
+      <div class="qor-page__breadcrumbs">
+          <ol class="breadcrumbs">
+              <li><a href="index.html">Dashboard</a></li>
+              <li><a href="#">Pages</a></li>
+              <li class="active">Breadcrumbs</li>
+          </ol>
+      </div>
     {{$actions}}
   </div>
 {{end}}

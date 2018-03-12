@@ -27,9 +27,9 @@ func TestFuncMaps(t *testing.T) {
 	}
 
 	context := Context{
-		Admin: New(&qor.Config{}),
+		Admin: New(qor.NewConfig(nil)),
 	}
-	funcMaps := context.FuncMap()
+	funcMaps := context.FuncMaps()
 
 	for i, testcase := range rawTestCases {
 		result := funcMaps["raw"].((func(string) template.HTML))(testcase.HTML)

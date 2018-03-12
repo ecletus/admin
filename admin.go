@@ -1,26 +1,36 @@
 package admin
 
 import (
-	"html/template"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 
-	"github.com/jinzhu/inflection"
 	"github.com/qor/assetfs"
 	"github.com/qor/qor"
+	qorconfig "github.com/qor/qor/config"
 	"github.com/qor/qor/resource"
 	"github.com/qor/qor/utils"
 	"github.com/qor/session"
-	"github.com/qor/session/manager"
-	"github.com/theplant/cldr"
+	"github.com/moisespsena/template/html/template"
 )
+
+type AdminConfig struct {
+	*qorconfig.Config
+	SetupDB        qor.SetupDB
+	AssetFS assetfs.Interface
+	RootAssetFS assetfs.Interface
+}
+
+func NewConfig(config *qorconfig.Config) *AdminConfig {
+	return &AdminConfig{Config:config}
+}
 
 // Admin is a struct that used to generate admin/api interface
 type Admin struct {
 	SiteName       string
-	Config         *qor.Config
+	SiteTitle      string
+	Config         *AdminConfig
 	I18n           I18n
 	Auth           Auth
 	SessionManager session.ManagerInterface
@@ -29,10 +39,12 @@ type Admin struct {
 	AssetFS          assetfs.Interface
 	menus            []*Menu
 	resources        []*Resource
+	resourcesMap     map[interface{}]*Resource
 	searchResources  []*Resource
 	router           *Router
 	funcMaps         template.FuncMap
 	metaConfigorMaps map[string]func(*Meta)
+	NewContextCallbacks []func(context *Context) *Context
 }
 
 // ResourceNamer is an interface for models that defined method `ResourceName`
@@ -41,19 +53,44 @@ type ResourceNamer interface {
 }
 
 // New new admin with configuration
-func New(config *qor.Config) *Admin {
-	admin := Admin{
+func New(config *AdminConfig) *Admin {
+	admin := &Admin{
 		Config:           config,
 		funcMaps:         make(template.FuncMap),
 		router:           newRouter(),
 		metaConfigorMaps: metaConfigorMaps,
 		Transformer:      DefaultTransformer,
+		resourcesMap:     make(map[interface{}]*Resource),
 	}
 
-	admin.SessionManager = manager.SessionManager
-	admin.SetAssetFS(assetfs.AssetFS().NameSpace("admin"))
+	if config.RootAssetFS != nil {
+		admin.SetRootAssetFS(config.RootAssetFS)
+	} else if config.AssetFS != nil {
+		admin.SetAssetFS(config.AssetFS)
+	} else {
+		admin.SetRootAssetFS(assetfs.AssetFS())
+	}
+
 	admin.registerCompositePrimaryKeyCallback()
-	return &admin
+	return admin
+}
+
+func (admin *Admin) GetSiteTitle() string {
+	if admin.SiteTitle == "" {
+		return admin.SiteName
+	}
+	return admin.SiteTitle
+}
+
+func (admin *Admin) AddNewContextCallback(callback func(context *Context) *Context) *Admin {
+	admin.NewContextCallbacks = append(admin.NewContextCallbacks, callback)
+	return admin
+}
+
+// SetSiteName set site's name, the name will be used as admin HTML title and admin interface will auto load javascripts, stylesheets files based on its value
+// For example, if you named it as `Qor Demo`, admin will look up `qor_demo.js`, `qor_demo.css` in QOR view paths, and load them if found
+func (admin *Admin) SetSiteTitle(siteName string) {
+	admin.SiteTitle = siteName
 }
 
 // SetSiteName set site's name, the name will be used as admin HTML title and admin interface will auto load javascripts, stylesheets files based on its value
@@ -78,6 +115,11 @@ func (admin *Admin) SetAssetFS(assetFS assetfs.Interface) {
 	for _, viewPath := range globalViewPaths {
 		admin.RegisterViewPath(viewPath)
 	}
+}
+
+// SetAssetFS set AssetFS for admin
+func (admin *Admin) SetRootAssetFS(assetFS assetfs.Interface) {
+	admin.SetAssetFS(assetFS.NameSpace("admin"))
 }
 
 // RegisterViewPath register view path for admin
@@ -121,6 +163,7 @@ func (admin *Admin) newResource(value interface{}, config ...*Config) *Resource 
 		Config:      configuration,
 		cachedMetas: &map[string][]*Meta{},
 		admin:       admin,
+		filters:     make(map[string]*Filter),
 	}
 
 	res.Permission = configuration.Permission
@@ -154,13 +197,14 @@ func (admin *Admin) newResource(value interface{}, config ...*Config) *Resource 
 	}
 
 	res.UseTheme("slideout")
+
 	return res
 }
 
 // NewResource initialize a new qor resource, won't add it to admin, just initialize it
 func (admin *Admin) NewResource(value interface{}, config ...*Config) *Resource {
 	res := admin.newResource(value, config...)
-	res.Config.Invisible = true
+	//res.Config.Invisible = true
 	res.configure()
 	return res
 }
@@ -173,23 +217,16 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 	res.configure()
 
 	if !res.Config.Invisible {
-		res.Action(&Action{
-			Name:   "Delete",
-			Method: "DELETE",
-			URL: func(record interface{}, context *Context) string {
-				return context.URLFor(record, res)
-			},
-			Permission: res.Config.Permission,
-			Modes:      []string{"menu_item"},
-		})
+		admin.AddMenu(res.CreateDefaultMenu())
+		res.RegisterDefaultRouters()
+	}
 
-		menuName := res.Name
-		if !res.Config.Singleton {
-			menuName = inflection.Plural(res.Name)
-		}
-		admin.AddMenu(&Menu{Name: menuName, Permissioner: res, Priority: res.Config.Priority, Ancestors: res.Config.Menu, RelativePath: res.ToParam()})
+	admin.resourcesMap[res.ToParam()] = res
 
-		admin.RegisterResourceRouters(res, "create", "update", "read", "delete")
+	key := utils.TypeId(value)
+
+	if _, ok := admin.resourcesMap[key]; !ok {
+		admin.resourcesMap[key] = res
 	}
 
 	return res
@@ -201,17 +238,24 @@ func (admin *Admin) GetResources() []*Resource {
 }
 
 // GetResource get resource with name
-func (admin *Admin) GetResource(name string) (resource *Resource) {
-	for _, res := range admin.resources {
-		modelType := utils.ModelType(res.Value)
-		// find with defined name first
-		if res.ToParam() == name || res.Name == name || modelType.String() == name {
-			return res
-		}
+func (admin *Admin) GetResource(key interface{}) (resource *Resource) {
+	if resource, ok := admin.resourcesMap[key]; ok {
+		return resource
+	}
 
-		// if failed to find, use its model name
-		if modelType.Name() == name {
-			resource = res
+	switch name := key.(type) {
+	case string:
+		for _, res := range admin.resources {
+			modelType := utils.ModelType(res.Value)
+			// find with defined name first
+			if res.ToParam() == name || res.Name == name || modelType.String() == name {
+				return res
+			}
+
+			// if failed to find, use its model name
+			if modelType.Name() == name {
+				resource = res
+			}
 		}
 	}
 
@@ -232,14 +276,24 @@ type I18n interface {
 
 // T call i18n backend to translate
 func (admin *Admin) T(context *qor.Context, key string, value string, values ...interface{}) template.HTML {
-	locale := utils.GetLocale(context)
-
-	if admin.I18n == nil {
-		if result, err := cldr.Parse(locale, value, values...); err == nil {
-			return template.HTML(result)
-		}
-		return template.HTML(key)
+	if len(values) > 1 {
+		panic("Values has many args.")
 	}
 
-	return admin.I18n.Default(value).T(locale, key, values...)
+	t := context.GetI18nContext().T(key).Default(value)
+
+	if len(values) == 1 {
+		t.Data(values[0])
+	}
+
+	return template.HTML(t.Get())
+}
+
+// TT call i18n backend to translate template
+func (admin *Admin) TT(context *qor.Context, key string, data interface{}, defaul... string) template.HTML {
+	t := context.GetI18nContext().T(key).Data(data)
+	if len(defaul) > 0 {
+		t = t.Default(defaul[0])
+	}
+	return template.HTML(t.Get())
 }

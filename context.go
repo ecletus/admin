@@ -3,15 +3,17 @@ package admin
 import (
 	"bytes"
 	"fmt"
-	"reflect"
-	"html/template"
+	"strings"
 	"net/http"
 	"path/filepath"
+	"errors"
 
 	"github.com/qor/qor"
 	"github.com/qor/qor/utils"
 	"github.com/qor/roles"
 	"github.com/qor/session"
+	"github.com/moisespsena/template/html/template"
+	"github.com/moisespsena/template/cache"
 )
 
 // Context admin context, which is used for admin controller
@@ -25,31 +27,63 @@ type Context struct {
 	Settings     map[string]interface{}
 	Result       interface{}
 	RouteHandler *routeHandler
+	PageTitle    string
 
 	usedThemes []string
-	funcMaps   template.FuncMap
+	funcMaps   []template.FuncMap
+	funcValues *template.FuncValues
 }
 
 // NewContext new admin context
-func (admin *Admin) NewContext(w http.ResponseWriter, r *http.Request) *Context {
-	return &Context{Context: &qor.Context{Config: admin.Config, Request: r, Writer: w}, Admin: admin, Settings: map[string]interface{}{}}
+func (admin *Admin) NewContext(args... interface{}) (c *Context) {
+	if len(args) == 0 {
+		return admin.NewContext(&qor.Context{})
+	}
+	for i, arg := range args {
+		switch ctx := arg.(type) {
+		case qor.SiteInterface:
+			return admin.NewContext(ctx.NewContext())
+		case *qor.Context:
+			c = &Context{Context: ctx, Admin: admin, Settings: map[string]interface{}{}}
+		case http.ResponseWriter:
+			_, qorCtx := qor.NewContextFromRequestPair(ctx, args[i+1].(*http.Request), admin.router.Prefix)
+			qorCtx.Config = admin.Config.Config
+			c = &Context{Context: qorCtx, Admin: admin, Settings: map[string]interface{}{}}
+		}
+	}
+
+	if c != nil {
+		if c.Context == nil {
+			_, c.Context = qor.NewContextFromRequestPair(c.Writer, c.Request, admin.router.Prefix)
+			c.Request = c.Context.Request
+		}
+		c.PageTitle = admin.SiteTitle
+
+		for _, cb := range admin.NewContextCallbacks {
+			c = cb(c)
+		}
+	}
+
+	return
+}
+
+func (admin *Admin) NewContextForResource(context *Context, resource *Resource) *Context {
+	clone := admin.NewContext(context.Writer, context.Request)
+	clone.Searcher = &Searcher{Context: clone}
+	clone.Resource = resource
+	clone.DB = clone.DB.NewScope(resource.Value).DB()
+	return clone
 }
 
 // Funcs set FuncMap for templates
-func (context *Context) Funcs(funcMaps template.FuncMap) *Context {
-	if context.funcMaps == nil {
-		context.funcMaps = template.FuncMap{}
-	}
-
-	for key, value := range funcMaps {
-		context.funcMaps[key] = value
-	}
+func (context *Context) Funcs(funcMaps... template.FuncMap) *Context {
+	context.funcMaps = append(context.funcMaps, funcMaps...)
 	return context
 }
 
 // Flash set flash message
 func (context *Context) Flash(message string, typ string) {
-	context.Admin.SessionManager.Flash(context.Writer, context.Request, session.Message{
+	context.SessionManager().Flash(session.Message{
 		Message: template.HTML(message),
 		Type:    typ,
 	})
@@ -67,6 +101,20 @@ func (context *Context) clone() *Context {
 		Action:   context.Action,
 		funcMaps: context.funcMaps,
 	}
+}
+
+func (context *Context) IsAction(name string, names... string) bool {
+	if context.Action == name {
+		return true
+	}
+
+	for _, name = range names {
+		if context.Action == name {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Get get context's Settings
@@ -93,6 +141,16 @@ func (context *Context) setResource(res *Resource) *Context {
 	}
 	context.Searcher = &Searcher{Context: context}
 	return context
+}
+
+func (context *Context) SetResource(res *Resource) *Context {
+	return context.setResource(res)
+}
+
+func (context *Context) SetResourceWithDB(res *Resource) *Context {
+	ctx := context.setResource(res)
+	ctx.DB = ctx.DB.NewScope(res.Value).DB()
+	return ctx
 }
 
 func (context *Context) Asset(layouts ...string) ([]byte, error) {
@@ -144,8 +202,8 @@ func (context *Context) renderText(text string, data interface{}) template.HTML 
 		result = bytes.NewBufferString("")
 	)
 
-	if tmpl, err = template.New("").Funcs(context.FuncMap()).Parse(text); err == nil {
-		if err = tmpl.Execute(result, data); err == nil {
+	if tmpl, err = template.New("").Parse(text); err == nil {
+		if err = context.ExecuteTemplate(tmpl, result, data); err == nil {
 			return template.HTML(result.String())
 		}
 	}
@@ -153,17 +211,54 @@ func (context *Context) renderText(text string, data interface{}) template.HTML 
 	return template.HTML(err.Error())
 }
 
+func (context *Context) LoadTemplate(name string) (*template.Executor, error) {
+	if content, err := context.Asset(name + ".tmpl"); err == nil {
+		tmpl, err := template.New(name).Parse(string(content))
+		if err != nil {
+			return nil, err
+		}
+		return tmpl.CreateExecutor(), nil
+	} else {
+		return nil, nil
+	}
+}
+
+func (context *Context) GetTemplateOrDefault(name string, defaul *template.Executor, others... string) (t *template.Executor, err error) {
+	t, err = cache.Cache.LoadOrStoreNames(name, context.LoadTemplate, others...)
+	if t == nil && err == nil {
+		return defaul.FuncsValues(context.FuncValues()), nil
+	}
+
+	return
+}
+
+// renderWith render template based on data
+func (context *Context) GetTemplate(name string, others... string) (t *template.Executor, err error) {
+	t, err = cache.Cache.LoadOrStoreNames(name, context.LoadTemplate, others...)
+	if t == nil && err == nil {
+		var msg string
+		if len(others) > 0 {
+			msg = "Templates with \"" + strings.Join(append([]string{name}, others...), "\", \"") + "\" does not exists."
+		} else{
+			msg = "Template \"" + name + "\" not exists."
+		}
+		return nil,  errors.New(msg)
+	}
+
+	return t.FuncsValues(context.FuncValues()), nil
+}
+
 // renderWith render template based on data
 func (context *Context) renderWith(name string, data interface{}) template.HTML {
-	var (
-		err     error
-		content []byte
-	)
-
-	if content, err = context.Asset(name + ".tmpl"); err == nil {
-		return context.renderText(string(content), data)
+	executor, err := context.GetTemplate(name)
+	if err != nil {
+		return template.HTML(err.Error())
 	}
-	return template.HTML(err.Error())
+	text, err := executor.ExecuteString(data)
+	if err != nil {
+		return template.HTML(err.Error())
+	}
+	return template.HTML(text)
 }
 
 // Render render template based on context
@@ -185,8 +280,6 @@ func (context *Context) Render(name string, results ...interface{}) template.HTM
 
 // Execute execute template with layout
 func (context *Context) Execute(name string, result interface{}) {
-	var tmpl *template.Template
-
 	if name == "show" && !context.Resource.isSetShowAttrs {
 		name = "edit"
 	}
@@ -195,25 +288,18 @@ func (context *Context) Execute(name string, result interface{}) {
 		context.Action = name
 	}
 
-	if content, err := context.Asset("layout.tmpl"); err == nil {
-		if tmpl, err = template.New("layout").Funcs(context.FuncMap()).Parse(string(content)); err == nil {
-			for _, name := range []string{"header", "footer"} {
-				if tmpl.Lookup(name) == nil {
-					if content, err := context.Asset(name + ".tmpl"); err == nil {
-						tmpl.Parse(string(content))
-					}
-				} else {
-					utils.ExitWithMsg(err)
-				}
-			}
-		} else {
-			utils.ExitWithMsg(err)
-		}
+	var (
+		executor *template.Executor
+		err error
+	)
+
+	if executor, err = context.GetTemplate("layout"); err != nil {
+		utils.ExitWithMsg(err)
 	}
 
 	context.Result = result
 	context.Content = context.Render(name, result)
-	if err := tmpl.Execute(context.Writer, context); err != nil {
+	if err := executor.Execute(context.Writer, context); err != nil {
 		utils.ExitWithMsg(err)
 	}
 }
@@ -254,4 +340,27 @@ func (context *Context) GetSearchableResources() (resources []*Resource) {
 		}
 	}
 	return
+}
+
+// GetSearchableResources clone the context object
+func CloneContext(context *Context) *Context {
+	return context.clone()
+}
+
+func (context *Context) GetActionLabel() string {
+	var defaul string
+	key := "qor_admin.action." + context.Action
+
+	switch context.Action {
+	case "new":
+		defaul = "Add {{.}}"
+	case "edit":
+		defaul = "Edit {{.}}"
+	case "show":
+		defaul = "{{.}} Details"
+	default:
+		return ""
+	}
+
+	return string(context.t(key, defaul))
 }

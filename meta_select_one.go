@@ -6,12 +6,76 @@ import (
 	"html/template"
 	"path"
 	"reflect"
+	"strings"
 
 	"github.com/jinzhu/gorm"
 	"github.com/qor/qor"
 	"github.com/qor/qor/resource"
 	"github.com/qor/qor/utils"
 )
+
+type RemoteDataResourceConfig struct {
+	Scopes []string
+}
+
+type DataResource struct {
+	Resource    *Resource
+	Scopes      []string
+	Filters     map[string]string
+	DynamicFilters func(context *Context, filters map[string]string)
+	DisplayName string
+	Query       map[string]interface{}
+	FormatURI func(data *DataResource, context *Context, uri string) string
+}
+
+func NewDataResource(resource *Resource) *DataResource {
+	return &DataResource{Resource:resource}
+}
+
+func (d *DataResource) Filter(name string, value string) *DataResource {
+	if d.Filters == nil {
+		d.Filters = make(map[string]string)
+	}
+	d.Filters[name] = value
+	return d
+}
+
+// ToURLString Convert to URL string
+func (d *DataResource) ToURLString(context *Context) string {
+	uri := d.Resource.GetURI(context)
+	if d.FormatURI != nil {
+		uri = d.FormatURI(d, context, uri)
+	}
+
+	var query []string
+
+	if d.DisplayName != "" {
+		query = append(query, "display=" + d.DisplayName)
+	}
+
+	for _, scope := range d.Scopes {
+		query = append(query, "scopes=" + scope)
+	}
+
+	for fname, fvalue := range d.Filters {
+		query = append(query, "filters[" + fname + "].Value="+fvalue)
+	}
+
+	if d.DynamicFilters != nil {
+		dynamicFilters := make(map[string]string)
+		d.DynamicFilters(context, dynamicFilters)
+
+		for fname, fvalue := range dynamicFilters {
+			query = append(query, "filters[" + fname + "].Value="+fvalue)
+		}
+	}
+
+	if len(query) > 0 {
+		uri += "?" + strings.Join(query, "&")
+	}
+
+	return uri
+}
 
 // SelectOneConfig meta configuration used for select one
 type SelectOneConfig struct {
@@ -20,13 +84,32 @@ type SelectOneConfig struct {
 	AllowBlank               bool
 	DefaultCreating          bool
 	SelectionTemplate        string
+	DisplayName              string
 	SelectMode               string // select, select_async, bottom_sheet
 	PrimaryField             string
 	Select2ResultTemplate    template.JS
 	Select2SelectionTemplate template.JS
-	RemoteDataResource       *Resource
+	RemoteDataResource       *DataResource
+	RemoteURL                string
+	MakeRemoteURL            func(*Context) string
 	metaConfig
-	getCollection func(interface{}, *Context) [][]string
+	getCollection            func(interface{}, *Context) [][]string
+	Note                     string
+}
+
+func (selectOneConfig *SelectOneConfig) IsRemote() bool {
+	return selectOneConfig.RemoteURL != "" || selectOneConfig.RemoteDataResource != nil
+}
+
+// ToURLString Convert to URL string
+func (selectOneConfig *SelectOneConfig) ToURLString(context *Context) string {
+	if selectOneConfig.RemoteDataResource != nil {
+		return selectOneConfig.RemoteDataResource.ToURLString(context)
+	}
+	if selectOneConfig.MakeRemoteURL != nil {
+		return selectOneConfig.MakeRemoteURL(context)
+	}
+	return selectOneConfig.RemoteURL
 }
 
 // GetPlaceholder get placeholder
@@ -72,7 +155,7 @@ func (selectOneConfig *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor)
 
 func (selectOneConfig *SelectOneConfig) ConfigureQORAdminFilter(filter *Filter) {
 	var structField *gorm.StructField
-	if field, ok := filter.Resource.GetAdmin().Config.DB.NewScope(filter.Resource.Value).FieldByName(filter.Name); ok {
+	if field, ok := qor.FakeDB.NewScope(filter.Resource.Value).FieldByName(filter.Name); ok {
 		structField = field.StructField
 	}
 
@@ -97,10 +180,10 @@ func (selectOneConfig *SelectOneConfig) FilterValue(filter *Filter, context *Con
 	}
 
 	if keyword != "" && selectOneConfig.RemoteDataResource != nil {
-		result := selectOneConfig.RemoteDataResource.NewStruct()
+		result := selectOneConfig.RemoteDataResource.Resource.NewStruct(context.Context.Site)
 		clone := context.Clone()
 		clone.ResourceID = keyword
-		if selectOneConfig.RemoteDataResource.CallFindOne(result, nil, clone) == nil {
+		if selectOneConfig.RemoteDataResource.Resource.CallFindOne(result, nil, clone) == nil {
 			return result
 		}
 	}
@@ -142,14 +225,14 @@ func (selectOneConfig *SelectOneConfig) prepareDataSource(field *gorm.StructFiel
 			for fieldType.Kind() == reflect.Ptr || fieldType.Kind() == reflect.Slice {
 				fieldType = fieldType.Elem()
 			}
-			selectOneConfig.RemoteDataResource = res.GetAdmin().GetResource(fieldType.Name())
-			if selectOneConfig.RemoteDataResource == nil {
-				selectOneConfig.RemoteDataResource = res.GetAdmin().NewResource(reflect.New(fieldType).Interface())
+			selectOneConfig.RemoteDataResource = NewDataResource(res.GetAdmin().GetResource(fieldType.Name()))
+			if selectOneConfig.RemoteDataResource.Resource == nil {
+				selectOneConfig.RemoteDataResource.Resource = res.GetAdmin().NewResource(reflect.New(fieldType).Interface())
 			}
 		}
 
 		if selectOneConfig.PrimaryField == "" {
-			for _, primaryField := range selectOneConfig.RemoteDataResource.PrimaryFields {
+			for _, primaryField := range selectOneConfig.RemoteDataResource.Resource.PrimaryFields {
 				selectOneConfig.PrimaryField = primaryField.Name
 				break
 			}
@@ -161,15 +244,16 @@ func (selectOneConfig *SelectOneConfig) prepareDataSource(field *gorm.StructFiel
 
 		selectOneConfig.getCollection = func(_ interface{}, context *Context) (results [][]string) {
 			cloneContext := context.clone()
-			cloneContext.setResource(selectOneConfig.RemoteDataResource)
+			cloneContext.setResource(selectOneConfig.RemoteDataResource.Resource)
 			searcher := &Searcher{Context: cloneContext}
+			searcher.Scope(selectOneConfig.RemoteDataResource.Scopes...)
 			searcher.Pagination.CurrentPage = -1
-			searchResults, _ := searcher.FindMany()
-
+			searchResults, _ := searcher.Basic().FindMany()
 			reflectValues := reflect.Indirect(reflect.ValueOf(searchResults))
+
 			for i := 0; i < reflectValues.Len(); i++ {
 				value := reflectValues.Index(i).Interface()
-				scope := context.GetDB().NewScope(value)
+				scope := context.DB.NewScope(value)
 				results = append(results, []string{fmt.Sprint(scope.PrimaryKeyValue()), utils.Stringify(value)})
 			}
 			return
@@ -178,9 +262,11 @@ func (selectOneConfig *SelectOneConfig) prepareDataSource(field *gorm.StructFiel
 
 	if res != nil && (selectOneConfig.SelectMode == "select_async" || selectOneConfig.SelectMode == "bottom_sheet") {
 		if remoteDataResource := selectOneConfig.RemoteDataResource; remoteDataResource != nil {
-			if !remoteDataResource.mounted {
-				remoteDataResource.params = path.Join(routePrefix, res.ToParam(), field.Name, fmt.Sprintf("%p", remoteDataResource))
-				res.GetAdmin().RegisterResourceRouters(remoteDataResource, "create", "update", "read", "delete")
+			if !remoteDataResource.Resource.mounted {
+				remoteDataResource.Resource.params = path.Join(routePrefix, res.ToParam(), field.Name,
+					fmt.Sprintf("%p", remoteDataResource.Resource))
+				res.GetAdmin().RegisterResourceRouters(remoteDataResource.Resource,
+					"create", "update", "read", "delete")
 			}
 		} else {
 			utils.ExitWithMsg("RemoteDataResource not configured")

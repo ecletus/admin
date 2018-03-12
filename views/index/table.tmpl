@@ -32,8 +32,9 @@
 
           <td class="mdl-data-table__cell--non-numeric qor-table__actions">
             {{$allowed_actions := allowed_actions $resource.Actions "menu_item" $result}}
+            {{$children := $resource.VisibleChildren}}
 
-            {{if $allowed_actions}}
+            {{if or $allowed_actions $children}}
               <button id="actions-for-{{$uniqueKey}}" class="mdl-button mdl-js-button mdl-button--icon qor-button--actions">
                 <i class="material-icons">more_vert</i>
               </button>
@@ -60,6 +61,16 @@
                       </a>
                     {{end}}
                   </li>
+                {{end}}
+
+                {{if $children}}
+                  {{range $child := $children}}
+                    {{with $child.CreateDefaultMenu $primaryKey}}
+                        <li class="mdl-menu__item" qor-icon-name="{{.GetIcon}}">
+                        {{link_to (t (.GetLabel) .Name) (.URL (admin_context))}}
+                        </li>
+                    {{end}}
+                  {{end}}
                 {{end}}
               </ul>
             {{end}}

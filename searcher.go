@@ -8,11 +8,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"net/url"
 
 	"github.com/jinzhu/gorm"
 	"github.com/qor/qor"
 	"github.com/qor/qor/resource"
 	"github.com/qor/qor/utils"
+	"gopkg.in/fatih/set.v0"
+	"mime/multipart"
 )
 
 // PaginationPageCount default pagination page count
@@ -28,16 +31,56 @@ type Pagination struct {
 	PerPage     int
 }
 
+type ImmutableScopes struct {
+	set *set.Set
+}
+
+func (is *ImmutableScopes) Has(names... interface{}) bool  {
+	return is.set.Has(names...)
+}
+
+func (is *ImmutableScopes) List() []string {
+	var items []string
+
+	for _, v := range is.set.List() {
+		items = append(items, v.(string))
+	}
+
+	return items
+}
+
 // Searcher is used to search results
 type Searcher struct {
 	*Context
 	scopes     []*Scope
 	filters    map[*Filter]*resource.MetaValues
 	Pagination Pagination
+	CurrentScopes ImmutableScopes
+	readonly   bool
+	basic      bool
+}
+
+func (s *Searcher) Basic() *Searcher {
+	s.basic = true
+	return s
+}
+
+func (s *Searcher) Readonly() *Searcher {
+	s.readonly = true
+	return s
+}
+
+func (s *Searcher) ForUpdate() *Searcher {
+	s.readonly = false
+	return s
+}
+
+func (s *Searcher) IsReadonly() bool {
+	return s.readonly
 }
 
 func (s *Searcher) clone() *Searcher {
-	return &Searcher{Context: s.Context, scopes: s.scopes, filters: s.filters}
+	return &Searcher{Context: s.Context, scopes: s.scopes, filters: s.filters, CurrentScopes: s.CurrentScopes}
 }
 
 // Page set current page, if current page equal -1, then show all records
@@ -55,14 +98,22 @@ func (s *Searcher) PerPage(num int) *Searcher {
 // Scope filter with defined scopes
 func (s *Searcher) Scope(names ...string) *Searcher {
 	newSearcher := s.clone()
+	scopesSet := set.New()
+
 	for _, name := range names {
 		for _, scope := range s.Resource.scopes {
-			if scope.Name == name && !scope.Default {
-				newSearcher.scopes = append(newSearcher.scopes, scope)
-				break
+			if scope.Name == name  {
+				scopesSet.Add(name)
+
+				if !scope.Default {
+					newSearcher.scopes = append(newSearcher.scopes, scope)
+					break
+				}
 			}
 		}
 	}
+
+	newSearcher.CurrentScopes = ImmutableScopes{scopesSet}
 	return newSearcher
 }
 
@@ -97,32 +148,36 @@ func (s *Searcher) FindOne() (interface{}, error) {
 	var (
 		err     error
 		context = s.parseContext()
-		result  = s.Resource.NewStruct()
+		result  = s.Resource.NewStruct(s.Site)
 	)
 
 	if context.HasError() {
 		return result, context.Errors
 	}
 
-	err = s.Resource.CallFindOne(result, nil, context)
+	if s.IsReadonly() {
+		err = s.Resource.CallFindOneReadonly(result, nil, context)
+	} else {
+		err = s.Resource.CallFindOne(result, nil, context)
+	}
 	return result, err
 }
 
 var filterRegexp = regexp.MustCompile(`^filters\[(.*?)\]`)
 
 func (s *Searcher) callScopes(context *qor.Context) *qor.Context {
-	db := context.GetDB()
+	db := context.DB
 
 	// call default scopes
 	for _, scope := range s.Resource.scopes {
 		if scope.Default {
-			db = scope.Handler(db, context)
+			db = scope.Handler(db, s, context)
 		}
 	}
 
 	// call scopes
 	for _, scope := range s.scopes {
-		db = scope.Handler(db, context)
+		db = scope.Handler(db, s, context)
 	}
 
 	// call filters
@@ -152,7 +207,7 @@ func (s *Searcher) callScopes(context *qor.Context) *qor.Context {
 		}
 	}
 
-	context.SetDB(db)
+	context.DB = db
 
 	// call search
 	var keyword string
@@ -161,11 +216,46 @@ func (s *Searcher) callScopes(context *qor.Context) *qor.Context {
 	}
 
 	if s.Resource.SearchHandler != nil {
-		context.SetDB(s.Resource.SearchHandler(keyword, context))
+		context.DB = s.Resource.SearchHandler(keyword, context)
 		return context
 	}
 
 	return context
+}
+
+func (s *Searcher) FilterRaw(data map[string]string) *Searcher {
+	params := url.Values{}
+	for key, value := range data {
+		params.Add("filters[" + key + "].Value", value)
+	}
+
+	return s.FilterFromParams(params, nil)
+}
+
+func (s *Searcher) FilterFromParams(params url.Values, form *multipart.Form) *Searcher  {
+	searcher := s
+
+	for key := range params {
+		if matches := filterRegexp.FindStringSubmatch(key); len(matches) > 0 {
+			var prefix = fmt.Sprintf("filters[%v].", matches[1])
+			if filter, ok := s.Resource.filters[matches[1]]; ok {
+				if metaValues, err := resource.ConvertFormDataToMetaValues(params, form, []resource.Metaor{}, prefix); err == nil {
+					searcher = searcher.Filter(filter, metaValues)
+				}
+			}
+		}
+	}
+
+	return searcher
+}
+
+func (s *Searcher) FilterRawPairs(args... string) *Searcher {
+	data := make(map[string]string)
+	l := len(args)
+	for i := 0; i < l; i +=2 {
+		data[args[i]] = args[i+1]
+	}
+	return s.FilterRaw(data)
 }
 
 func (s *Searcher) parseContext() *qor.Context {
@@ -178,28 +268,15 @@ func (s *Searcher) parseContext() *qor.Context {
 		// parse scopes
 		scopes := context.Request.Form["scopes"]
 		searcher = searcher.Scope(scopes...)
-
-		// parse filters
-		for key := range context.Request.Form {
-			if matches := filterRegexp.FindStringSubmatch(key); len(matches) > 0 {
-				var prefix = fmt.Sprintf("filters[%v].", matches[1])
-				for _, filter := range s.Resource.filters {
-					if filter.Name == matches[1] {
-						if metaValues, err := resource.ConvertFormToMetaValues(context.Request, []resource.Metaor{}, prefix); err == nil {
-							searcher = searcher.Filter(filter, metaValues)
-						}
-					}
-				}
-			}
-		}
+		searcher = searcher.FilterFromParams(context.Request.Form, context.Request.MultipartForm)
 	}
 
 	searcher.callScopes(context)
 
-	db := context.GetDB()
+	db := context.DB
 
 	// pagination
-	context.SetDB(db.Model(s.Resource.Value).Set("qor:getting_total_count", true))
+	context.DB = db.Model(s.Resource.Value).Set("qor:getting_total_count", true)
 	s.Resource.CallFindMany(&s.Pagination.Total, context)
 
 	if s.Pagination.CurrentPage == 0 {
@@ -230,7 +307,7 @@ func (s *Searcher) parseContext() *qor.Context {
 		db = db.Limit(s.Pagination.PerPage).Offset((s.Pagination.CurrentPage - 1) * s.Pagination.PerPage)
 	}
 
-	context.SetDB(db)
+	context.DB = db
 
 	return context
 }

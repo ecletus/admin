@@ -255,7 +255,15 @@
         },
 
         handleResults: function(data, isNewData) {
-            data.displayName = data.Text || data.Name || data.Title || data.Code || data[Object.keys(data)[0]];
+            var firstKey = function() {
+                var keys = Object.keys(data);
+                if (keys.length > 1 && keys[0] == "ID") {
+                    return keys[1];
+                }
+                return keys[0];
+            }
+
+            data.displayName = data.Text || data.Name || data.Title || data.Code || data[firstKey()];
 
             if (isNewData) {
                 this.addItem(data, true);

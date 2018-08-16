@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-valuesmap"
 	"github.com/aghape/aghape/serializer"
 	"github.com/aghape/responder"
@@ -124,7 +124,7 @@ func (ac *Controller) renderSingleton(context *Context) (interface{}, bool, erro
 
 	if res.Config.Singleton {
 		result = res.NewStruct(context.Context.Site)
-		if err = res.FindMany(result, res.ApplyDefaultFilters(context.Context)); err == gorm.ErrRecordNotFound {
+		if err = res.FindMany(result, res.ApplyDefaultFilters(context.Context)); err == aorm.ErrRecordNotFound {
 			context.Type = NEW
 			context.Execute("", result)
 			return nil, true, nil

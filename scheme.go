@@ -3,7 +3,7 @@ package admin
 import (
 	"strings"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/aghape"
 	"github.com/aghape/roles"
 )
@@ -18,7 +18,7 @@ type Scheme struct {
 	customSections *map[string]*[]*Section
 	sortableAttrs  *[]string
 
-	SearchHandler func(keyword string, context *qor.Context) *gorm.DB
+	SearchHandler func(keyword string, context *qor.Context) *aorm.DB
 }
 
 // IndexAttrs set attributes will be shown in the index page
@@ -149,7 +149,7 @@ func (s *Scheme) SearchAttrs(columns ...string) []string {
 		}
 
 		if len(columns) > 0 {
-			s.SearchHandler = func(keyword string, context *qor.Context) *gorm.DB {
+			s.SearchHandler = func(keyword string, context *qor.Context) *aorm.DB {
 				var filterFields []filterField
 				for _, column := range columns {
 					filterFields = append(filterFields, filterField{FieldName: column})

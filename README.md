@@ -29,7 +29,7 @@ import (
     "fmt"
     "net/http"
 
-    "github.com/jinzhu/gorm"
+    "github.com/moisespsena-go/aorm"
     _ "github.com/mattn/go-sqlite3"
     "github.com/aghape/aghape"
     "github.com/aghape/admin"
@@ -37,19 +37,19 @@ import (
 
 // Create a GORM-backend model
 type User struct {
-  gorm.Model
+  aorm.Model
   Name string
 }
 
 // Create another GORM-backend model
 type Product struct {
-  gorm.Model
+  aorm.Model
   Name        string
   Description string
 }
 
 func main() {
-  DB, _ := gorm.Open("sqlite3", "demo.db")
+  DB, _ := aorm.Open("sqlite3", "demo.db")
   DB.AutoMigrate(&User{}, &Product{})
 
   // Initalize
@@ -180,7 +180,7 @@ To translate admin interface to a new language, you could use `i18n` [https://gi
 
 ## Working with a Resource
 
-Every QOR Admin Resource needs a [GORM-backend](https://github.com/jinzhu/gorm) model. Once you have defined the model you can create a QOR Admin resource: `Admin.AddResource(&Product{})`
+Every QOR Admin Resource needs a [GORM-backend](https://github.com/moisespsena-go/aorm) model. Once you have defined the model you can create a QOR Admin resource: `Admin.AddResource(&Product{})`
 
 Once a resource has been added, QOR Admin will generate the admin interface to manage it, including a RESTFul JSON API.
 
@@ -238,7 +238,7 @@ product.SearchAttrs("Name", "Code", "Category.Name", "Brand.Name")
 If you want to fully customize the search function, you could set the `SearchHandler`:
 
 ```go
-order.SearchHandler = func(keyword string, context *qor.Context) *gorm.DB {
+order.SearchHandler = func(keyword string, context *qor.Context) *aorm.DB {
   // search orders
 }
 ```
@@ -260,7 +260,7 @@ You can define scopes to filter data with given conditions, for example:
 
 ```go
 // Only show actived users
-user.Scope(&admin.Scope{Name: "Active", Handle: func(db *gorm.DB, context *qor.Context) *gorm.DB {
+user.Scope(&admin.Scope{Name: "Active", Handle: func(db *aorm.DB, context *qor.Context) *aorm.DB {
   return db.Where("active = ?", true)
 }})
 ```
@@ -268,11 +268,11 @@ user.Scope(&admin.Scope{Name: "Active", Handle: func(db *gorm.DB, context *qor.C
 #### Group Scopes
 
 ```go
-order.Scope(&admin.Scope{Name: "Paid", Group: "State", Handle: func(db *gorm.DB, context *qor.Context) *gorm.DB {
+order.Scope(&admin.Scope{Name: "Paid", Group: "State", Handle: func(db *aorm.DB, context *qor.Context) *aorm.DB {
   return db.Where("state = ?", "paid")
 }})
 
-order.Scope(&admin.Scope{Name: "Shipped", Group: "State", Handle: func(db *gorm.DB, context *qor.Context) *gorm.DB {
+order.Scope(&admin.Scope{Name: "Shipped", Group: "State", Handle: func(db *aorm.DB, context *qor.Context) *aorm.DB {
   return db.Where("state = ?", "shipped")
 }})
 ```

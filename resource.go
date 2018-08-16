@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena/go-route"
 	"github.com/aghape/helpers"
@@ -600,7 +600,7 @@ func (res *Resource) DBName(quote bool) (name string, alias string, pkfields []s
 	return
 }
 
-func (res *Resource) FilterByParent(db *gorm.DB, parentKey string) *gorm.DB {
+func (res *Resource) FilterByParent(db *aorm.DB, parentKey string) *aorm.DB {
 	r := res.ParentResource
 
 	res_parent_alias := res.FakeScope.QuotedTableName()
@@ -708,7 +708,7 @@ func (res *Resource) Decode(context *qor.Context, value interface{}) error {
 
 func (res *Resource) allAttrs() []string {
 	var attrs []string
-	scope := &gorm.Scope{Value: res.Value}
+	scope := &aorm.Scope{Value: res.Value}
 
 Fields:
 	for _, field := range scope.GetModelStruct().StructFields {
@@ -1489,7 +1489,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 				return false
 			},
 			//Label: I18NGROUP + ".actions.fragment_is_filter",
-			Handler: func(db *gorm.DB, argument *FilterArgument) *gorm.DB {
+			Handler: func(db *aorm.DB, argument *FilterArgument) *aorm.DB {
 				if v := argument.Value.Get("Value").Value; v != nil {
 					if vs, ok := v.([]string); ok && len(vs) > 0 {
 						id := vs[0]
@@ -1553,7 +1553,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 			return nil
 		}, resource.E_DB_ACTION_FIND_MANY.Before(), resource.E_DB_ACTION_FIND_ONE.Before())
 
-		res.FakeScope.GetModelStruct().BeforeRelatedCallback(func(fromScope *gorm.Scope, toScope *gorm.Scope, DB *gorm.DB, fromField *gorm.Field) *gorm.DB {
+		res.FakeScope.GetModelStruct().BeforeRelatedCallback(func(fromScope *aorm.Scope, toScope *aorm.Scope, DB *aorm.DB, fromField *aorm.Field) *aorm.DB {
 			fields, query := res.Fragments.Fields(), res.Fragments.Query()
 			DB = DB.ExtraSelectFieldsSetter(
 				PKG+".fragments",

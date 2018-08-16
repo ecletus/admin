@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-assetfs"
 	"github.com/moisespsena/go-edis"
 	"github.com/aghape/aghape"
@@ -481,7 +481,7 @@ func (meta *Meta) updateMeta() {
 			if relationship := meta.FieldStruct.Relationship; relationship != nil {
 				if (relationship.Kind == "has_one" || relationship.Kind == "has_many") && meta.Meta.Setter == nil && (meta.Type == "select_one" || meta.Type == "select_many") {
 					meta.SetSetter(func(resource interface{}, metaValue *resource.MetaValue, context *qor.Context) error {
-						scope := &gorm.Scope{Value: resource}
+						scope := &aorm.Scope{Value: resource}
 						reflectValue := reflect.Indirect(reflect.ValueOf(resource))
 						field := reflectValue.FieldByName(meta.FieldName)
 

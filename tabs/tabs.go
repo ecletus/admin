@@ -2,7 +2,7 @@ package tabs
 
 import (
 	"github.com/aghape/aghape"
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/admin"
 )
 
@@ -10,7 +10,7 @@ type Tab struct {
 	Title    string
 	Path     string
 	TitleKey string
-	Handler  func(res *admin.Resource, context *qor.Context, db *gorm.DB) *gorm.DB
+	Handler  func(res *admin.Resource, context *qor.Context, db *aorm.DB) *aorm.DB
 	Default  bool
 }
 

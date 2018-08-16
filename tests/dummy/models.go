@@ -3,35 +3,35 @@ package dummy
 import (
 	"time"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/media/oss"
 )
 
 type CreditCard struct {
-	gorm.Model
+	aorm.Model
 	Number string
 	Issuer string
 }
 
 type Company struct {
-	gorm.Model
+	aorm.Model
 	Name string
 }
 
 type Address struct {
-	gorm.Model
+	aorm.Model
 	UserID   uint
 	Address1 string
 	Address2 string
 }
 
 type Language struct {
-	gorm.Model
+	aorm.Model
 	Name string
 }
 
 type User struct {
-	gorm.Model
+	aorm.Model
 	Name         string
 	Age          uint
 	Role         string
@@ -48,7 +48,7 @@ type User struct {
 }
 
 type Profile struct {
-	gorm.Model
+	aorm.Model
 	UserID uint
 	Name   string
 	Sex    string
@@ -57,7 +57,7 @@ type Profile struct {
 }
 
 type Phone struct {
-	gorm.Model
+	aorm.Model
 
 	ProfileID uint64
 	Num       string

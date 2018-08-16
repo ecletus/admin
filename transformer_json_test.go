@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/jinzhu/now"
 	"github.com/aghape/admin"
 	. "github.com/aghape/admin/tests/dummy"
@@ -24,7 +24,7 @@ func TestJSONTransformerEncode(t *testing.T) {
 			Context:  Admin.NewContext(nil, nil),
 			Result: &User{
 				Active:       true,
-				Model:        gorm.Model{ID: 1},
+				Model:        aorm.Model{ID: 1},
 				Name:         "jinzhu",
 				Role:         "admin",
 				RegisteredAt: &registeredAt,

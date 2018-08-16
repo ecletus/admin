@@ -15,7 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena/go-assetfs"
 	"github.com/moisespsena/go-assetfs/api"
@@ -63,7 +63,7 @@ func (context *Context) NewResourceContext(name ...interface{}) *Context {
 
 func (context *Context) primaryKeyOf(value interface{}) interface{} {
 	if reflect.Indirect(reflect.ValueOf(value)).Kind() == reflect.Struct {
-		scope := &gorm.Scope{Value: value}
+		scope := &aorm.Scope{Value: value}
 		return fmt.Sprint(scope.PrimaryKeyValue())
 	}
 	return fmt.Sprint(value)
@@ -71,7 +71,7 @@ func (context *Context) primaryKeyOf(value interface{}) interface{} {
 
 func (context *Context) uniqueKeyOf(value interface{}) interface{} {
 	if reflect.Indirect(reflect.ValueOf(value)).Kind() == reflect.Struct {
-		scope := &gorm.Scope{Value: value}
+		scope := &aorm.Scope{Value: value}
 		var primaryValues []string
 		for _, primaryField := range scope.PrimaryFields() {
 			primaryValues = append(primaryValues, fmt.Sprint(primaryField.Field.Interface()))
@@ -460,7 +460,7 @@ func (context *Context) isEqual(value interface{}, hasValue interface{}) bool {
 	var result string
 
 	if reflect.Indirect(reflect.ValueOf(hasValue)).Kind() == reflect.Struct {
-		scope := &gorm.Scope{Value: hasValue}
+		scope := &aorm.Scope{Value: hasValue}
 		result = fmt.Sprint(scope.PrimaryKeyValue())
 	} else {
 		result = fmt.Sprint(hasValue)
@@ -468,7 +468,7 @@ func (context *Context) isEqual(value interface{}, hasValue interface{}) bool {
 
 	reflectValue := reflect.Indirect(reflect.ValueOf(value))
 	if reflectValue.Kind() == reflect.Struct {
-		scope := &gorm.Scope{Value: value}
+		scope := &aorm.Scope{Value: value}
 		return fmt.Sprint(scope.PrimaryKeyValue()) == result
 	} else if reflectValue.Kind() == reflect.String {
 		return reflectValue.Interface().(string) == result
@@ -480,7 +480,7 @@ func (context *Context) isEqual(value interface{}, hasValue interface{}) bool {
 func (context *Context) isIncluded(value interface{}, hasValue interface{}) bool {
 	var result string
 	if reflect.Indirect(reflect.ValueOf(hasValue)).Kind() == reflect.Struct {
-		scope := &gorm.Scope{Value: hasValue}
+		scope := &aorm.Scope{Value: hasValue}
 		result = fmt.Sprint(scope.PrimaryKeyValue())
 	} else {
 		result = fmt.Sprint(hasValue)
@@ -493,7 +493,7 @@ func (context *Context) isIncluded(value interface{}, hasValue interface{}) bool
 		for i := 0; i < reflectValue.Len(); i++ {
 			if value := reflectValue.Index(i); value.IsValid() {
 				if reflect.Indirect(value).Kind() == reflect.Struct {
-					scope := &gorm.Scope{Value: reflectValue.Index(i).Interface()}
+					scope := &aorm.Scope{Value: reflectValue.Index(i).Interface()}
 					primaryKeys = append(primaryKeys, scope.PrimaryKeyValue())
 				} else {
 					primaryKeys = append(primaryKeys, reflect.Indirect(reflectValue.Index(i)).Interface())
@@ -501,7 +501,7 @@ func (context *Context) isIncluded(value interface{}, hasValue interface{}) bool
 			}
 		}
 	} else if reflectValue.Kind() == reflect.Struct {
-		scope := &gorm.Scope{Value: value}
+		scope := &aorm.Scope{Value: value}
 		primaryKeys = append(primaryKeys, scope.PrimaryKeyValue())
 	} else if reflectValue.Kind() == reflect.String {
 		return strings.Contains(reflectValue.Interface().(string), result)

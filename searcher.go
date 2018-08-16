@@ -12,7 +12,7 @@ import (
 
 	"mime/multipart"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/aghape"
 	"github.com/aghape/aghape/resource"
 	"github.com/aghape/aghape/utils"
@@ -22,7 +22,7 @@ import (
 // PaginationPageCount default pagination page count
 var PaginationPageCount = 20
 
-type scopeFunc func(db *gorm.DB, context *qor.Context) *gorm.DB
+type scopeFunc func(db *aorm.DB, context *qor.Context) *aorm.DB
 
 // Pagination is used to hold pagination related information when rendering tables
 type Pagination struct {
@@ -328,16 +328,16 @@ type filterField struct {
 	Operation string
 }
 
-func filterResourceByFields(res *Resource, filterFields []filterField, keyword string, db *gorm.DB, context *qor.Context) *gorm.DB {
+func filterResourceByFields(res *Resource, filterFields []filterField, keyword string, db *aorm.DB, context *qor.Context) *aorm.DB {
 	if keyword != "" {
 		var (
 			joinConditionsMap  = map[string][]string{}
 			conditions         []string
 			keywords           []interface{}
-			generateConditions func(field filterField, scope *gorm.Scope)
+			generateConditions func(field filterField, scope *aorm.Scope)
 		)
 
-		generateConditions = func(filterfield filterField, scope *gorm.Scope) {
+		generateConditions = func(filterfield filterField, scope *aorm.Scope) {
 			column := filterfield.FieldName
 			currentScope, nextScope := scope, scope
 
@@ -400,7 +400,7 @@ func filterResourceByFields(res *Resource, filterFields []filterField, keyword s
 			}
 			tableName := currentScope.QuotedTableName()
 
-			appendString := func(field *gorm.Field) {
+			appendString := func(field *aorm.Field) {
 				switch filterfield.Operation {
 				case "equal":
 					conditions = append(conditions, fmt.Sprintf("upper(%v.%v) = upper(?)", tableName, scope.Quote(field.DBName)))
@@ -411,35 +411,35 @@ func filterResourceByFields(res *Resource, filterFields []filterField, keyword s
 				}
 			}
 
-			appendInteger := func(field *gorm.Field) {
+			appendInteger := func(field *aorm.Field) {
 				if _, err := strconv.Atoi(keyword); err == nil {
 					conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
 					keywords = append(keywords, keyword)
 				}
 			}
 
-			appendFloat := func(field *gorm.Field) {
+			appendFloat := func(field *aorm.Field) {
 				if _, err := strconv.ParseFloat(keyword, 64); err == nil {
 					conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
 					keywords = append(keywords, keyword)
 				}
 			}
 
-			appendBool := func(field *gorm.Field) {
+			appendBool := func(field *aorm.Field) {
 				if value, err := strconv.ParseBool(keyword); err == nil {
 					conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
 					keywords = append(keywords, value)
 				}
 			}
 
-			appendTime := func(field *gorm.Field) {
+			appendTime := func(field *aorm.Field) {
 				if parsedTime, err := utils.ParseTime(keyword, context); err == nil {
 					conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
 					keywords = append(keywords, parsedTime)
 				}
 			}
 
-			appendStruct := func(field *gorm.Field) {
+			appendStruct := func(field *aorm.Field) {
 				switch field.Field.Interface().(type) {
 				case time.Time, *time.Time:
 					appendTime(field)

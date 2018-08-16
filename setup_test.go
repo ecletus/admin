@@ -3,14 +3,14 @@ package admin_test
 import (
 	"net/http/httptest"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/admin"
 	. "github.com/aghape/admin/tests/dummy"
 )
 
 var (
 	server *httptest.Server
-	db     *gorm.DB
+	db     *aorm.DB
 	Admin  *admin.Admin
 )
 

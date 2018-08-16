@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/aghape"
 	"github.com/aghape/aghape/resource"
 	"github.com/aghape/aghape/utils"
@@ -21,7 +21,7 @@ func (res *Resource) Filter(filter *Filter) {
 
 	if filter.Handler == nil {
 		// generate default handler
-		filter.Handler = func(db *gorm.DB, filterArgument *FilterArgument) *gorm.DB {
+		filter.Handler = func(db *aorm.DB, filterArgument *FilterArgument) *aorm.DB {
 			if metaValue := filterArgument.Value.Get("Value"); metaValue != nil {
 				if keyword := utils.ToString(metaValue.Value); keyword != "" {
 					field := filterField{FieldName: filter.Name}
@@ -68,7 +68,7 @@ type Filter struct {
 	Type       string
 	Operations []string // eq, cont, gt, gteq, lt, lteq
 	Resource   *Resource
-	Handler    func(*gorm.DB, *FilterArgument) *gorm.DB
+	Handler    func(*aorm.DB, *FilterArgument) *aorm.DB
 	Config     FilterConfigInterface
 	Available func(context *qor.Context) bool
 }

@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/aghape"
 	"github.com/aghape/roles"
 )
@@ -11,7 +11,7 @@ type SubConfig struct {
 	ParentFieldName string
 	ParentField     string
 	FieldName       string
-	Filters         []func(context *qor.Context, db *gorm.DB) *gorm.DB
+	Filters         []func(context *qor.Context, db *aorm.DB) *aorm.DB
 	RawFieldFilter  map[string]interface{}
 }
 

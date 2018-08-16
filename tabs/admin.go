@@ -1,7 +1,7 @@
 package tabs
 
 import (
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-path-helpers"
 	"github.com/aghape/admin"
 	"github.com/aghape/aghape"
@@ -45,7 +45,7 @@ func PrepareResource(res *admin.Resource, tabs Tabs, defaultTab *Tab) {
 		res.Router.Get("/"+tab.Path, TabHandler(res, index.Config, indexHandler, tab))
 	}
 
-	res.DefaultFilter(func(context *qor.Context, db *gorm.DB) *gorm.DB {
+	res.DefaultFilter(func(context *qor.Context, db *aorm.DB) *aorm.DB {
 		scopePath := GetTabPath(context)
 		if scope, ok := scopesMap.ByPath[scopePath]; ok {
 			return scope.Handler(res, context, db)

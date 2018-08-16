@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/aghape"
 )
 
@@ -19,6 +19,6 @@ type Scope struct {
 	Label   string
 	Group   string
 	Visible func(context *Context) bool
-	Handler func(*gorm.DB, *Searcher, *qor.Context) *gorm.DB
+	Handler func(*aorm.DB, *Searcher, *qor.Context) *aorm.DB
 	Default bool
 }

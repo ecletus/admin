@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-route"
 )
 
@@ -31,7 +31,7 @@ func (admin *Admin) registerCompositePrimaryKeyCallback() {
 
 var DisableCompositePrimaryKeyMode = PKG + ".composite_primary_key:query:disable"
 
-func compositePrimaryKeyQueryCallback(scope *gorm.Scope) {
+func compositePrimaryKeyQueryCallback(scope *aorm.Scope) {
 	if value, ok := scope.Get(DisableCompositePrimaryKeyMode); ok && value != "" {
 		return
 	}

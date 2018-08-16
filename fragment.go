@@ -8,7 +8,7 @@ import (
 	"database/sql"
 
 	"github.com/go-errors/errors"
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/fragment"
 	"github.com/aghape/aghape"
 	"github.com/aghape/aghape/utils"
@@ -22,7 +22,7 @@ type Fragments struct {
 	Fragments    map[string]*Fragment
 	columnsCount int
 	query        string
-	fields       []*gorm.StructField
+	fields       []*aorm.StructField
 }
 
 func NewFragments() *Fragments {
@@ -57,7 +57,7 @@ func (f *Fragments) Walk(cb func(fr *Fragment) error) (err error) {
 	return err
 }
 
-func (f *Fragments) JoinLeft(DB *gorm.DB) *gorm.DB {
+func (f *Fragments) JoinLeft(DB *aorm.DB) *aorm.DB {
 	f.Build()
 	for _, id := range f.Sorted {
 		DB = f.Fragments[id].JoinLeft(DB)
@@ -65,7 +65,7 @@ func (f *Fragments) JoinLeft(DB *gorm.DB) *gorm.DB {
 	return DB
 }
 
-func (f *Fragments) Join(DB *gorm.DB) *gorm.DB {
+func (f *Fragments) Join(DB *aorm.DB) *aorm.DB {
 	f.Build()
 	for _, id := range f.Sorted {
 		DB = f.Fragments[id].Join(DB)
@@ -81,7 +81,7 @@ func (f *Fragments) NewSlice() []interface{} {
 	return r
 }
 
-func (f *Fragments) Fields() (fields []*gorm.StructField) {
+func (f *Fragments) Fields() (fields []*aorm.StructField) {
 	if len(f.fields) == 0 {
 		f.Build()
 		f.Walk(func(fr *Fragment) error {
@@ -136,7 +136,7 @@ func (f *Fragments) extraFieldsScan(result fragment.FragmentedModelInterface, va
 		fr := f.Fragments[id]
 
 		// FragmentEnabled field. If is nil, is not defined.
-		if values[*low].(*gorm.ValueScanner).IsNil() {
+		if values[*low].(*aorm.ValueScanner).IsNil() {
 			// skip columns scan for this fragment and sub fragments
 			*low += fr.fieldsCount
 			if fr.Resource.Fragments != nil {
@@ -239,7 +239,7 @@ type Fragment struct {
 	fieldsCount int
 	joinQuery   string
 	QTN         string
-	fields      []*gorm.StructField
+	fields      []*aorm.StructField
 	query       string
 	isURI       string
 }
@@ -293,19 +293,19 @@ func (f *Fragment) IsURI() string {
 }
 
 func (f *Fragment) buildFields() {
-	fields := append([]*gorm.StructField{}, f.Resource.FakeScope.GetNonIgnoredStructFields()...)
+	fields := append([]*aorm.StructField{}, f.Resource.FakeScope.GetNonIgnoredStructFields()...)
 	if !f.IsForm {
 		for i, field := range fields {
 			if field.Name == "FragmentEnabled" {
 				if i != 0 {
-					fields = append([]*gorm.StructField{field}, append(fields[0:i], fields[i+1:]...)...)
+					fields = append([]*aorm.StructField{field}, append(fields[0:i], fields[i+1:]...)...)
 				}
 				break
 			}
 		}
 	}
 
-	var newFields []*gorm.StructField
+	var newFields []*aorm.StructField
 
 	for _, field := range fields {
 		if !field.IsPrimaryKey && field.Relationship == nil {
@@ -324,7 +324,7 @@ func (f *Fragment) buildQuery() {
 	f.query = strings.Join(columns, ", ")
 }
 
-func (f *Fragment) Fields() []*gorm.StructField {
+func (f *Fragment) Fields() []*aorm.StructField {
 	return f.fields
 }
 
@@ -336,7 +336,7 @@ func (f *Fragment) FieldsNames() []string {
 	return names
 }
 
-func (f *Fragment) AllFields() []*gorm.StructField {
+func (f *Fragment) AllFields() []*aorm.StructField {
 	fields := f.Fields()
 	if f.Resource.Fragments != nil {
 		f.Resource.Fragments.Walk(func(fr *Fragment) error {
@@ -362,7 +362,7 @@ func (f *Fragment) AllQuery() string {
 	return strings.Join(queries, ", ")
 }
 
-func (f *Fragment) JoinLeft(DB *gorm.DB) *gorm.DB {
+func (f *Fragment) JoinLeft(DB *aorm.DB) *aorm.DB {
 	DB = DB.Joins("LEFT " + f.joinQuery)
 	if f.Resource.Fragments != nil {
 		return f.Resource.Fragments.JoinLeft(DB)
@@ -370,7 +370,7 @@ func (f *Fragment) JoinLeft(DB *gorm.DB) *gorm.DB {
 	return DB
 }
 
-func (f *Fragment) Join(DB *gorm.DB) *gorm.DB {
+func (f *Fragment) Join(DB *aorm.DB) *aorm.DB {
 	DB = DB.Joins(f.joinQuery)
 	if f.Resource.Fragments != nil {
 		return f.Resource.Fragments.JoinLeft(DB)
@@ -378,7 +378,7 @@ func (f *Fragment) Join(DB *gorm.DB) *gorm.DB {
 	return DB
 }
 
-func (f *Fragment) Filter(DB *gorm.DB) *gorm.DB {
+func (f *Fragment) Filter(DB *aorm.DB) *aorm.DB {
 	super := f
 	for super != nil {
 		DB = DB.Where(super.QTN + ".fragment_enabled")

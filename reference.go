@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/db/inheritance"
 	"github.com/aghape/aghape"
 	"github.com/aghape/aghape/resource"
@@ -53,7 +53,7 @@ type Inheritance struct {
 	FieldName string
 	index     int
 	dbName    string
-	field     *gorm.Field
+	field     *aorm.Field
 	query     string
 	Options   *ChildOptions
 }
@@ -85,7 +85,7 @@ func (r *Inheritance) DBName() string {
 	return r.dbName
 }
 
-func (r *Inheritance) Field() *gorm.Field {
+func (r *Inheritance) Field() *aorm.Field {
 	return r.field
 }
 
@@ -145,7 +145,7 @@ func (rs *Inheritances) NewSlice() []interface{} {
 	}
 	return r
 }
-func (rs *Inheritances) Find(pk interface{}, db *gorm.DB) (r *Inheritance, err error) {
+func (rs *Inheritances) Find(pk interface{}, db *aorm.DB) (r *Inheritance, err error) {
 	if rs.query == "" {
 		rs.Build()
 	}

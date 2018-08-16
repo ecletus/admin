@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/jinzhu/gorm"
+	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-assetfs"
 	"github.com/aghape/aghape"
 	"github.com/aghape/aghape/resource"
@@ -246,7 +246,7 @@ func (selectOneConfig *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor)
 }
 
 func (selectOneConfig *SelectOneConfig) ConfigureQORAdminFilter(filter *Filter) {
-	var structField *gorm.StructField
+	var structField *aorm.StructField
 	if field, ok := qor.FakeDB.NewScope(filter.Resource.Value).FieldByName(filter.Name); ok {
 		structField = field.StructField
 	}
@@ -283,7 +283,7 @@ func (selectOneConfig *SelectOneConfig) FilterValue(filter *Filter, context *Con
 	return keyword
 }
 
-func (selectOneConfig *SelectOneConfig) prepareDataSource(field *gorm.StructField, res *Resource, routePrefix string) {
+func (selectOneConfig *SelectOneConfig) prepareDataSource(field *aorm.StructField, res *Resource, routePrefix string) {
 	// Set GetCollection
 	if selectOneConfig.Collection != nil {
 		selectOneConfig.SelectMode = "select"

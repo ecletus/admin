@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
-	"path"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/jinzhu/gorm"
-	"github.com/qor/responder"
+	"github.com/moisespsena/go-valuesmap"
+	"github.com/aghape/aghape/serializer"
+	"github.com/aghape/responder"
 )
 
 // Controller admin controller
@@ -28,16 +30,31 @@ func (ac *Controller) Dashboard(context *Context) {
 	context.Execute("dashboard", nil)
 }
 
+func (ac *Controller) LoadIndexData(context *Context) interface{} {
+	var result interface{}
+	if context.ValidateLayout() {
+		var err error
+		result, err = context.FindMany()
+		context.AddError(err)
+	}
+	return result
+}
+
 // Index render index page
 func (ac *Controller) Index(context *Context) {
-	context.Readonly()
-	result, err := context.FindMany()
-	context.AddError(err)
-
+	context.Type = INDEX
+	context.DefaulLayout()
 	responder.With("html", func() {
-		context.Execute("index", result)
+		var result interface{}
+		if context.LoadDisplayOrError() {
+			result = ac.LoadIndexData(context)
+		}
+		context.Execute("", result)
 	}).With([]string{"json", "xml"}, func() {
-		context.Encode("index", result)
+		if context.ValidateLayoutOrError() {
+			result := ac.LoadIndexData(context)
+			context.Encode(result)
+		}
 	}).Respond(context.Request)
 }
 
@@ -67,31 +84,35 @@ func (ac *Controller) SearchCenter(context *Context) {
 
 // New render new page
 func (ac *Controller) New(context *Context) {
-	context.Execute("new", context.Resource.NewStruct(context.Context.Site))
+	context.Type = NEW
+	context.Execute("", context.Resource.NewStruct(context.Context.Site))
 }
 
 // Create create data
 func (ac *Controller) Create(context *Context) {
+	context.Type = NEW
 	res := context.Resource
 	result := res.NewStruct(context.Context.Site)
 	if context.AddError(res.Decode(context.Context, result)); !context.HasError() {
-		context.AddError(res.CallSave(result, context.Context))
+		context.AddError(res.Save(result, context.Context))
 	}
 
 	if context.HasError() {
 		responder.With("html", func() {
 			context.Writer.WriteHeader(HTTPUnprocessableEntity)
-			context.Execute("new", result)
+			context.Execute("", result)
 		}).With([]string{"json", "xml"}, func() {
 			context.Writer.WriteHeader(HTTPUnprocessableEntity)
-			context.Encode("index", map[string]interface{}{"errors": context.GetErrors()})
+			context.Encode(map[string]interface{}{"errors": context.GetErrors()})
 		}).Respond(context.Request)
 	} else {
+		context.Type = SHOW
+		context.DefaulLayout()
 		responder.With("html", func() {
-			context.Flash(string(context.t("qor_admin.form.successfully_created", "{{.Name}} was successfully created", res)), "success")
+			context.Flash(string(context.t(I18NGROUP+".form.successfully_created", "{{.}} was successfully created", res)), "success")
 			http.Redirect(context.Writer, context.Request, context.URLFor(result, res), http.StatusFound)
 		}).With([]string{"json", "xml"}, func() {
-			context.Encode("show", result)
+			context.Encode(result)
 		}).Respond(context.Request)
 	}
 }
@@ -99,11 +120,13 @@ func (ac *Controller) Create(context *Context) {
 func (ac *Controller) renderSingleton(context *Context) (interface{}, bool, error) {
 	var result interface{}
 	var err error
+	res := context.Resource
 
-	if context.Resource.Config.Singleton {
-		result = context.Resource.NewStruct(context.Context.Site)
-		if err = context.Resource.CallFindMany(result, context.Context); err == gorm.ErrRecordNotFound {
-			context.Execute("new", result)
+	if res.Config.Singleton {
+		result = res.NewStruct(context.Context.Site)
+		if err = res.FindMany(result, res.ApplyDefaultFilters(context.Context)); err == gorm.ErrRecordNotFound {
+			context.Type = NEW
+			context.Execute("", result)
 			return nil, true, nil
 		}
 	} else {
@@ -112,72 +135,116 @@ func (ac *Controller) renderSingleton(context *Context) (interface{}, bool, erro
 	return result, false, err
 }
 
-// Show render show page
-func (ac *Controller) Show(context *Context) {
-	context.Readonly()
-	result, rendered, err := ac.renderSingleton(context)
+func (ac *Controller) LoadShowData(context *Context) (result interface{}, rendered bool) {
+	var err error
+	result, rendered, err = ac.renderSingleton(context)
 	if rendered {
 		return
 	}
-
 	context.AddError(err)
+	return
+}
+
+// Show render show page
+func (ac *Controller) Show(context *Context) {
+	context.Type = SHOW
+	context.DefaulLayout()
 	responder.With("html", func() {
-		context.Execute("show", result)
+		if context.LoadDisplayOrError() {
+			result, rendered := ac.LoadShowData(context)
+			if !rendered {
+				context.Execute("", result)
+			}
+		}
 	}).With([]string{"json", "xml"}, func() {
-		context.Encode("show", result)
+		if context.ValidateLayoutOrError() {
+			result, _ := ac.LoadShowData(context)
+			context.Encode(result)
+		}
 	}).Respond(context.Request)
 }
 
 // Edit render edit page
 func (ac *Controller) Edit(context *Context) {
-	result, rendered, err := ac.renderSingleton(context)
-	if rendered {
-		return
-	}
-
-	context.AddError(err)
+	context.Type = EDIT
+	context.DefaulLayout()
 	responder.With("html", func() {
-		context.Execute("edit", result)
+		if context.LoadDisplayOrError() {
+			result, rendered := ac.LoadShowData(context)
+			if !rendered {
+				context.Execute("", result)
+			}
+		}
 	}).With([]string{"json", "xml"}, func() {
-		context.Encode("edit", result)
+		if context.ValidateLayoutOrError() {
+			result, _ := ac.LoadShowData(context)
+			context.Encode(result)
+		}
 	}).Respond(context.Request)
 }
 
 // Update update data
 func (ac *Controller) Update(context *Context) {
+	context.Type = EDIT
+	context.DefaulLayout()
+	if !context.ValidateLayoutOrError() {
+		return
+	}
 	var result interface{}
-	var err error
+	res := context.Resource
 
-	// If singleton Resource
-	if context.Resource.Config.Singleton {
-		result = context.Resource.NewStruct(context.Context.Site)
-		context.Resource.CallFindMany(result, context.Context)
-	} else {
-		result, err = context.FindOne()
-		context.AddError(err)
+	if !context.LoadDisplayOrError() {
+		return
 	}
 
-	res := context.Resource
+	result, _ = ac.LoadShowData(context)
+
 	if !context.HasError() {
 		decerror := res.Decode(context.Context, result)
 		if context.AddError(decerror); !context.HasError() {
-			context.AddError(res.CallSave(result, context.Context))
+			context.AddError(res.Save(result, context.Context))
 		}
 	}
 
 	if context.HasError() {
 		context.Writer.WriteHeader(HTTPUnprocessableEntity)
 		responder.With("html", func() {
-			context.Execute("edit", result)
+			context.Execute("", result)
 		}).With([]string{"json", "xml"}, func() {
-			context.Encode("edit", map[string]interface{}{"errors": context.GetErrors()})
+			context.Encode(map[string]interface{}{"errors": context.GetErrors()})
 		}).Respond(context.Request)
 	} else {
+		context.Type = SHOW
+		context.DefaulLayout()
 		responder.With("html", func() {
-			context.Flash(string(context.t("qor_admin.form.successfully_updated", "{{.Name}} was successfully updated", res)), "success")
-			context.Execute("show", result)
+			context.Flash(string(context.t(I18NGROUP+".form.successfully_updated", "{{.}} was successfully updated", res)), "success")
+			context.Execute("", result)
 		}).With([]string{"json", "xml"}, func() {
-			context.Encode("show", result)
+			if context.Request.FormValue("qorInlineEdit") != "" {
+				rresult := reflect.ValueOf(result)
+				for rresult.Kind() == reflect.Ptr {
+					rresult = rresult.Elem()
+				}
+				newResult := make(map[string]interface{})
+
+				for key, _ := range context.Request.Form {
+					if strings.HasPrefix(key, "QorResource.") {
+						key = strings.TrimPrefix(key, "QorResource.")
+						f := rresult.FieldByName(key)
+						if f.IsValid() {
+							newResult[key] = f.Interface()
+						} else if gsf, ok := result.(serializer.SerializableField); ok {
+							if value, ok := gsf.GetSerializableField(key); ok {
+								newResult[key] = value
+							}
+						}
+					}
+				}
+				newResult = valuesmap.ParseMap(newResult)
+				context.Encode(newResult)
+				return
+			}
+			context.Encode(result)
 		}).Respond(context.Request)
 	}
 }
@@ -187,13 +254,13 @@ func (ac *Controller) Delete(context *Context) {
 	res := context.Resource
 	status := http.StatusOK
 
-	if context.AddError(res.CallDelete(res.NewStruct(context.Context.Site), context.Context)); context.HasError() {
-		context.Flash(string(context.t("qor_admin.form.failed_to_delete", "Failed to delete {{.Name}}", res)), "error")
+	if context.AddError(res.Delete(res.NewStruct(context.Context.Site), res.ApplyDefaultFilters(context.Context))); context.HasError() {
+		context.Flash(string(context.t(I18NGROUP+".form.failed_to_delete", "Failed to delete {{.}}", res)), "error")
 		status = http.StatusNotFound
 	}
 
 	responder.With("html", func() {
-		http.Redirect(context.Writer, context.Request, path.Join(ac.GetRouter().Prefix, res.ToParam()), http.StatusFound)
+		http.Redirect(context.Writer, context.Request, res.GetContextIndexURI(context.Context), http.StatusFound)
 	}).With([]string{"json", "xml"}, func() {
 		context.Writer.WriteHeader(status)
 	}).Respond(context.Request)
@@ -218,7 +285,7 @@ func (ac *Controller) Action(context *Context) {
 			Context:       context,
 		}
 
-		if primaryValue := context.Resource.GetPrimaryValue(context.Request); primaryValue != "" {
+		if primaryValue := context.URLParam(context.Resource.ParamIDName()); primaryValue != "" {
 			actionArgument.PrimaryValues = append(actionArgument.PrimaryValues, primaryValue)
 		}
 
@@ -232,12 +299,13 @@ func (ac *Controller) Action(context *Context) {
 
 		if !actionArgument.SkipDefaultResponse {
 			if err == nil {
-				message := string(context.t("qor_admin.actions.executed_successfully", "Action {{.Name}}: Executed successfully", action))
+				message := string(context.t(I18NGROUP+".actions.executed_successfully", "Action {{.Name}}: Executed successfully", action))
 				responder.With("html", func() {
 					context.Flash(message, "success")
 					http.Redirect(context.Writer, context.Request, context.Request.Referer(), http.StatusFound)
 				}).With([]string{"json"}, func() {
-					context.Encode("OK", map[string]string{"message": message, "status": "ok"})
+					context.Layout = "OK"
+					context.Encode(map[string]string{"message": message, "status": "ok"})
 				}).Respond(context.Request)
 			} else {
 				context.Writer.WriteHeader(HTTPUnprocessableEntity)
@@ -245,8 +313,9 @@ func (ac *Controller) Action(context *Context) {
 					context.AddError(err)
 					context.Execute("action", action)
 				}).With([]string{"json", "xml"}, func() {
-					message := string(context.t("qor_admin.actions.executed_failed", "Action {{.Name}}: Failed to execute", action))
-					context.Encode("OK", map[string]string{"error": message, "status": "error"})
+					context.Layout = "OK"
+					message := string(context.t(I18NGROUP+".actions.executed_failed", "Action {{.Name}}: Failed to execute", action))
+					context.Encode(map[string]string{"error": message, "status": "error"})
 				}).Respond(context.Request)
 			}
 		}
@@ -259,18 +328,36 @@ var (
 
 // Asset handle asset requests
 func (ac *Controller) Asset(context *Context) {
-	file := strings.TrimPrefix(context.Request.URL.Path, ac.GetRouter().Prefix)
+	var done bool
 
-	if context.Request.Header.Get("If-Modified-Since") == cacheSince {
-		context.Writer.WriteHeader(http.StatusNotModified)
+	context.SetupConfig().IfProd(func() error {
+		if context.Request.Header.Get("If-Modified-Since") == cacheSince {
+			context.Writer.WriteHeader(http.StatusNotModified)
+			done = true
+			return nil
+		}
+		context.Writer.Header().Set("Last-Modified", cacheSince)
+		return nil
+	})
+
+	if done {
 		return
 	}
-	context.Writer.Header().Set("Last-Modified", cacheSince)
+	file := strings.TrimPrefix(context.Request.URL.Path, ac.Router.Prefix())
 
-	if content, err := context.Asset(file); err == nil {
-		etag := fmt.Sprintf("%x", md5.Sum(content))
-		if context.Request.Header.Get("If-None-Match") == etag {
-			context.Writer.WriteHeader(http.StatusNotModified)
+	if asset, err := context.Asset(file); err == nil {
+		var etag string
+		context.SetupConfig().IfProd(func() (err error) {
+			etag = fmt.Sprintf("%x", md5.Sum(asset.GetData()))
+			if context.Request.Header.Get("If-None-Match") == etag {
+				context.Writer.WriteHeader(http.StatusNotModified)
+				done = true
+				return
+			}
+			return
+		})
+
+		if done {
 			return
 		}
 
@@ -278,9 +365,12 @@ func (ac *Controller) Asset(context *Context) {
 			context.Writer.Header().Set("Content-Type", ctype)
 		}
 
-		context.Writer.Header().Set("Cache-control", "private, must-revalidate, max-age=300")
-		context.Writer.Header().Set("ETag", etag)
-		context.Writer.Write(content)
+		context.SetupConfig().IfProd(func() error {
+			context.Writer.Header().Set("Cache-control", "private, must-revalidate, max-age=300")
+			context.Writer.Header().Set("ETag", etag)
+			return nil
+		})
+		context.Writer.Write(asset.GetData())
 	} else {
 		http.NotFound(context.Writer, context.Request)
 	}

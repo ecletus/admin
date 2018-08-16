@@ -3,7 +3,8 @@ package admin
 import (
 	"errors"
 
-	"github.com/qor/qor/resource"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/aghape/aghape/resource"
 )
 
 // CollectionEditConfig meta configuration used for collection edit
@@ -14,7 +15,7 @@ type CollectionEditConfig struct {
 }
 
 // GetTemplate get template for collection edit
-func (collectionEditConfig CollectionEditConfig) GetTemplate(context *Context, metaType string) ([]byte, error) {
+func (collectionEditConfig CollectionEditConfig) GetTemplate(context *Context, metaType string) (assetfs.AssetInterface, error) {
 	if metaType == "form" && collectionEditConfig.Template != "" {
 		return context.Asset(collectionEditConfig.Template)
 	}

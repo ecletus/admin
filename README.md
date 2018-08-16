@@ -2,7 +2,7 @@
 
 Instantly create a beautiful, cross platform, configurable Admin Interface and API for managing your data in minutes.
 
-[![GoDoc](https://godoc.org/github.com/qor/admin?status.svg)](https://godoc.org/github.com/qor/admin)
+[![GoDoc](https://godoc.org/github.com/aghape/admin?status.svg)](https://godoc.org/github.com/aghape/admin)
 
 **For security issues, please send us an email to security@getqor.com and give us time to respond BEFORE posting as an issue or reporting on public forums.**
 
@@ -31,8 +31,8 @@ import (
 
     "github.com/jinzhu/gorm"
     _ "github.com/mattn/go-sqlite3"
-    "github.com/qor/qor"
-    "github.com/qor/admin"
+    "github.com/aghape/aghape"
+    "github.com/aghape/admin"
 )
 
 // Create a GORM-backend model
@@ -176,7 +176,7 @@ Admin.AddResource(&User{}, &admin.Config{Invisible: true})
 
 ### Internationalization
 
-To translate admin interface to a new language, you could use `i18n` [https://github.com/qor/i18n](https://github.com/qor/i18n)
+To translate admin interface to a new language, you could use `i18n` [https://github.com/aghape/i18n](https://github.com/aghape/i18n)
 
 ## Working with a Resource
 
@@ -346,7 +346,7 @@ order.Action(&admin.Action{
 
 By default, management pages in QOR Admin are rendered based on your resource's fields' data types and relations. The default should satisfy most use cases, however should you need to you can customize the rendering by overwritting the `Meta` definition.
 
-There are some Meta types that have been predefined, including `string`, `password`, `date`, `datetime`, `rich_editor`, `select_one`, `select_many` and so on (see full list here: [qor admin form templates](https://github.com/qor/admin/tree/master/views/metas/form "qor admin form templates")). QOR Admin will auto select a type for `Meta` based on a field's data type. For example, if a field's type is `time.Time`, QOR Admin will determine `datetime` as the type.
+There are some Meta types that have been predefined, including `string`, `password`, `date`, `datetime`, `rich_editor`, `select_one`, `select_many` and so on (see full list here: [qor admin form templates](https://github.com/aghape/admin/tree/master/views/metas/form "qor admin form templates")). QOR Admin will auto select a type for `Meta` based on a field's data type. For example, if a field's type is `time.Time`, QOR Admin will determine `datetime` as the type.
 
 ```go
 // Change the Meta type of `Password` field in User resource from `string` (default value) to `password`
@@ -358,7 +358,7 @@ user.Meta(&admin.Meta{Name: "Gender", Type: "select_one", Collection: []string{"
 
 ### Authorization and Permissions
 
-Authorization in QOR Admin is based on setting Permissions per Role. QOR Admin uses [https://github.com/qor/roles](https://github.com/qor/roles) for Permission management, please refer to it's documentation for information on how to define Roles and Permissions.
+Authorization in QOR Admin is based on setting Permissions per Role. QOR Admin uses [https://github.com/aghape/roles](https://github.com/aghape/roles) for Permission management, please refer to it's documentation for information on how to define Roles and Permissions.
 
 ```go
 // CRUD permission for admin users, deny create permission for manager
@@ -417,7 +417,7 @@ QOR Admin will look up templates in QOR Admin view paths and use them to render 
 Customize Views Rules:
 
 * To overwrite a template, create a file with the same name under `{current path}/app/views/qor`.
-* To overwrite templates for a specific resource, put templates with the same name in `{qor view paths}/{resource param}`, for example `{current path}/app/views/qor/products/index.tmpl`.
+* To overwrite templates for a specific resource, put templates with the same name in `{qor view paths}/{resource param}`, for example `{current path}/app/views/aghape/products/index.tmpl`.
 * To overwrite templates for resources using a theme, put templates with the same name in `{qor view paths}/themes/{theme name}`.
 
 #### Registering HTTP routes
@@ -465,7 +465,7 @@ There are a few plugins created for QOR already, you can find some of them at [h
 ## Live DEMO
 
 * Live Demo [http://demo.getqor.com/admin](http://demo.getqor.com/admin)
-* Source Code of Live Demo [https://github.com/qor/qor-example](https://github.com/qor/qor-example)
+* Source Code of Live Demo [https://github.com/aghape/qor-example](https://github.com/aghape/qor-example)
 
 ## Q & A
 

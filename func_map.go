@@ -9,27 +9,30 @@ import (
 	"math/rand"
 	"net/url"
 	"path"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime/debug"
 	"sort"
 	"strings"
 
-	"github.com/moisespsena/template/html/template"
-	"github.com/moisespsena/template/funcs"
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/inflection"
-	"github.com/qor/qor"
-	"github.com/qor/qor/utils"
-	"github.com/qor/roles"
-	"github.com/qor/session"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena/template/funcs"
+	"github.com/moisespsena/template/html/template"
+	"github.com/aghape/common"
+	"github.com/aghape/aghape"
+	"github.com/aghape/aghape/utils"
+	"github.com/aghape/roles"
+	"github.com/aghape/session"
 )
 
 var TemplateExecutorMetaValue *template.Executor
+var TemplateGlob = assetfs.NewGlobPattern("\f*.tmpl")
 
 func init() {
-	t, err := template.New("qor:admin:meta_value").Parse("{{.Value}}")
+	t, err := template.New(PKG + ".meta_value").Parse("{{.Value}}")
 	if err != nil {
 		panic(err)
 	}
@@ -38,10 +41,17 @@ func init() {
 
 // NewResourceContext new resource context
 func (context *Context) NewResourceContext(name ...interface{}) *Context {
-	clone := &Context{Context: context.Context.Clone(), Admin: context.Admin, Result: context.Result, Action: context.Action}
+	clone := &Context{
+		Context: context.Context.Clone(),
+		Admin: context.Admin,
+		Result: context.Result,
+		Action: context.Action,
+		Type: context.Type,
+	}
+
 	if len(name) > 0 {
 		if str, ok := name[0].(string); ok {
-			clone.setResource(context.Admin.GetResource(str))
+			clone.setResource(context.Admin.GetResourceByID(str))
 		} else if res, ok := name[0].(*Resource); ok {
 			clone.setResource(res)
 		}
@@ -79,15 +89,22 @@ func (context *Context) isNewRecord(value interface{}) bool {
 	return context.DB.NewRecord(value)
 }
 
+func (context *Context) SetNewResourceForPath(res *Resource) {
+	context.Data().Set(PKG+".new_resource_path", res)
+}
+
 func (context *Context) newResourcePath(res *Resource) string {
-	return path.Join(context.URLFor(res), "new")
+	if res2, ok := context.Data().GetOk(PKG + ".new_resource_path"); res2 != nil && ok {
+		res = res2.(*Resource)
+	}
+	return res.GetContextIndexURI(context.Context) + "/new"
 }
 
 // RoutePrefix return route prefix of resource
 func (res *Resource) RoutePrefix() string {
 	var params string
 	for res.ParentResource != nil {
-		params = path.Join(res.ParentResource.ToParam(), res.ParentResource.ParamIDName(), params)
+		params = path.Join(res.ParentResource.ToParam(), res.ParentResource.ParamIDPattern(), params)
 		res = res.ParentResource
 	}
 	return params
@@ -103,76 +120,25 @@ func (context *Context) UseTheme(name string) {
 //     context.URLFor(&Product{ID: 111})
 //     context.URLFor(productResource)
 func (context *Context) URLFor(value interface{}, resources ...*Resource) string {
-	getPrefix := func(res *Resource) string {
-		var params string
-		for res.ParentResource != nil {
-			params = path.Join(res.ParentResource.ToParam(), res.ParentResource.GetPrimaryValue(context.Request), params)
-			res = res.ParentResource
-		}
-		return params
-	}
-
 	if admin, ok := value.(*Admin); ok {
-		return context.GenURL(admin.router.Prefix)
+		return context.GenURL(admin.Router.Prefix())
 	} else if urler, ok := value.(interface {
 		ToURLString(*Context) string
 	}); ok {
 		return urler.ToURLString(context)
 	} else if res, ok := value.(*Resource); ok {
-		return context.GenURL(getPrefix(res), res.ToParam())
+		return res.GetContextIndexURI(context.Context)
 	} else {
-		var res *Resource
-
-		if len(resources) > 0 {
-			res = resources[0]
+		if len(resources) == 0 {
+			return ""
 		}
 
-		if res == nil {
-			res = context.Admin.GetResource(reflect.Indirect(reflect.ValueOf(value)).Type().String())
+		res := resources[0]
+		if res.Config.Singleton {
+			return res.GetIndexLink(context.Context, context.ParentResourceID)
 		}
 
-		if res != nil {
-			if res.Config.Singleton {
-				return context.GenURL(getPrefix(res), res.ToParam())
-			}
-
-			var (
-				scope         = context.DB.NewScope(value)
-				primaryFields []string
-				primaryValues = map[string]string{}
-			)
-
-			for _, primaryField := range res.PrimaryFields {
-				if field, ok := scope.FieldByName(primaryField.Name); ok {
-					primaryFields = append(primaryFields, fmt.Sprint(field.Field.Interface())) // TODO improve me
-				}
-			}
-
-			for _, field := range scope.PrimaryFields() {
-				useAsPrimaryField := false
-				for _, primaryField := range res.PrimaryFields {
-					if field.DBName == primaryField.DBName {
-						useAsPrimaryField = true
-						break
-					}
-				}
-
-				if !useAsPrimaryField {
-					primaryValues[fmt.Sprintf("primary_key[%v_%v]", scope.TableName(), field.DBName)] = fmt.Sprint(reflect.Indirect(field.Field).Interface())
-				}
-			}
-
-			urlPath := path.Join(res.ToParam(), strings.Join(primaryFields, ","))
-
-			if len(primaryValues) > 0 {
-				var primaryValueParams []string
-				for key, value := range primaryValues {
-					primaryValueParams = append(primaryValueParams, fmt.Sprintf("%v=%v", key, url.QueryEscape(value)))
-				}
-				urlPath = urlPath + "?" + strings.Join(primaryValueParams, "&")
-			}
-			return context.GenURL(getPrefix(res), urlPath)
-		}
+		return res.GetLink(value, context.Context, context.ParentResourceID)
 	}
 	return context.GenURL("")
 }
@@ -197,14 +163,13 @@ func (context *Context) valueOf(valuer func(interface{}, *qor.Context) interface
 			value = reflectPtr.Interface()
 		}
 
-		result := valuer(value, context.Context)
-
+		originalResult := valuer(value, context.Context)
+		result := originalResult
 		if reflectValue := reflect.ValueOf(result); reflectValue.IsValid() {
 			if reflectValue.Kind() == reflect.Ptr {
 				if reflectValue.IsNil() || !reflectValue.Elem().IsValid() {
 					return nil
 				}
-
 				result = reflectValue.Elem().Interface()
 			}
 
@@ -213,7 +178,7 @@ func (context *Context) valueOf(valuer func(interface{}, *qor.Context) interface
 					return nil
 				}
 			}
-			return result
+			return originalResult
 		}
 		return nil
 	}
@@ -256,14 +221,21 @@ func (context *Context) renderSections(value interface{}, sections []*Section, p
 			columnsHTML := bytes.NewBufferString("")
 			var exclude int
 			for _, col := range column {
+				if col == "A" {
+					println()
+				}
 				meta := section.Resource.GetMeta(col)
 				if meta != nil {
-					if meta.Enabled == nil || meta.Enabled(context, meta) {
+					if meta.Enabled == nil || meta.Enabled(value, context, meta) {
 						context.renderMeta(meta, value, prefix, kind, columnsHTML)
 					} else {
 						exclude++
 					}
 				}
+			}
+
+			if context.Action == "show" && columnsHTML.Len() == 0 {
+				continue
 			}
 
 			rows = append(rows, struct {
@@ -275,14 +247,16 @@ func (context *Context) renderSections(value interface{}, sections []*Section, p
 			})
 		}
 
-		var data = map[string]interface{}{
-			"Section": section,
-			"Title":   template.HTML(section.Title),
-			"Rows":    rows,
-		}
+		if len(rows) > 0 {
+			var data = map[string]interface{}{
+				"Section": section,
+				"Title":   template.HTML(section.Title),
+				"Rows":    rows,
+			}
 
-		if executor, err := context.GetTemplate("metas/section"); err == nil {
-			executor.Execute(writer, data, context.FuncValues())
+			if executor, err := context.GetTemplate("metas/section"); err == nil {
+				err = executor.Execute(writer, data, context.FuncValues())
+			}
 		}
 	}
 }
@@ -295,8 +269,13 @@ func (context *Context) renderFilter(filter *Filter) template.HTML {
 
 	defer func() {
 		if r := recover(); r != nil {
+			msg := fmt.Sprintf("Get error when render template for filter %v (%v): %v", filter.Name, filter.Type, r)
+			if et, ok := r.(template.ErrorWithTrace); ok {
+				et.Err = msg
+				panic(et)
+			}
 			debug.PrintStack()
-			result.WriteString(fmt.Sprintf("Get error when render template for filter %v (%v): %v", filter.Name, filter.Type, r))
+			result.WriteString(msg)
 		}
 	}()
 
@@ -321,16 +300,52 @@ func (context *Context) renderFilter(filter *Filter) template.HTML {
 
 func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []string, metaType string, writer *bytes.Buffer) {
 	var (
-		err      error
-		funcsMap = funcs.FuncMap{}
-		executor *template.Executor
+		err        error
+		funcsMap   = funcs.FuncMap{}
+		executor   *template.Executor
+		dataValue  = context.FormattedValueOf(value, meta)
+		showAction = context.Action == "show"
 	)
-	prefix = append(prefix, meta.Name)
+	if showAction && !meta.ForceShowRender {
+		if dataValue == nil {
+			return
+		}
+		if meta.ShowRenderIgnore != nil && meta.ShowRenderIgnore(value, dataValue) {
+			return
+		}
+		switch vt := dataValue.(type) {
+		case string:
+			if vt == "" {
+				return
+			}
+		case int, uint, uint8, uint16, uint32, uint64:
+			if vt == 0 {
+				return
+			}
+		case float32, float64:
+			if vt == 0.0 {
+				return
+			}
+		}
+	}
 
-	var generateNestedRenderSections = func(kind string) func(interface{}, []*Section, int) template.HTML {
-		return func(value interface{}, sections []*Section, index int) template.HTML {
+	if !meta.Include {
+		prefix = append(prefix, meta.Name)
+	}
+
+	var generateNestedRenderSections = func(kind string) func(interface{}, *Meta, []*Section, int, ...string) template.HTML {
+		return func(value interface{}, meta *Meta, sections []*Section, index int, prefx ...string) template.HTML {
 			var result = bytes.NewBufferString("")
-			var newPrefix = append([]string{}, prefix...)
+			newPrefix := prefix
+
+			if len(prefx) > 0 && prefx[0] != "" {
+				for prefx[0][0] == '.' {
+					newPrefix = newPrefix[0 : len(newPrefix)-1]
+					prefx[0] = prefx[0][1:]
+				}
+
+				newPrefix = append(newPrefix, prefx...)
+			}
 
 			if index >= 0 {
 				last := newPrefix[len(newPrefix)-1]
@@ -338,13 +353,23 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 			}
 
 			if len(sections) > 0 {
-				for _, field := range context.DB.NewScope(value).PrimaryFields() {
-					if meta := sections[0].Resource.GetMeta(field.Name); meta != nil {
-						context.renderMeta(meta, value, newPrefix, kind, result)
+				context.renderSections(value, sections, newPrefix, result, kind)
+				resultString := strings.TrimSpace(result.String())
+				result.Reset()
+
+				if len(resultString) == 0 {
+					return template.HTML("")
+				}
+
+				if !sections[0].Resource.Config.DisableFormID {
+					for _, field := range context.DB.NewScope(value).PrimaryFields() {
+						if meta := sections[0].Resource.GetMeta(field.Name); meta != nil {
+							context.renderMeta(meta, value, newPrefix, kind, result)
+						}
 					}
 				}
 
-				context.renderSections(value, sections, newPrefix, result, kind)
+				return template.HTML(result.String() + resultString)
 			}
 
 			return template.HTML(result.String())
@@ -355,10 +380,16 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 
 	defer func() {
 		if r := recover(); r != nil {
-			debug.PrintStack()
-			msg := fmt.Sprintf("Get error when render template for meta %v (%v): %v", meta.Name, meta.Type, r)
-			writer.WriteString(msg)
-			println(msg)
+			var msg string
+			msg = fmt.Sprintf("Get error when render template for meta %v (%v):\n%v", meta.Name, meta.Type, r)
+			if et, ok := r.(*template.ErrorWithTrace); ok {
+				et.Err = msg
+				panic(et)
+			} else {
+				writer.WriteString(msg)
+				debug.PrintStack()
+				println(msg)
+			}
 		}
 	}()
 
@@ -374,7 +405,7 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 		fallthrough
 	default:
 		var others []string
-		metaUserType := meta.GetType(context)
+		metaUserType := meta.GetType(value, context)
 
 		if metaUserType != "" {
 			others = append(others, fmt.Sprintf("metas/%v/%v", metaType, metaUserType))
@@ -388,12 +419,13 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 
 	if err == nil {
 		var scope = context.DB.NewScope(value)
+
 		var data = map[string]interface{}{
 			"Context":       context,
 			"BaseResource":  meta.baseResource,
 			"Meta":          meta,
 			"ResourceValue": value,
-			"Value":         context.FormattedValueOf(value, meta),
+			"Value":         dataValue,
 			"Label":         meta.Label,
 			"InputName":     strings.Join(prefix, "."),
 		}
@@ -413,9 +445,14 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 	}
 
 	if err != nil {
-		msg := fmt.Sprintf("got error when render %v template for %v(%v): %v", metaType, meta.Name, meta.Type, err)
-		fmt.Fprint(writer, msg)
-		utils.ExitWithMsg(msg)
+		msg := fmt.Sprintf("got error when render %v template for %v(%v):\n%v", metaType, meta.Name, meta.Type, err)
+		if et, ok := err.(*template.ErrorWithTrace); ok {
+			et.Err = msg
+			panic(et)
+		} else {
+			fmt.Fprint(writer, msg)
+			utils.ExitWithMsg(msg)
+		}
 	}
 }
 
@@ -489,22 +526,69 @@ func (context *Context) getResource(resources ...*Resource) *Resource {
 
 func (context *Context) indexSections(resources ...*Resource) []*Section {
 	res := context.getResource(resources...)
-	return res.allowedSections(res.IndexAttrs(), context, roles.Read)
+	return res.allowedSections(nil, res.IndexAttrs(), context, roles.Read)
 }
 
-func (context *Context) editSections(resources ...*Resource) []*Section {
-	res := context.getResource(resources...)
-	return res.allowedSections(res.EditAttrs(), context, roles.Read)
+func (context *Context) editSections(res *Resource, record ...interface{}) []*Section {
+	if len(record) == 0 {
+		record = append(record, nil)
+	}
+	return res.allowedSections(record[0], res.EditAttrs(), context, roles.Read)
 }
 
 func (context *Context) newSections(resources ...*Resource) []*Section {
 	res := context.getResource(resources...)
-	return res.allowedSections(res.NewAttrs(), context, roles.Create)
+	return res.allowedSections(nil, res.NewAttrs(), context, roles.Create)
 }
 
-func (context *Context) showSections(resources ...*Resource) []*Section {
+func (context *Context) showSections(record interface{}, resources ...*Resource) []*Section {
 	res := context.getResource(resources...)
-	return res.allowedSections(res.ShowAttrs(), context, roles.Read)
+	return res.allowedSections(record, res.ShowAttrs(), context, roles.Read)
+}
+
+func (context *Context) editMetaSections(meta *Meta, record interface{}) []*Section {
+	context = context.CreateChild(meta.Resource, record)
+	res := meta.Resource
+	var attrs []*Section
+	if meta.Config != nil {
+		if sc, ok := meta.Config.(*SingleEditConfig); ok {
+			attrs = sc.EditSections(res)
+		}
+	}
+	if len(attrs) == 0 {
+		attrs = res.EditAttrs()
+	}
+	return res.allowedSections(record, attrs, context, roles.Read)
+}
+
+func (context *Context) newMetaSections(meta *Meta, record interface{}) []*Section {
+	context = context.CreateChild(meta.Resource, record)
+	res := meta.Resource
+	var attrs []*Section
+	if meta.Config != nil {
+		if sc, ok := meta.Config.(*SingleEditConfig); ok {
+			attrs = sc.NewSections(res)
+		}
+	}
+	if len(attrs) == 0 {
+		attrs = res.NewAttrs()
+	}
+	return res.allowedSections(record, attrs, context, roles.Create)
+}
+
+func (context *Context) showMetaSections(meta *Meta, record interface{}) []*Section {
+	context = context.CreateChild(meta.Resource, record)
+	res := meta.Resource
+	var attrs []*Section
+	if meta.Config != nil {
+		if sc, ok := meta.Config.(*SingleEditConfig); ok {
+			attrs = sc.ShowSections(res)
+		}
+	}
+	if len(attrs) == 0 {
+		attrs = res.ShowAttrs()
+	}
+	return res.allowedSections(record, attrs, context, roles.Create)
 }
 
 type menu struct {
@@ -524,6 +608,11 @@ func (context *Context) getMenus() (menus []*menu) {
 
 	addMenu = func(parent *menu, menus []*Menu) {
 		for _, m := range menus {
+			if m.Enabled != nil {
+				if !m.Enabled(m, context) {
+					continue
+				}
+			}
 			if m.HasPermission(roles.Read, context.Context) {
 				var menu = &menu{Menu: m}
 				url := m.URL(context)
@@ -550,6 +639,53 @@ func (context *Context) getMenus() (menus []*menu) {
 	}
 
 	return globalMenu.SubMenus
+}
+
+func (context *Context) getResourceMenus() (menus []*menu) {
+	var (
+		globalMenu = &menu{}
+		addMenu    func(*menu, []*Menu)
+	)
+
+	addMenu = func(parent *menu, menus []*Menu) {
+		for _, m := range menus {
+			if m.Enabled != nil {
+				if !m.Enabled(m, context) {
+					continue
+				}
+			}
+			if m.HasPermission(roles.Read, context.Context) {
+				var menu = &menu{Menu: m}
+				url := m.URL(context)
+
+				if url[0:1] == "@" {
+					url = url[1:]
+				}
+
+				addMenu(menu, menu.GetSubMenus())
+				parent.SubMenus = append(parent.SubMenus, menu)
+			}
+		}
+	}
+
+	if context.Resource != nil && context.ResourceID != "" {
+		addMenu(globalMenu, context.Resource.GetMenus())
+	}
+
+	return globalMenu.SubMenus
+}
+
+func (context *Context) getResourceMenuActions() map[string]interface{} {
+	if context.Resource != nil && context.ResourceID != "" {
+		actions := context.AllowedActions(context.Resource.Actions, "menu_item", context.Result)
+		return map[string]interface{}{
+			"Context":  context,
+			"Actions":  actions,
+			"Resource": context.Resource,
+			"Result":   context.Result,
+		}
+	}
+	return nil
 }
 
 type scope struct {
@@ -726,7 +862,7 @@ func (context *Context) themesClass() (result string) {
 
 func (context *Context) javaScriptTag(names ...string) template.HTML {
 	var results []string
-	prefix := context.GenStaticURL(path.Join("assets", "javascripts"))
+	prefix := context.GenStaticURL("javascripts")
 	for _, name := range names {
 		results = append(results, fmt.Sprintf(`<script src="%s/%s.js"></script>`, prefix, name))
 	}
@@ -735,7 +871,7 @@ func (context *Context) javaScriptTag(names ...string) template.HTML {
 
 func (context *Context) styleSheetTag(names ...string) template.HTML {
 	var results []string
-	prefix := context.GenStaticURL(path.Join("assets", "stylesheets"))
+	prefix := context.GenStaticURL("stylesheets")
 	for _, name := range names {
 		results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s/%s.css">`, prefix, name))
 	}
@@ -765,8 +901,8 @@ func (context *Context) getThemeNames() (themes []string) {
 func (context *Context) loadThemeStyleSheets() template.HTML {
 	var results []string
 	for _, themeName := range context.getThemeNames() {
-		var file = path.Join("themes", themeName, "assets", "stylesheets", themeName+".css")
-		if _, err := context.Asset(file); err == nil {
+		var file = path.Join("themes", themeName, "stylesheets", themeName+".css")
+		if _, err := context.StaticAsset(file); err == nil {
 			results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s?theme=%s">`, context.GenStaticURL(file), themeName))
 		}
 	}
@@ -777,8 +913,8 @@ func (context *Context) loadThemeStyleSheets() template.HTML {
 func (context *Context) loadThemeJavaScripts() template.HTML {
 	var results []string
 	for _, themeName := range context.getThemeNames() {
-		var file = path.Join("themes", themeName, "assets", "javascripts", themeName+".js")
-		if _, err := context.Asset(file); err == nil {
+		var file = path.Join("themes", themeName, "javascripts", themeName+".js")
+		if _, err := context.StaticAsset(file); err == nil {
 			results = append(results, fmt.Sprintf(`<script src="%s?theme=%s"></script>`, context.GenStaticURL(file), themeName))
 		}
 	}
@@ -792,8 +928,8 @@ func (context *Context) loadAdminJavaScripts() template.HTML {
 		siteName = "application"
 	}
 
-	var file = path.Join("assets", "javascripts", strings.ToLower(strings.Replace(siteName, " ", "_", -1))+".js")
-	if _, err := context.Asset(file); err == nil {
+	var file = path.Join("custom", strings.ToLower(strings.Replace(siteName, " ", "_", -1)), "js", "admin.js")
+	if _, err := context.StaticAsset(file); err == nil {
 		return template.HTML(fmt.Sprintf(`<script src="%s"></script>`, context.GenStaticURL(file)))
 	}
 	return ""
@@ -805,9 +941,8 @@ func (context *Context) loadAdminStyleSheets() template.HTML {
 		siteName = "application"
 	}
 
-	var file = path.Join("assets", "stylesheets", strings.ToLower(strings.Replace(siteName, " ", "_", -1))+".css")
-
-	if _, err := context.Asset(file); err == nil {
+	var file = path.Join("custom", strings.ToLower(strings.Replace(siteName, " ", "_", -1)), "css", "admin.css")
+	if _, err := context.StaticAsset(file); err == nil {
 		return template.HTML(fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s">`, context.GenStaticURL(file)))
 	}
 	return ""
@@ -815,54 +950,56 @@ func (context *Context) loadAdminStyleSheets() template.HTML {
 
 func (context *Context) loadActions(action string) template.HTML {
 	var (
-		actionPatterns, actionKeys, actionFiles []string
-		actions                                 = map[string]string{}
+		actionKeys     []string
+		actionFiles    []api.FileInfo
+		actions        = map[string]api.FileInfo{}
+		actionPatterns []assetfs.GlobPatter
 	)
 
 	switch action {
 	case "index", "show", "edit", "new":
-		actionPatterns = []string{filepath.Join("actions", action, "*.tmpl"), "actions/*.tmpl"}
+		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", action), TemplateGlob.Wrap("actions")}
 
 		if !context.Resource.isSetShowAttrs && action == "edit" {
-			actionPatterns = []string{filepath.Join("actions", "show", "*.tmpl"), "actions/*.tmpl"}
+			actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", "show"), TemplateGlob.Wrap("actions")}
 		}
 	case "global":
-		actionPatterns = []string{"actions/*.tmpl"}
+		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions")}
 	default:
-		actionPatterns = []string{filepath.Join("actions", action, "*.tmpl")}
+		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", action)}
 	}
 
 	for _, pattern := range actionPatterns {
 		for _, themeName := range context.getThemeNames() {
 			if resourcePath := context.resourcePath(); resourcePath != "" {
-				if matches, err := context.Admin.AssetFS.Glob(filepath.Join("themes", themeName, resourcePath, pattern)); err == nil {
+				if matches, err := context.Admin.TemplateFS.NewGlob(pattern.Wrap("themes", themeName, resourcePath)).Infos(); err == nil {
 					actionFiles = append(actionFiles, matches...)
 				}
 			}
 
-			if matches, err := context.Admin.AssetFS.Glob(filepath.Join("themes", themeName, pattern)); err == nil {
+			if matches, err := context.Admin.TemplateFS.NewGlob(pattern.Wrap("themes", themeName)).Infos(); err == nil {
 				actionFiles = append(actionFiles, matches...)
 			}
 		}
 
 		if resourcePath := context.resourcePath(); resourcePath != "" {
-			if matches, err := context.Admin.AssetFS.Glob(filepath.Join(resourcePath, pattern)); err == nil {
+			if matches, err := context.Admin.TemplateFS.NewGlob(pattern.Wrap(resourcePath)).Infos(); err == nil {
 				actionFiles = append(actionFiles, matches...)
 			}
 		}
 
-		if matches, err := context.Admin.AssetFS.Glob(pattern); err == nil {
+		if matches, err := context.Admin.TemplateFS.NewGlob(pattern).Infos(); err == nil {
 			actionFiles = append(actionFiles, matches...)
 		}
 	}
 
 	// before files have higher priority
 	for _, actionFile := range actionFiles {
-		actionFile = strings.TrimSuffix(actionFile, ".tmpl")
-		base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(path.Base(actionFile), "")
+		actionFileName := strings.TrimSuffix(actionFile.RealPath(), ".tmpl")
+		base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(path.Base(actionFileName), "")
 
 		if _, ok := actions[base]; !ok {
-			actionKeys = append(actionKeys, path.Base(actionFile))
+			actionKeys = append(actionKeys, path.Base(actionFileName))
 			actions[base] = actionFile
 		}
 	}
@@ -870,25 +1007,32 @@ func (context *Context) loadActions(action string) template.HTML {
 	sort.Strings(actionKeys)
 
 	var (
-		result   = bytes.NewBufferString("")
-		err      error
-		executor *template.Executor
+		result = bytes.NewBufferString("")
 	)
 
 	for _, key := range actionKeys {
-		defer func() {
-			if r := recover(); r != nil {
-				err := fmt.Sprintf("Get error when render action %v: %v", key, r)
-				utils.ExitWithMsg(err)
-				result.WriteString(err)
-			}
-		}()
-
 		base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(key, "")
-		if executor, err = context.GetTemplate(actions[base]); err == nil {
-			err = executor.Execute(result, context, context.FuncValues())
-		}
+		err := (func() (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("Get error when render action %v:\n%v", actions[base], r)
+					if et, ok := r.(*template.ErrorWithTrace); ok {
+						et.Err = err.Error()
+						panic(et)
+					}
+				}
+			}()
+
+			executor, err := context.GetTemplateInfo(actions[base])
+			if err == nil {
+				err = executor.Execute(result, context, context.FuncValues())
+			}
+			return
+		})()
 		if err != nil {
+			if et, ok := err.(*template.ErrorWithTrace); ok {
+				panic(et)
+			}
 			result.WriteString(err.Error())
 			utils.ExitWithMsg(err)
 			return template.HTML("")
@@ -905,7 +1049,14 @@ func (context *Context) logoutURL() string {
 	return ""
 }
 
-func (context *Context) t(key string, defaul ... interface{}) template.HTML {
+func (context *Context) profileURL() string {
+	if context.Admin.Auth != nil {
+		return context.Admin.Auth.ProfileURL(context)
+	}
+	return ""
+}
+
+func (context *Context) t(key string, defaul ...interface{}) template.HTML {
 	var defauls []string
 	for _, value := range defaul {
 		defauls = append(defauls, fmt.Sprint(value))
@@ -913,7 +1064,7 @@ func (context *Context) t(key string, defaul ... interface{}) template.HTML {
 	return context.T(key, defauls...)
 }
 
-func (context *Context) tt(key string, data interface{}, defaul ... interface{}) template.HTML {
+func (context *Context) tt(key string, data interface{}, defaul ...interface{}) template.HTML {
 	var defauls []string
 	for _, value := range defaul {
 		defauls = append(defauls, fmt.Sprint(value))
@@ -992,6 +1143,9 @@ func (context *Context) AllowedActions(actions []*Action, mode string, records .
 }
 
 func (context *Context) pageTitle() template.HTML {
+	if title, ok := context.Data().GetOk("page_title"); ok {
+		return title.(template.HTML)
+	}
 	if context.Action == "search_center" {
 		return context.t("qor_admin.search_center.title", "Search Center")
 	}
@@ -1007,6 +1161,10 @@ func (context *Context) pageTitle() template.HTML {
 		if action, ok := context.Result.(*Action); ok {
 			return context.Resource.GetActionLabel(context, action)
 		}
+	}
+
+	if context.PageTitle != "" {
+		return context.t(context.PageTitle)
 	}
 
 	var (
@@ -1045,14 +1203,20 @@ func (context *Context) FuncValues() *funcs.FuncValues {
 // FuncMap return funcs map
 func (context *Context) FuncMaps() []funcs.FuncMap {
 	funcMaps := []template.FuncMap{
-		template.FuncMap{
-			"qor_context":          func() *qor.Context { return context.Context },
-			"site":                 func() qor.SiteInterface { return context.Context.Site },
-			"public_url":           func(args ...string) string { return context.Context.Site.PublicURL() },
-			"public_urlf":          func(args ...interface{}) string { return context.Context.Site.PublicURLf(args...) },
-			"admin_context":        func() *Context { return context },
-			"current_user":         func() qor.CurrentUser { return context.CurrentUser },
-			"get_resource":         context.Admin.GetResource,
+		{
+			"qor_context": func() *qor.Context { return context.Context },
+			"get_route_handler": func() interface{} {
+				rctx := context.RouteContext
+				return rctx.Handler
+			},
+			"site":          func() qor.SiteInterface { return context.Context.Site },
+			"public_url":    func(args ...string) string { return context.Context.Site.PublicURL() },
+			"public_urlf":   func(args ...interface{}) string { return context.Context.Site.PublicURLf(args...) },
+			"admin_context": func() *Context { return context },
+			"current_user": func() common.User {
+				return context.CurrentUser
+			},
+			"get_resource":         context.Admin.GetResourceByID,
 			"new_resource_context": context.NewResourceContext,
 			"is_new_record":        context.isNewRecord,
 			"is_equal":             context.isEqual,
@@ -1061,7 +1225,9 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 			"unique_key_of":        context.uniqueKeyOf,
 			"formatted_value_of":   context.FormattedValueOf,
 			"raw_value_of":         context.RawValueOf,
-
+			"result": func() interface{} {
+				return context.Result
+			},
 			"t":          context.t,
 			"tt":         context.tt,
 			"flashes":    func() []session.Message { return context.SessionManager().Flashes() },
@@ -1135,11 +1301,12 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 			"join_current_url":   context.JoinCurrentURL,
 			"join_url":           context.JoinURL,
 			"logout_url":         context.logoutURL,
+			"profile_url":        context.profileURL,
 			"search_center_path": func() string { return context.JoinPath("!search") },
 			"new_resource_path":  context.newResourcePath,
 			"defined_resource_show_page": func(res *Resource) bool {
 				if res != nil {
-					if r := context.Admin.GetResource(res.Name); r != nil {
+					if r := context.Admin.GetResourceByID(res.ID); r != nil {
 						return r.isSetShowAttrs
 					}
 				}
@@ -1147,6 +1314,8 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 				return false
 			},
 			"get_menus":                 context.getMenus,
+			"get_resource_menus":        context.getResourceMenus,
+			"get_resource_menu_actions": context.getResourceMenuActions,
 			"get_scopes":                context.GetScopes,
 			"get_formatted_errors":      context.getFormattedErrors,
 			"load_actions":              context.loadActions,
@@ -1156,6 +1325,9 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 			"show_sections":             context.showSections,
 			"new_sections":              context.newSections,
 			"edit_sections":             context.editSections,
+			"show_meta_sections":        context.showMetaSections,
+			"new_meta_sections":         context.newMetaSections,
+			"edit_meta_sections":        context.editMetaSections,
 			"convert_sections_to_metas": context.convertSectionToMetas,
 
 			"has_create_permission": context.hasCreatePermission,
@@ -1178,6 +1350,21 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 			"locale": func() string {
 				return context.Locale
 			},
+			"crumbs": func() []qor.Breadcrumb {
+				return context.Breadcrumbs().Items
+			},
+			"resource_key": func() string {
+				return context.ResourceID
+			},
+			"resource_parent_keys": func() []string {
+				return context.ParentResourceID
+			},
+			"new_resource_struct": func(res *Resource) interface{} {
+				return res.NewStruct(context.Site)
+			},
+
+			"htmlify":       context.Htmlify,
+			"htmlify_items": context.HtmlifyItems,
 		},
 		context.Admin.funcMaps,
 	}

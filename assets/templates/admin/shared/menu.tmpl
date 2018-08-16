@@ -1,0 +1,16 @@
+{{if .Result}}
+<ul class="qor-menu {{.MenuClass?}}">
+  {{range .Result}}
+    {{if .SubMenus}}
+      <li qor-icon-name="{{.GetIcon}}" {{if .Active}}class="active"{{end}}>
+        <a href="{{if .RealURL}}{{.URL (admin_context)}}{{else}}javascript:void(0);{{end}}">{{t (.GetLabel) .Name}}</a>
+        {{render "shared/menu" .SubMenus}}
+      </li>
+    {{else}}
+      <li qor-icon-name="{{.GetIcon}}" {{if .Active}}class="active"{{end}}>
+        {{link_to (t (.GetLabel) .Name) (.URL (admin_context))}}
+      </li>
+    {{end}}
+  {{end}}
+</ul>
+{{end}}

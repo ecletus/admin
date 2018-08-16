@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/qor/qor/utils"
+	"github.com/aghape/aghape/utils"
 )
 
 // Section is used to structure forms, it could group your fields into sections, to make your form clean & tidy
@@ -29,9 +29,30 @@ type Section struct {
 	Rows     [][]string
 }
 
+type Sections []*Section
+
+func (s Sections) AddPrefix(prefix string) []*Section {
+	items := make([]*Section, len(s))
+	for i, section := range s {
+		items[i] = section.AddPrefix(prefix)
+	}
+	return items
+}
+
 // String stringify section
 func (section *Section) String() string {
 	return fmt.Sprint(section.Rows)
+}
+
+func (section *Section) AddPrefix(prefix string) *Section {
+	s := &Section{section.Resource, section.Title, make([][]string, len(section.Rows))}
+	for i, columns := range section.Rows {
+		s.Rows[i] = make([]string, len(columns))
+		for j, v := range columns {
+			s.Rows[i][j] = prefix + "." + v
+		}
+	}
+	return s
 }
 
 func (res *Resource) generateSections(values ...interface{}) []*Section {
@@ -64,7 +85,9 @@ func (res *Resource) generateSections(values ...interface{}) []*Section {
 
 	sections = reverseSections(sections)
 	for _, section := range sections {
-		section.Resource = res
+		if section.Resource == nil {
+			section.Resource = res
+		}
 	}
 	return sections
 }
@@ -127,7 +150,7 @@ func (res *Resource) ConvertSectionToMetas(sections []*Section) []*Meta {
 		for _, row := range section.Rows {
 			for _, col := range row {
 				meta := res.GetMeta(col)
-				if meta != nil {
+				if meta != nil && meta.Type != "-" {
 					metas = append(metas, meta)
 				}
 			}
@@ -170,6 +193,8 @@ func (res *Resource) setSections(sections *[]*Section, values ...interface{}) {
 				flattenValues = append(flattenValues, section)
 			} else if column, ok := value.(string); ok {
 				flattenValues = append(flattenValues, column)
+			} else if column, ok := value.([][]string); ok {
+				flattenValues = append(flattenValues, &Section{Resource: res, Rows: column})
 			} else {
 				utils.ExitWithMsg(fmt.Sprintf("Qor Resource: attributes should be Section or String, but it is %+v", value))
 			}

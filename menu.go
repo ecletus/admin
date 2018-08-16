@@ -3,8 +3,9 @@ package admin
 import (
 	"path"
 
-	"github.com/qor/qor"
-	"github.com/qor/roles"
+	"github.com/moisespsena/go-route"
+	"github.com/aghape/aghape"
+	"github.com/aghape/roles"
 )
 
 // GetMenus get all sidebar menus for admin
@@ -14,7 +15,7 @@ func (admin Admin) GetMenus() []*Menu {
 
 // AddMenu add a menu to admin sidebar
 func (admin *Admin) AddMenu(menu *Menu) *Menu {
-	menu.router = admin.router
+	menu.router = admin.Router
 	admin.menus = appendMenu(admin.menus, menu.Ancestors, menu)
 	return menu
 }
@@ -39,10 +40,13 @@ type Menu struct {
 	Ancestors    []string
 	Permissioner HasPermissioner
 	Permission   *roles.Permission
+	Class        string
+	Enabled      func(menu *Menu, context *Context) bool
+	Resource     *Resource
 
 	subMenus []*Menu
-	router   *Router
-	MakeLink func(context *Context)string
+	router   route.Router
+	MakeLink func(context *Context, args ...interface{}) string
 }
 
 // GetLabel return menu's Label
@@ -68,16 +72,16 @@ func (menu Menu) RealURL() string {
 	}
 
 	if (menu.router != nil) && (menu.RelativePath != "") {
-		return path.Join(menu.router.Prefix, menu.RelativePath)
+		return path.Join(menu.router.Prefix(), menu.RelativePath)
 	}
 
 	return menu.RelativePath
 }
 
 // URL return menu's URL
-func (menu Menu) URL(context *Context) string {
+func (menu Menu) URL(context *Context, args ...interface{}) string {
 	if menu.MakeLink != nil {
-		return menu.MakeLink(context)
+		return menu.MakeLink(context, args...)
 	}
 
 	if menu.Link != "" {

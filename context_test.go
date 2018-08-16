@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/qor/admin"
-	. "github.com/qor/admin/tests/dummy"
-	"github.com/qor/qor"
+	"github.com/aghape/admin"
+	. "github.com/aghape/admin/tests/dummy"
+	"github.com/aghape/aghape"
 )
 
 // Template helpers test
@@ -23,7 +23,7 @@ func TestUrlForAdmin(t *testing.T) {
 
 func TestUrlForResource(t *testing.T) {
 	context := &admin.Context{Admin: Admin}
-	user := Admin.GetResource("User")
+	user := Admin.GetResourceByName("User")
 
 	userLink := context.URLFor(user)
 

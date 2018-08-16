@@ -1,0 +1,34 @@
+<div class="qor-layout__sidebar">
+  <div class="sidebar-header">
+    {{$logo := (tt "qor_admin.layout.logo" (_tpl_funcs) "-")}}
+    {{if eq $logo "-"}}
+      {{render "shared/logo" .}}
+    {{else}}
+      {{$logo}}
+    {{end}}
+  </div>
+  {{if .CurrentUser}}
+    <div class="sidebar-userinfo">
+        <h5>{{.CurrentUser.DisplayName}}</h5>
+      <div style="height:30px">
+      <a class="mdl-button mdl-js-button mdl-button--icon" href="{{profile_url}}" title="{{t "qor_admin.account.profile" "profile"}}" alt="{{t "qor_admin.account.profile" "profile"}}"><i class="material-icons">account_circle</i></a>
+      <a class="mdl-button mdl-js-button mdl-button--icon" href="{{logout_url}}" title="{{t "qor_admin.account.logout" "logout"}}" alt="{{t "qor_admin.account.logout" "logout"}}"><i class="material-icons">exit_to_app</i></a>
+      </div>
+    </div>
+  {{end}}
+  <div class="sidebar-body">
+    <div class="qor-menu-container">
+      {{if .GetSearchableResources }}
+        <div qor-icon-name="Search">
+          <span class="qor-global-search--show {{if (eq .Action "search_center")}}active{{end}}" data-placeholder="{{t "qor_admin.search_center.hint" "Search…"}}" data-action-url="{{search_center_path}}">{{t "qor_admin.search_center.title" "Search Center" }}</span>
+        </div>
+      {{end}}
+
+      {{render_with "shared/resource_menu" (dict "Result" get_resource_menus "MenuClass" "resource-menu" "Resource" result)}}
+      {{render "shared/menu" get_menus}}
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    {{t "qor_admin.layout.powered_by" "Powered by <a href=\"http://getqor.com\" target=\"_blank\">QOR</a>"}}
+  </div>
+</div>

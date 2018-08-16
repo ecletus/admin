@@ -1,0 +1,27 @@
+{{define "html"}}
+    {{if ((admin_context).Is "new") }}
+        {{render_nested_form .Value.Value .Meta (new_sections .Value.Resource .Value.Value) -1}}
+    {{else if ((admin_context).Is "show") }}
+        {{render_nested_form .Value.Value .Meta (.Value.ShowSections .Context) -1}}
+    {{else if ((admin_context).Is "edit")}}
+        {{render_nested_form .Value.Value .Meta (.Value.EditSections .Context) -1}}
+    {{end}}
+{{end}}
+{{if .Value}}
+    {{$html := (trim (template_exec "html" .))}}
+    {{if $html}}
+        <div class="single-edit qor-field">
+            {{if not (.Value.OnlyEnabledField .Context)}}
+            <label class="qor-field__label" for="{{.InputId}}">
+              {{t .Value.Resource.SingularLabelKey}}
+            </label>
+            {{end}}
+
+            <div class="qor-field__block">
+              <fieldset id="{{.InputId}}" class="qor-fieldset">
+                  {{$html}}
+              </fieldset>
+            </div>
+        </div>
+    {{end}}
+{{end}}

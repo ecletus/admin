@@ -1,0 +1,48 @@
+.qor-breadcrumbs {
+    padding: 10px !important;
+    border-bottom: 1px solid rgba(0,0,0,.12);
+    color: rgba(255,255,255,.6);
+    min-height:20px;
+    background-color: #00568a !important;
+}
+
+.qor-breadcrumbs A:hover, .qor-breadcrumbs A:focus {
+    color: white;
+}
+.qor-breadcrumbs A {
+  text-decoration: none !important;
+  color: rgba(255,255,255,.6);
+  font-weight: normal;
+}
+
+.qor-breadcrumbs A.active {
+    font-weight:bold;
+    color: white;
+}
+
+.qor-breadcrumbs A:first-child::before {
+    content: " ";
+    display: inline-block;
+    width: 20px;
+}
+
+.qor-breadcrumbs A:not(:first-child)::before {
+    color: rgba(255,255,255,.6);
+    content: "\e315";
+    vertical-align: middle;
+    display: inline-block;
+    font-family: 'Material Icons';
+    font-size: 24px;
+    font-style: normal;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    word-break: normal;
+    word-wrap: normal;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-feature-settings: 'liga';
+    -moz-font-feature-settings: 'liga';
+    font-feature-settings: 'liga';
+}

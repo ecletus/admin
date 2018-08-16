@@ -3,19 +3,20 @@ package admin
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-	"net/url"
+
+	"mime/multipart"
 
 	"github.com/jinzhu/gorm"
-	"github.com/qor/qor"
-	"github.com/qor/qor/resource"
-	"github.com/qor/qor/utils"
+	"github.com/aghape/aghape"
+	"github.com/aghape/aghape/resource"
+	"github.com/aghape/aghape/utils"
 	"gopkg.in/fatih/set.v0"
-	"mime/multipart"
 )
 
 // PaginationPageCount default pagination page count
@@ -35,7 +36,7 @@ type ImmutableScopes struct {
 	set *set.Set
 }
 
-func (is *ImmutableScopes) Has(names... interface{}) bool  {
+func (is *ImmutableScopes) Has(names ...interface{}) bool {
 	return is.set.Has(names...)
 }
 
@@ -52,35 +53,44 @@ func (is *ImmutableScopes) List() []string {
 // Searcher is used to search results
 type Searcher struct {
 	*Context
-	scopes     []*Scope
-	filters    map[*Filter]*resource.MetaValues
-	Pagination Pagination
+	scopes        []*Scope
+	filters       map[*Filter]*resource.MetaValues
+	Pagination    Pagination
 	CurrentScopes ImmutableScopes
-	readonly   bool
-	basic      bool
+	Layout        string
+	Fragment      *Fragment
+}
+
+func (s *Searcher) DefaulLayout(layout ...string) {
+	if s.Layout == "" {
+		if len(layout) == 0 || layout[0] == "" {
+			layout = []string{s.Type.S()}
+		}
+		s.Layout = layout[0]
+	}
 }
 
 func (s *Searcher) Basic() *Searcher {
-	s.basic = true
+	s.Layout = "basic"
 	return s
 }
 
 func (s *Searcher) Readonly() *Searcher {
-	s.readonly = true
+	s.Layout = "readonly"
 	return s
 }
 
 func (s *Searcher) ForUpdate() *Searcher {
-	s.readonly = false
+	s.Layout = ""
 	return s
 }
 
 func (s *Searcher) IsReadonly() bool {
-	return s.readonly
+	return s.Layout == "readonly"
 }
 
 func (s *Searcher) clone() *Searcher {
-	return &Searcher{Context: s.Context, scopes: s.scopes, filters: s.filters, CurrentScopes: s.CurrentScopes}
+	return &(*s)
 }
 
 // Page set current page, if current page equal -1, then show all records
@@ -102,7 +112,7 @@ func (s *Searcher) Scope(names ...string) *Searcher {
 
 	for _, name := range names {
 		for _, scope := range s.Resource.scopes {
-			if scope.Name == name  {
+			if scope.Name == name {
 				scopesSet.Add(name)
 
 				if !scope.Default {
@@ -132,14 +142,19 @@ func (s *Searcher) FindMany() (interface{}, error) {
 	var (
 		err     error
 		context = s.parseContext()
-		result  = s.Resource.NewSlice()
+		layout  = s.Resource.GetLayoutOrDefault(s.Layout)
+		result  = layout.NewSlice()
 	)
 
 	if context.HasError() {
 		return result, context.Errors
 	}
 
-	err = s.Resource.CallFindMany(result, context)
+	if s.Fragment != nil {
+		context.SetDB(s.Fragment.Filter(context.GetDB()))
+	}
+
+	err = s.Resource.FindManyLayout(result, context, layout)
 	return result, err
 }
 
@@ -155,11 +170,7 @@ func (s *Searcher) FindOne() (interface{}, error) {
 		return result, context.Errors
 	}
 
-	if s.IsReadonly() {
-		err = s.Resource.CallFindOneReadonly(result, nil, context)
-	} else {
-		err = s.Resource.CallFindOne(result, nil, context)
-	}
+	err = s.Resource.FindOneLayout(result, nil, context, s.Resource.GetLayoutOrDefault(s.Layout))
 	return result, err
 }
 
@@ -215,8 +226,8 @@ func (s *Searcher) callScopes(context *qor.Context) *qor.Context {
 		keyword = context.Request.URL.Query().Get("keyword")
 	}
 
-	if s.Resource.SearchHandler != nil {
-		context.DB = s.Resource.SearchHandler(keyword, context)
+	if s.Scheme.SearchHandler != nil {
+		context.DB = s.Scheme.SearchHandler(keyword, context)
 		return context
 	}
 
@@ -226,20 +237,20 @@ func (s *Searcher) callScopes(context *qor.Context) *qor.Context {
 func (s *Searcher) FilterRaw(data map[string]string) *Searcher {
 	params := url.Values{}
 	for key, value := range data {
-		params.Add("filters[" + key + "].Value", value)
+		params.Add("filters["+key+"].Value", value)
 	}
 
 	return s.FilterFromParams(params, nil)
 }
 
-func (s *Searcher) FilterFromParams(params url.Values, form *multipart.Form) *Searcher  {
+func (s *Searcher) FilterFromParams(params url.Values, form *multipart.Form) *Searcher {
 	searcher := s
 
 	for key := range params {
 		if matches := filterRegexp.FindStringSubmatch(key); len(matches) > 0 {
 			var prefix = fmt.Sprintf("filters[%v].", matches[1])
 			if filter, ok := s.Resource.filters[matches[1]]; ok {
-				if metaValues, err := resource.ConvertFormDataToMetaValues(params, form, []resource.Metaor{}, prefix); err == nil {
+				if metaValues, err := resource.ConvertFormDataToMetaValues(s.Context.Context, params, form, []resource.Metaor{}, prefix); err == nil {
 					searcher = searcher.Filter(filter, metaValues)
 				}
 			}
@@ -249,10 +260,10 @@ func (s *Searcher) FilterFromParams(params url.Values, form *multipart.Form) *Se
 	return searcher
 }
 
-func (s *Searcher) FilterRawPairs(args... string) *Searcher {
+func (s *Searcher) FilterRawPairs(args ...string) *Searcher {
 	data := make(map[string]string)
 	l := len(args)
-	for i := 0; i < l; i +=2 {
+	for i := 0; i < l; i += 2 {
 		data[args[i]] = args[i+1]
 	}
 	return s.FilterRaw(data)
@@ -261,7 +272,7 @@ func (s *Searcher) FilterRawPairs(args... string) *Searcher {
 func (s *Searcher) parseContext() *qor.Context {
 	var (
 		searcher = s.clone()
-		context  = searcher.Context.Context.Clone()
+		context  = s.Resource.ApplyDefaultFilters(searcher.Context.Context)
 	)
 
 	if context != nil && context.Request != nil {
@@ -277,7 +288,7 @@ func (s *Searcher) parseContext() *qor.Context {
 
 	// pagination
 	context.DB = db.Model(s.Resource.Value).Set("qor:getting_total_count", true)
-	s.Resource.CallFindMany(&s.Pagination.Total, context)
+	s.Resource.FindManyLayout(&s.Pagination.Total, context, s.Resource.GetLayoutOrDefault(s.Layout))
 
 	if s.Pagination.CurrentPage == 0 {
 		if s.Context.Request != nil {

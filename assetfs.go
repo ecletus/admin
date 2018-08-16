@@ -2,10 +2,7 @@ package admin
 
 import (
 	"os"
-	"path/filepath"
-	"strings"
-
-	"github.com/qor/assetfs"
+	"github.com/moisespsena/go-assetfs"
 )
 
 var (
@@ -25,12 +22,8 @@ func RegisterViewPath(pth string) {
 	globalViewPaths = append(globalViewPaths, pth)
 
 	for _, assetFS := range globalAssetFSes {
-		if assetFS.RegisterPath(filepath.Join(root, "vendor", pth)) != nil {
-			for _, gopath := range strings.Split(os.Getenv("GOPATH"), ":") {
-				if assetFS.RegisterPath(filepath.Join(gopath, "src", pth)) == nil {
-					break
-				}
-			}
+		if assetFS.RegisterPath(pth) != nil {
+			return
 		}
 	}
 }

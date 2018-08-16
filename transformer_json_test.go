@@ -8,8 +8,8 @@ import (
 
 	"github.com/jinzhu/gorm"
 	"github.com/jinzhu/now"
-	"github.com/qor/admin"
-	. "github.com/qor/admin/tests/dummy"
+	"github.com/aghape/admin"
+	. "github.com/aghape/admin/tests/dummy"
 	"github.com/theplant/testingutils"
 )
 
@@ -20,7 +20,7 @@ func TestJSONTransformerEncode(t *testing.T) {
 		jsonTransformer = &admin.JSONTransformer{}
 		encoder         = admin.Encoder{
 			Action:   "show",
-			Resource: Admin.GetResource("User"),
+			Resource: Admin.GetResourceByName("User"),
 			Context:  Admin.NewContext(nil, nil),
 			Result: &User{
 				Active:       true,

@@ -1,16 +1,38 @@
 package admin
 
-import "github.com/qor/roles"
+import (
+	"github.com/jinzhu/gorm"
+	"github.com/aghape/aghape"
+	"github.com/aghape/roles"
+)
+
+type SubConfig struct {
+	Parent          *Resource
+	ParentFieldName string
+	ParentField     string
+	FieldName       string
+	Filters         []func(context *qor.Context, db *gorm.DB) *gorm.DB
+	RawFieldFilter  map[string]interface{}
+}
 
 // Config admin config struct
 type Config struct {
-	Param        string
-	Name         string
-	Menu         []string
-	Permission   *roles.Permission
-	Themes       []ThemeInterface
-	Priority     int
-	Singleton    bool
-	Invisible    bool
-	PageCount    int
+	Sub           *SubConfig
+	Prefix        string
+	Param         string
+	Name          string
+	PluralName    string
+	Menu          []string
+	Permission    *roles.Permission
+	Themes        []ThemeInterface
+	Displays      map[string]DisplayInterface
+	Priority      int
+	Singleton     bool
+	Invisible     bool
+	PageCount     int
+	ID            string
+	DisableFormID bool
+	NotMount      bool
+	Setup         func(res *Resource)
+	MenuEnabled   func(menu *Menu, ctx *Context) bool
 }

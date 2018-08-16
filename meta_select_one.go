@@ -4,32 +4,54 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"path"
 	"reflect"
 	"strings"
 
 	"github.com/jinzhu/gorm"
-	"github.com/qor/qor"
-	"github.com/qor/qor/resource"
-	"github.com/qor/qor/utils"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/aghape/aghape"
+	"github.com/aghape/aghape/resource"
+	"github.com/aghape/aghape/utils"
 )
+
+var SelectOne2ResultTemplateBasicHTMLWithIcon = RawJS(`
+if (data.text) return data.text;
+var v = "";
+if (data.Icon) {
+	v += "<i class=\"material-icons\"";
+    if (/\//.test(data.Icon)) {
+		v += "style=\"background-position-y:bottom;background-image: url('" + data.Icon + "');background-repeat:no-repeat;background-size:contain\">";
+	} else {
+		v += ">" + data.Icon;
+	}
+	v += "</i> ";
+}
+if (data.HTML) {
+	v += data.HTML;
+} else if (data.Text) {
+	v += data.Text;
+}
+return $("<span>" + v + "</span>");
+`)
 
 type RemoteDataResourceConfig struct {
 	Scopes []string
 }
 
 type DataResource struct {
-	Resource    *Resource
-	Scopes      []string
-	Filters     map[string]string
+	Resource       *Resource
+	Scopes         []string
+	Filters        map[string]string
 	DynamicFilters func(context *Context, filters map[string]string)
-	DisplayName string
-	Query       map[string]interface{}
-	FormatURI func(data *DataResource, context *Context, uri string) string
+	Layout         string
+	Display        string
+	Query          map[string]interface{}
+	FormatURI      func(data *DataResource, context *Context, uri string) string
+	Dependency     []interface{}
 }
 
 func NewDataResource(resource *Resource) *DataResource {
-	return &DataResource{Resource:resource}
+	return &DataResource{Resource: resource}
 }
 
 func (d *DataResource) Filter(name string, value string) *DataResource {
@@ -42,23 +64,53 @@ func (d *DataResource) Filter(name string, value string) *DataResource {
 
 // ToURLString Convert to URL string
 func (d *DataResource) ToURLString(context *Context) string {
-	uri := d.Resource.GetURI(context)
+	var parents []string
+	var query []string
+
+	if len(d.Dependency) > 0 {
+		for _, dep := range d.Dependency {
+			switch dp := dep.(type) {
+			case *DependencyParent:
+				if len(parents) == 0 {
+					parents = make([]string, d.Resource.PathLevel, d.Resource.PathLevel)
+				}
+				parents[dp.Meta.Resource.PathLevel] = "{" + dp.Meta.Name + "}"
+			case *DependencyQuery:
+				query = append(query, dp.Param+"={"+dp.Meta.Name+"}")
+			}
+		}
+	}
+
+	if len(parents) > 0 {
+		parent := d.Resource
+		for pathLevel := d.Resource.PathLevel - 1; pathLevel >= 0; pathLevel-- {
+			parent = parent.ParentResource
+			if parents[pathLevel] == "" {
+				parents[pathLevel] = context.URLParam(parent.ParamIDName())
+			}
+		}
+	}
+
+	uri := d.Resource.GetContextIndexURI(context.Context, parents...)
+
 	if d.FormatURI != nil {
 		uri = d.FormatURI(d, context, uri)
 	}
 
-	var query []string
+	if d.Layout != "" {
+		query = append(query, P_LAYOUT + "="+d.Layout)
+	}
 
-	if d.DisplayName != "" {
-		query = append(query, "display=" + d.DisplayName)
+	if d.Display != "" {
+		query = append(query, P_DISPLAY + "="+d.Display)
 	}
 
 	for _, scope := range d.Scopes {
-		query = append(query, "scopes=" + scope)
+		query = append(query, "scopes="+scope)
 	}
 
 	for fname, fvalue := range d.Filters {
-		query = append(query, "filters[" + fname + "].Value="+fvalue)
+		query = append(query, "filters["+fname+"].Value="+fvalue)
 	}
 
 	if d.DynamicFilters != nil {
@@ -66,7 +118,7 @@ func (d *DataResource) ToURLString(context *Context) string {
 		d.DynamicFilters(context, dynamicFilters)
 
 		for fname, fvalue := range dynamicFilters {
-			query = append(query, "filters[" + fname + "].Value="+fvalue)
+			query = append(query, "filters["+fname+"].Value="+fvalue)
 		}
 	}
 
@@ -84,21 +136,23 @@ type SelectOneConfig struct {
 	AllowBlank               bool
 	DefaultCreating          bool
 	SelectionTemplate        string
-	DisplayName              string
+	Layout                   string
+	Display                  string
 	SelectMode               string // select, select_async, bottom_sheet
 	PrimaryField             string
-	Select2ResultTemplate    template.JS
-	Select2SelectionTemplate template.JS
+	Select2ResultTemplate    *JS
+	Select2SelectionTemplate *JS
 	RemoteDataResource       *DataResource
+	Remote                   bool
 	RemoteURL                string
 	MakeRemoteURL            func(*Context) string
 	metaConfig
-	getCollection            func(interface{}, *Context) [][]string
-	Note                     string
+	getCollection func(interface{}, *Context) [][]string
+	Note          string
 }
 
 func (selectOneConfig *SelectOneConfig) IsRemote() bool {
-	return selectOneConfig.RemoteURL != "" || selectOneConfig.RemoteDataResource != nil
+	return selectOneConfig.RemoteURL != "" || selectOneConfig.Remote || selectOneConfig.RemoteDataResource != nil
 }
 
 // ToURLString Convert to URL string
@@ -118,7 +172,7 @@ func (selectOneConfig SelectOneConfig) GetPlaceholder(*Context) (template.HTML, 
 }
 
 // GetTemplate get template for selection template
-func (selectOneConfig SelectOneConfig) GetTemplate(context *Context, metaType string) ([]byte, error) {
+func (selectOneConfig SelectOneConfig) GetTemplate(context *Context, metaType string) (assetfs.AssetInterface, error) {
 	if metaType == "form" && selectOneConfig.SelectionTemplate != "" {
 		return context.Asset(selectOneConfig.SelectionTemplate)
 	}
@@ -140,6 +194,44 @@ func (selectOneConfig *SelectOneConfig) GetCollection(value interface{}, context
 // ConfigureQorMeta configure select one meta
 func (selectOneConfig *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	if meta, ok := metaor.(*Meta); ok {
+		if selectOneConfig.IsRemote() {
+			if selectOneConfig.RemoteDataResource == nil {
+				selectOneConfig.RemoteDataResource = &DataResource{}
+			}
+			if selectOneConfig.RemoteDataResource.Resource == nil && meta.Resource != nil {
+				selectOneConfig.RemoteDataResource.Resource = meta.Resource
+			} else if selectOneConfig.RemoteDataResource.Resource != nil && meta.Resource == nil {
+				meta.Resource = selectOneConfig.RemoteDataResource.Resource
+			}
+			if selectOneConfig.RemoteDataResource.Layout == "" {
+				selectOneConfig.RemoteDataResource.Layout = selectOneConfig.Layout
+			}
+			if selectOneConfig.RemoteDataResource.Display == "" {
+				selectOneConfig.RemoteDataResource.Display = selectOneConfig.Display
+			}
+			if len(selectOneConfig.RemoteDataResource.Dependency) == 0 {
+				selectOneConfig.RemoteDataResource.Dependency = meta.Dependency
+			}
+
+			switch selectOneConfig.RemoteDataResource.Layout {
+			case BASIC_LAYOUT_HTML_WITH_ICON, BASIC_LAYOUT_HTML, BASIC_LAYOUT:
+				selectOneConfig.Select2ResultTemplate = SelectOne2ResultTemplateBasicHTMLWithIcon
+				selectOneConfig.Select2SelectionTemplate = SelectOne2ResultTemplateBasicHTMLWithIcon
+			default:
+				selectOneConfig.RemoteDataResource.Layout = BASIC_LAYOUT_HTML_WITH_ICON
+			}
+
+			// Set FormattedValuer
+			if meta.FormattedValuer == nil {
+				meta.SetFormattedValuer(func(record interface{}, context *qor.Context) interface{} {
+					if record != nil {
+						record = meta.GetValuer()(record, context)
+						return ContextFromQorContext(context).HtmlifyRecord(selectOneConfig.RemoteDataResource.Resource, record)
+					}
+					return nil
+				})
+			}
+		}
 		// Set FormattedValuer
 		if meta.FormattedValuer == nil {
 			meta.SetFormattedValuer(func(record interface{}, context *qor.Context) interface{} {
@@ -173,7 +265,7 @@ func (selectOneConfig *SelectOneConfig) FilterValue(filter *Filter, context *Con
 		keyword string
 	)
 
-	if metaValues, err := resource.ConvertFormToMetaValues(context.Request, []resource.Metaor{}, prefix); err == nil {
+	if metaValues, err := resource.ConvertFormToMetaValues(context.Context, context.Request, []resource.Metaor{}, prefix); err == nil {
 		if metaValue := metaValues.Get("Value"); metaValue != nil {
 			keyword = utils.ToString(metaValue.Value)
 		}
@@ -183,7 +275,7 @@ func (selectOneConfig *SelectOneConfig) FilterValue(filter *Filter, context *Con
 		result := selectOneConfig.RemoteDataResource.Resource.NewStruct(context.Context.Site)
 		clone := context.Clone()
 		clone.ResourceID = keyword
-		if selectOneConfig.RemoteDataResource.Resource.CallFindOne(result, nil, clone) == nil {
+		if selectOneConfig.RemoteDataResource.Resource.FindOne(result, nil, clone) == nil {
 			return result
 		}
 	}
@@ -196,38 +288,71 @@ func (selectOneConfig *SelectOneConfig) prepareDataSource(field *gorm.StructFiel
 	if selectOneConfig.Collection != nil {
 		selectOneConfig.SelectMode = "select"
 
-		if values, ok := selectOneConfig.Collection.([]string); ok {
+		switch cl := selectOneConfig.Collection.(type) {
+		case []string:
 			selectOneConfig.getCollection = func(interface{}, *Context) (results [][]string) {
-				for _, value := range values {
+				for _, value := range cl {
 					results = append(results, []string{value, value})
 				}
 				return
 			}
-		} else if maps, ok := selectOneConfig.Collection.([][]string); ok {
+		case [][]string:
 			selectOneConfig.getCollection = func(interface{}, *Context) [][]string {
-				return maps
+				return cl
 			}
-		} else if fc, ok := selectOneConfig.Collection.(func(interface{}, *qor.Context) [][]string); ok {
+		case func() [][]string:
 			selectOneConfig.getCollection = func(record interface{}, context *Context) [][]string {
-				return fc(record, context.Context)
+				return cl()
 			}
-		} else if fc, ok := selectOneConfig.Collection.(func(interface{}, *Context) [][]string); ok {
-			selectOneConfig.getCollection = fc
-		} else {
+		case func(*Context) [][]string:
+			selectOneConfig.getCollection = func(record interface{}, context *Context) [][]string {
+				return cl(context)
+			}
+		case func(interface{}, *qor.Context) [][]string:
+			selectOneConfig.getCollection = func(record interface{}, context *Context) [][]string {
+				return cl(record, context.Context)
+			}
+		case func() []string:
+			selectOneConfig.getCollection = func(record interface{}, context *Context) (results [][]string) {
+				for _, value := range cl() {
+					results = append(results, []string{value, value})
+				}
+				return
+			}
+		case func(*Context) []string:
+			selectOneConfig.getCollection = func(record interface{}, context *Context) (results [][]string) {
+				for _, value := range cl(context) {
+					results = append(results, []string{value, value})
+				}
+				return
+			}
+		case func(interface{}, *Context) [][]string:
+			selectOneConfig.getCollection = cl
+		default:
 			utils.ExitWithMsg("Unsupported Collection format")
 		}
 	}
 
 	// Set GetCollection if normal select mode
 	if selectOneConfig.getCollection == nil {
-		if selectOneConfig.RemoteDataResource == nil && field != nil {
-			fieldType := field.Struct.Type
-			for fieldType.Kind() == reflect.Ptr || fieldType.Kind() == reflect.Slice {
-				fieldType = fieldType.Elem()
-			}
-			selectOneConfig.RemoteDataResource = NewDataResource(res.GetAdmin().GetResource(fieldType.Name()))
-			if selectOneConfig.RemoteDataResource.Resource == nil {
-				selectOneConfig.RemoteDataResource.Resource = res.GetAdmin().NewResource(reflect.New(fieldType).Interface())
+		qorAdmin := res.GetAdmin()
+		if selectOneConfig.RemoteDataResource == nil {
+			if field != nil {
+				fieldType := field.Struct.Type
+				for fieldType.Kind() == reflect.Ptr || fieldType.Kind() == reflect.Slice {
+					fieldType = fieldType.Elem()
+				}
+				selectOneConfig.RemoteDataResource = NewDataResource(qorAdmin.GetResourceByID(fieldType.Name()))
+				if selectOneConfig.RemoteDataResource.Resource == nil {
+					typInterface := reflect.New(fieldType).Interface()
+					selectOneConfig.RemoteDataResource.Resource = res.AddResource(
+						&SubConfig{FieldName: field.Struct.Name},
+						typInterface,
+						&Config{
+							Param:     routePrefix + "!" + utils.ToParamString(field.Name),
+							Invisible: true,
+						})
+				}
 			}
 		}
 
@@ -254,7 +379,8 @@ func (selectOneConfig *SelectOneConfig) prepareDataSource(field *gorm.StructFiel
 			for i := 0; i < reflectValues.Len(); i++ {
 				value := reflectValues.Index(i).Interface()
 				scope := context.DB.NewScope(value)
-				results = append(results, []string{fmt.Sprint(scope.PrimaryKeyValue()), utils.Stringify(value)})
+				label := cloneContext.Resource.GetDefinedMeta(BASIC_META_LABEL).GetValuer()(value, cloneContext.Context)
+				results = append(results, []string{fmt.Sprint(scope.PrimaryKeyValue()), label.(string)})
 			}
 			return
 		}
@@ -263,10 +389,11 @@ func (selectOneConfig *SelectOneConfig) prepareDataSource(field *gorm.StructFiel
 	if res != nil && (selectOneConfig.SelectMode == "select_async" || selectOneConfig.SelectMode == "bottom_sheet") {
 		if remoteDataResource := selectOneConfig.RemoteDataResource; remoteDataResource != nil {
 			if !remoteDataResource.Resource.mounted {
-				remoteDataResource.Resource.params = path.Join(routePrefix, res.ToParam(), field.Name,
+				remoteDataResource.Resource.MountTo(routePrefix + "!" + utils.ToParamString(field.Name))
+				/*remoteDataResource.Resource.params = path.Join(routePrefix, res.ToParam(), field.Name,
 					fmt.Sprintf("%p", remoteDataResource.Resource))
 				res.GetAdmin().RegisterResourceRouters(remoteDataResource.Resource,
-					"create", "update", "read", "delete")
+					"create", "update", "read", "delete")*/
 			}
 		} else {
 			utils.ExitWithMsg("RemoteDataResource not configured")

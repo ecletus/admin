@@ -5,9 +5,10 @@ import (
 	"html/template"
 	"reflect"
 
-	"github.com/qor/qor"
-	"github.com/qor/qor/resource"
-	"github.com/qor/qor/utils"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/aghape/aghape"
+	"github.com/aghape/aghape/resource"
+	"github.com/aghape/aghape/utils"
 )
 
 // SelectManyConfig meta configuration used for select many
@@ -24,7 +25,7 @@ type SelectManyConfig struct {
 }
 
 // GetTemplate get template for selection template
-func (selectManyConfig SelectManyConfig) GetTemplate(context *Context, metaType string) ([]byte, error) {
+func (selectManyConfig SelectManyConfig) GetTemplate(context *Context, metaType string) (assetfs.AssetInterface, error) {
 	if metaType == "form" && selectManyConfig.SelectionTemplate != "" {
 		return context.Asset(selectManyConfig.SelectionTemplate)
 	}

@@ -1,0 +1,48 @@
+menus:
+  Financeiro: Financeiro
+  Dashboard: Painel
+  Site Management: Configuração do Site
+  Actions: Ações
+  Resources: Recursos
+form:
+  crop_image: Cortar Figura
+  cancel: Cancelar
+  cancel_edit: Cancelar Edição
+  save_changes: Salvar Alterações
+  are_you_sure: Você tem certeza?
+action:
+  new: "Cadastrar {{.}}"
+  edit: "Editar {{.}}"
+  show: "Detalhes de {{.}}"
+layout:
+  title: "Admin"
+  powered_by: "Por <a href=\"http://moisespsena.com\">Moisés P. Sena</a>"
+  logo~: "<a href=\"{{url}}\"><img src=\"{{static_url}}/images/logo.png\" /></a>"
+  header:
+    actions: Ações
+actions:
+  search_bar_search: Central de Pesquisa
+  bulk_edit: Edição em Massa
+  exit_bulk_edit: Sair do modo Edição em Massa
+  please_select_an_item: Por favor, selecione um item
+  view_standalone: Visualizar separado
+search_center:
+  hint: Pesquisa
+  title: Pesquisar
+  all: Tudo
+account:
+  logout: Sair
+  logout: Sair
+pagination:
+  next: Pŕoxima
+  page_num: Página
+  last: Última página
+  20_entries: 20 items por ágina
+  50_entries: 50 items por ágina
+  100_entries:  100 items por ágina
+  show_all: Tudo
+showpage:
+  inlineedit:
+    button:
+      save@: common.actions.save
+      cancel_edit@: common.actions.cancel_edit

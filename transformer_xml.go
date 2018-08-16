@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/jinzhu/inflection"
-	"github.com/qor/qor/utils"
-	"github.com/qor/roles"
+	"github.com/aghape/aghape/utils"
+	"github.com/aghape/roles"
 )
 
 // XMLTransformer xml transformer
@@ -23,7 +23,7 @@ func (XMLTransformer) CouldEncode(encoder Encoder) bool {
 // Encode encode encoder to writer as XML
 func (XMLTransformer) Encode(writer io.Writer, encoder Encoder) error {
 	xmlMarshaler := XMLStruct{
-		Action:   encoder.Action,
+		Action:   encoder.Layout,
 		Resource: encoder.Resource,
 		Context:  encoder.Context,
 		Result:   encoder.Result,
@@ -141,11 +141,11 @@ var XMLMarshalDefaultHandler = func(xmlStruct XMLStruct, e *xml.Encoder, start x
 			metas := []*Meta{}
 			switch xmlStruct.Action {
 			case "index":
-				metas = res.ConvertSectionToMetas(res.allowedSections(res.IndexAttrs(), context, roles.Update))
+				metas = res.ConvertSectionToMetas(res.allowedSections(xmlStruct.Result, res.IndexAttrs(), context, roles.Update))
 			case "edit":
-				metas = res.ConvertSectionToMetas(res.allowedSections(res.EditAttrs(), context, roles.Update))
+				metas = res.ConvertSectionToMetas(res.allowedSections(xmlStruct.Result, res.EditAttrs(), context, roles.Update))
 			case "show":
-				metas = res.ConvertSectionToMetas(res.allowedSections(res.ShowAttrs(), context, roles.Read))
+				metas = res.ConvertSectionToMetas(res.allowedSections(xmlStruct.Result, res.ShowAttrs(), context, roles.Read))
 			}
 
 			for _, meta := range metas {

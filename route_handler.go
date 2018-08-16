@@ -1,13 +1,23 @@
 package admin
 
 import (
-	"strings"
+	"net/http"
 
-	"github.com/qor/qor"
-	"github.com/qor/roles"
+	"github.com/moisespsena/go-route"
+	"github.com/aghape/aghape"
+	"github.com/aghape/roles"
 )
 
 var blankPermissionMode roles.PermissionMode
+
+type DataStack struct {
+	Parent *DataStack
+	Map   map[interface{}]interface{}
+}
+
+func (d *DataStack) NewChild() DataStack {
+	return DataStack{d, map[interface{}]interface{}{}}
+}
 
 // RouteConfig config for admin routes
 type RouteConfig struct {
@@ -15,20 +25,92 @@ type RouteConfig struct {
 	Permissioner   HasPermissioner
 	PermissionMode roles.PermissionMode
 	Values         map[interface{}]interface{}
+	Data           DataStack
 	Available      func(context *qor.Context) bool
 }
 
-type requestHandler func(c *Context)
-
-type routeHandler struct {
-	Path   string
-	Handle requestHandler
-	Config *RouteConfig
+func (c *RouteConfig) Set(key, value interface{}) {
+	if c.Data.Map == nil {
+		c.Data.Map = map[interface{}]interface{}{}
+	}
+	c.Data.Map[key] = value
 }
 
-func newRouteHandler(path string, handle requestHandler, configs ...*RouteConfig) *routeHandler {
-	handler := routeHandler{
-		Path:   "/" + strings.TrimPrefix(path, "/"),
+func (c *RouteConfig) Get(key interface{}) interface{} {
+	d := &c.Data
+	for d != nil {
+		if v, ok := d.Map[key]; ok {
+			return v
+		}
+		d = d.Parent
+	}
+	return nil
+}
+
+type Handler func(c *Context)
+
+type Chain struct {
+	Context  *Context
+	Handler  Handler
+	Handlers []func(chain *Chain)
+	index    int
+	pass     bool
+}
+
+func NewChain(context *Context, handler Handler, handlers []func(chain *Chain)) *Chain {
+	return &Chain{Context: context, Handler: handler, Handlers: handlers}
+}
+
+func (c *Chain) Pass() {
+	c.pass = true
+}
+
+func (c *Chain) Next() {
+	old := c.Context
+	defer func() {
+		c.Context = old
+	}()
+
+	l := len(c.Handlers)
+	for c.index < l {
+		h := c.Handlers[c.index]
+		c.index++
+		h(c)
+		if c.pass {
+			c.pass = false
+		} else {
+			return
+		}
+	}
+	if c.index == l {
+		c.index++
+		c.Handler(c.Context)
+	}
+}
+
+type RouteHandler struct {
+	Handle       Handler
+	Interseptors []func(chain *Chain)
+	Config       *RouteConfig
+}
+
+func (h RouteHandler) Clone() *RouteHandler {
+	h.Interseptors = h.Interseptors[:]
+	h.Config = &(*h.Config)
+	h.Config.Data = h.Config.Data.NewChild()
+	return &h
+}
+func (h *RouteHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
+	context := ContextFromRouteContext(rctx)
+	NewChain(context, h.Handle, h.Interseptors).Next()
+}
+
+func (h *RouteHandler) Intercept(f ...func(chain *Chain)) {
+	h.Interseptors = append(h.Interseptors, f...)
+}
+
+func NewHandler(handle Handler, configs ...*RouteConfig) *RouteHandler {
+	handler := RouteHandler{
 		Handle: handle,
 	}
 
@@ -51,7 +133,7 @@ func newRouteHandler(path string, handle requestHandler, configs ...*RouteConfig
 	return &handler
 }
 
-func (handler routeHandler) HasPermission(permissionMode roles.PermissionMode, context *qor.Context) bool {
+func (handler RouteHandler) HasPermission(permissionMode roles.PermissionMode, context *qor.Context) bool {
 	if handler.Config.Available != nil && !handler.Config.Available(context) {
 		return false
 	}

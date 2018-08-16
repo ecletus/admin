@@ -2,9 +2,9 @@ package admin
 
 import (
 	"github.com/jinzhu/gorm"
-	"github.com/qor/qor"
-	"github.com/qor/qor/resource"
-	"github.com/qor/qor/utils"
+	"github.com/aghape/aghape"
+	"github.com/aghape/aghape/resource"
+	"github.com/aghape/aghape/utils"
 )
 
 // Filter register filter for qor resource
@@ -52,9 +52,11 @@ func (res *Resource) Filter(filter *Filter) {
 	}
 }
 
-func (res *Resource) GetFilters() (filters []*Filter) {
+func (res *Resource) GetFilters(context *qor.Context) (filters []*Filter) {
 	for _, filter := range res.filters {
-		filters = append(filters, filter)
+		if filter.Available == nil || filter.Available(context) {
+			filters = append(filters, filter)
+		}
 	}
 	return
 }
@@ -68,6 +70,7 @@ type Filter struct {
 	Resource   *Resource
 	Handler    func(*gorm.DB, *FilterArgument) *gorm.DB
 	Config     FilterConfigInterface
+	Available func(context *qor.Context) bool
 }
 
 // FilterConfigInterface filter config interface

@@ -3,8 +3,8 @@ package admin
 import (
 	"time"
 
-	"github.com/qor/qor"
-	"github.com/qor/qor/utils"
+	"github.com/aghape/aghape"
+	"github.com/aghape/aghape/utils"
 )
 
 var metaConfigorMaps = map[string]func(*Meta){

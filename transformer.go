@@ -66,7 +66,6 @@ type EncoderInterface interface {
 
 // Encoder encoder struct used for encode
 type Encoder struct {
-	Action   string
 	Layout   string
 	Resource *Resource
 	Context  *Context
@@ -98,7 +97,7 @@ type DecoderInterface interface {
 
 // Decoder decoder struct used for decode
 type Decoder struct {
-	Action   string
+	Layout   string
 	Resource *Resource
 	Context  *Context
 	Result   interface{}

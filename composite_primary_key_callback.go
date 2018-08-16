@@ -5,17 +5,18 @@ import (
 	"regexp"
 
 	"github.com/jinzhu/gorm"
-	"github.com/qor/qor"
+	"github.com/moisespsena/go-route"
 )
 
 var primaryKeyRegexp = regexp.MustCompile(`primary_key\[.+_.+\]`)
 
 func (admin *Admin) registerCompositePrimaryKeyCallback() {
 	// register middleware
-	router := admin.GetRouter()
-	router.Use(&Middleware{
-		Name: "composite primary key filter",
-		Handler: func(context *Context, middleware *Middleware) {
+	router := admin.Router
+	router.Use(&route.Middleware{
+		Name: PKG + ".composite_primary_key_filter",
+		Handler: func(chain *route.ChainHandler) {
+			context := ContextFromChain(chain)
 			db := context.DB
 			for key, value := range context.Request.URL.Query() {
 				if primaryKeyRegexp.MatchString(key) {
@@ -23,25 +24,12 @@ func (admin *Admin) registerCompositePrimaryKeyCallback() {
 				}
 			}
 			context.DB = db
-
-			middleware.Next(context)
+			chain.Pass()
 		},
-	})
-
-	admin.Config.SetupDB(func(db *qor.DB) error {
-		if db.DB.Callback().Query().Get("qor_admin:composite_primary_key") == nil {
-			db.DB.Callback().Query().Before("gorm:query").Register("qor_admin:composite_primary_key", compositePrimaryKeyQueryCallback)
-		}
-
-		if db.DB.Callback().RowQuery().Get("qor_admin:composite_primary_key") == nil {
-			db.DB.Callback().RowQuery().Before("gorm:row_query").Register("qor_admin:composite_primary_key", compositePrimaryKeyQueryCallback)
-		}
-
-		return nil
 	})
 }
 
-var DisableCompositePrimaryKeyMode = "composite_primary_key:query:disable"
+var DisableCompositePrimaryKeyMode = PKG + ".composite_primary_key:query:disable"
 
 func compositePrimaryKeyQueryCallback(scope *gorm.Scope) {
 	if value, ok := scope.Get(DisableCompositePrimaryKeyMode); ok && value != "" {

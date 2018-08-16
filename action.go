@@ -1,13 +1,12 @@
 package admin
 
 import (
-	"path"
 	"reflect"
 	"strings"
 
-	"github.com/qor/qor"
-	"github.com/qor/qor/utils"
-	"github.com/qor/roles"
+	"github.com/aghape/aghape"
+	"github.com/aghape/aghape/utils"
+	"github.com/aghape/roles"
 )
 
 // Action register action for qor resource
@@ -84,23 +83,22 @@ func (res *Resource) Action(action *Action) *Action {
 	// Register Actions into Router
 	{
 		actionController := &Controller{Admin: res.GetAdmin(), action: action}
-		primaryKeyParams := res.ParamIDName()
 
 		if action.Resource != nil || action.Handler != nil {
 			routeConfig := &RouteConfig{Permissioner: action, PermissionMode: roles.Update}
+			actionParam := "/" + action.ToParam()
+			bulkPattern := "/!action" + actionParam
 
 			if action.Resource != nil {
 				// Bulk Action
-				res.RegisterRoute("GET", path.Join("!action", action.ToParam()), actionController.Action, routeConfig)
+				res.Router.Get(bulkPattern, NewHandler(actionController.Action, routeConfig))
 				// Single Resource Action
-				res.RegisterRoute("GET", path.Join(primaryKeyParams, action.ToParam()), actionController.Action, routeConfig)
-			}
-
-			if action.Handler != nil {
+				res.ObjectRouter.Get(actionParam, NewHandler(actionController.Action, routeConfig))
+			} else if action.Handler != nil {
 				// Bulk Action
-				res.RegisterRoute("PUT", path.Join("!action", action.ToParam()), actionController.Action, routeConfig)
+				res.Router.Put(bulkPattern, NewHandler(actionController.Action, routeConfig))
 				// Single Resource action
-				res.RegisterRoute("PUT", path.Join(primaryKeyParams, action.ToParam()), actionController.Action, routeConfig)
+				res.ObjectRouter.Put(actionParam, NewHandler(actionController.Action, routeConfig))
 			}
 		}
 	}
@@ -126,12 +124,28 @@ type ActionArgument struct {
 	SkipDefaultResponse bool
 }
 
+type ActionType int
+
+const (
+	ActionDefault        ActionType = iota
+	ActionPrimary
+	ActionInfo
+	ActionDanger
+)
+
+var ActionTypeName = []string{
+	"default",
+	"primary",
+	"info",
+	"danger",
+}
+
 // Action action definiation
 type Action struct {
 	Name        string
 	Label       string
 	Method      string
-	URL         func(record interface{}, context *Context) string
+	URL         func(record interface{}, context *Context, args ...interface{}) string
 	URLOpenType string
 	Available   func(context *Context) bool
 	Visible     func(record interface{}, context *Context) bool
@@ -139,6 +153,11 @@ type Action struct {
 	Modes       []string
 	Resource    *Resource
 	Permission  *roles.Permission
+	Type       ActionType
+}
+
+func (action *Action) TypeName() string{
+	return ActionTypeName[action.Type]
 }
 
 // ToParam used to register routes for actions
@@ -195,7 +214,7 @@ func (actionArgument *ActionArgument) FindSelectedRecords() []interface{} {
 
 	clone := context.clone()
 	for _, primaryValue := range actionArgument.PrimaryValues {
-		primaryQuerySQL, primaryParams := resource.ToPrimaryQueryParams(primaryValue, context.Context)
+		primaryQuerySQL, primaryParams := resource.ToPrimaryQueryParams(primaryValue)
 		sqls = append(sqls, primaryQuerySQL)
 		sqlParams = append(sqlParams, primaryParams...)
 	}

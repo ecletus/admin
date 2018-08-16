@@ -3,8 +3,8 @@ package admin
 import (
 	"testing"
 
-	"github.com/qor/qor"
-	"github.com/qor/qor/test/utils"
+	"github.com/aghape/aghape"
+	"github.com/aghape/aghape/test/utils"
 )
 
 type User struct {
@@ -44,7 +44,7 @@ func TestGetResource(t *testing.T) {
 	admin := New(qor.NewConfig(db))
 	user := admin.AddResource(&User{})
 
-	if admin.GetResource("User") != user {
+	if admin.GetResourceByName("User") != user {
 		t.Error("resource not returned")
 	}
 }

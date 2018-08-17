@@ -17,7 +17,7 @@ $(document).ajaxComplete(function(event, xhr, settings) {
 
 
 // select2 ajax common options
-// $.fn.select2 = $.fn.select2 || function(){};
+$.fn.select2 = $.fn.select2 || function(){};
 $.fn.select2.ajaxCommonOptions = function(select2Data) {
     let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey;
 

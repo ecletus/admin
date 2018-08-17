@@ -33,7 +33,7 @@ type Pagination struct {
 }
 
 type ImmutableScopes struct {
-	set *set.Set
+	set set.Interface
 }
 
 func (is *ImmutableScopes) Has(names ...interface{}) bool {
@@ -108,7 +108,7 @@ func (s *Searcher) PerPage(num int) *Searcher {
 // Scope filter with defined scopes
 func (s *Searcher) Scope(names ...string) *Searcher {
 	newSearcher := s.clone()
-	scopesSet := set.New()
+	scopesSet := set.New(set.NonThreadSafe)
 
 	for _, name := range names {
 		for _, scope := range s.Resource.scopes {

@@ -1006,9 +1006,7 @@ func (context *Context) loadActions(action string) template.HTML {
 
 	sort.Strings(actionKeys)
 
-	var (
-		result = bytes.NewBufferString("")
-	)
+	result := bytes.NewBufferString("")
 
 	for _, key := range actionKeys {
 		base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(key, "")

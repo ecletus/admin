@@ -709,6 +709,14 @@ func ContextFromQorContext(ctx *qor.Context) *Context {
 	return ctx.Data().Get(CONTEXT_KEY).(*Context)
 }
 
+func ContextFromQorContextOrNew(ctx *qor.Context, admin *Admin) *Context {
+	c, ok := ctx.Data().GetOk(CONTEXT_KEY)
+	if ok {
+		return c.(*Context)
+	}
+	return admin.NewContext(ctx)
+}
+
 var CONTEXT_KEY = PKG + ".context"
 
 func ContextFromChain(chain *route.ChainHandler) *Context {

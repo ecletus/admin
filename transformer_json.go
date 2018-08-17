@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/moisespsena/go-valuesmap"
 	"github.com/aghape/roles"
+	"github.com/moisespsena-go/valuesmap"
 )
 
 // JSONTransformer json transformer

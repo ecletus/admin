@@ -2,14 +2,16 @@ package admin
 
 import (
 	"github.com/aghape/db"
+	"github.com/aghape/plug"
 )
 
 type Plugin struct {
-	db.DisDBNames
+	db.DBNames
+	plug.EventDispatcher
 }
 
 func (p *Plugin) OnRegister() {
-	p.DBOnInitGorm(func(e *db.GormDBEvent) {
+	db.Events(p).DBOnInitGorm(func(e *db.GormDBEvent) {
 		DB := e.DB
 		if DB.Callback().Query().Get("qor_admin:composite_primary_key") == nil {
 			DB.Callback().Query().Before("gorm:query").Register("qor_admin:composite_primary_key", compositePrimaryKeyQueryCallback)

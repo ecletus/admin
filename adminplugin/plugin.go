@@ -3,13 +3,14 @@ package adminplugin
 import (
 	"path/filepath"
 
+	"strings"
+
 	"github.com/aghape/admin"
 	"github.com/aghape/plug"
+	"github.com/aghape/router"
 	"github.com/moisespsena/go-default-logger"
 	"github.com/moisespsena/go-error-wrap"
 	"github.com/moisespsena/go-path-helpers"
-	"github.com/aghape/router"
-	"strings"
 )
 
 const DEFAULT_ADMIN = "default"
@@ -157,7 +158,7 @@ func (p *Plugin) AssetsRootPath() string {
 }
 
 func (p *Plugin) OnRegister() {
-	adminsCalled := map[string]bool {}
+	adminsCalled := map[string]bool{}
 	p.On(E_ADMIN, func(e plug.PluginEventInterface) (err error) {
 		adminEvent := e.(*AdminEvent)
 		if _, ok := adminsCalled[adminEvent.AdminName]; ok {

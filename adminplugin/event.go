@@ -1,9 +1,10 @@
 package adminplugin
 
 import (
-	"github.com/moisespsena/go-route"
 	"github.com/aghape/admin"
 	"github.com/aghape/plug"
+	"github.com/moisespsena/go-error-wrap"
+	"github.com/moisespsena/go-route"
 )
 
 var (
@@ -71,4 +72,14 @@ func EInitResources(adminName string) string {
 		panic("AdminName is blank")
 	}
 	return E_ADMIN_INIT_RESOURCES + ":" + adminName
+}
+
+func (admins *Admins) Trigger(d plug.PluginEventDispatcherInterface) error {
+	return admins.Each(func(adminName string, Admin *admin.Admin) (err error) {
+		e := &AdminEvent{plug.NewPluginEvent(E_ADMIN), Admin, adminName, nil}
+		if err = d.TriggerPlugins(e); err != nil {
+			return errwrap.Wrap(err, "Admin %q: event %q", adminName, e.Name())
+		}
+		return nil
+	})
 }

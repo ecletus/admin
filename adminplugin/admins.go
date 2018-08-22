@@ -22,6 +22,13 @@ func (a *Admins) Set(name string, Admin *admin.Admin) {
 	Admin.Init()
 }
 
+func (a *Admins) Names() (n []string) {
+	for name := range a.ByName {
+		n = append(n, name)
+	}
+	return
+}
+
 func (a *Admins) SetDefault(Admin *admin.Admin) {
 	a.Set(DEFAULT_ADMIN, Admin)
 }

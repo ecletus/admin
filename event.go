@@ -3,8 +3,8 @@ package admin
 import (
 	"github.com/moisespsena/go-edis"
 	"github.com/aghape/plug"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/utils"
 )
 
 const (
@@ -75,6 +75,6 @@ func (admin *Admin) OnDoneE(cb func(e *AdminEvent) error) error {
 type RecordeEvent struct {
 	plug.EventInterface
 	Resource *Resource
-	Context  *qor.Context
+	Context  *core.Context
 	Recorde  interface{}
 }

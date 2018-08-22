@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/aghape/roles"
 )
 
@@ -18,7 +18,7 @@ type Scheme struct {
 	customSections *map[string]*[]*Section
 	sortableAttrs  *[]string
 
-	SearchHandler func(keyword string, context *qor.Context) *aorm.DB
+	SearchHandler func(keyword string, context *core.Context) *aorm.DB
 }
 
 // IndexAttrs set attributes will be shown in the index page
@@ -124,7 +124,7 @@ func (s *Scheme) SortableAttrs(columns ...string) []string {
 			columns = s.Resource.ConvertSectionToStrings(s.indexSections)
 		}
 		s.sortableAttrs = &[]string{}
-		scope := qor.FakeDB.NewScope(s.Resource.Value)
+		scope := core.FakeDB.NewScope(s.Resource.Value)
 		for _, column := range columns {
 			if field, ok := scope.FieldByName(column); ok && field.DBName != "" {
 				attrs := append(*s.sortableAttrs, column)
@@ -149,7 +149,7 @@ func (s *Scheme) SearchAttrs(columns ...string) []string {
 		}
 
 		if len(columns) > 0 {
-			s.SearchHandler = func(keyword string, context *qor.Context) *aorm.DB {
+			s.SearchHandler = func(keyword string, context *core.Context) *aorm.DB {
 				var filterFields []filterField
 				for _, column := range columns {
 					filterFields = append(filterFields, filterField{FieldName: column})

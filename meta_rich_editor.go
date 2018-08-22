@@ -1,9 +1,9 @@
 package admin
 
 import (
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 )
 
 type RichEditorConfig struct {
@@ -30,7 +30,7 @@ func (richEditorConfig *RichEditorConfig) ConfigureQorMeta(metaor resource.Metao
 		}
 
 		setter := meta.GetSetter()
-		meta.SetSetter(func(resource interface{}, metaValue *resource.MetaValue, context *qor.Context) error {
+		meta.SetSetter(func(resource interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 			metaValue.Value = utils.HTMLSanitizer.Sanitize(utils.ToString(metaValue.Value))
 			return setter(resource, metaValue, context)
 		})

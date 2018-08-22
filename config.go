@@ -2,7 +2,7 @@ package admin
 
 import (
 	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/aghape/roles"
 )
 
@@ -11,7 +11,7 @@ type SubConfig struct {
 	ParentFieldName string
 	ParentField     string
 	FieldName       string
-	Filters         []func(context *qor.Context, db *aorm.DB) *aorm.DB
+	Filters         []func(context *core.Context, db *aorm.DB) *aorm.DB
 	RawFieldFilter  map[string]interface{}
 }
 

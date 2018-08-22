@@ -10,8 +10,8 @@ import (
 	"github.com/go-errors/errors"
 	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/fragment"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
 )
 
@@ -213,7 +213,7 @@ func (f *FormFragmentRecordState) OnlyEnabledField(context *Context) bool {
 
 type FragmentCategoryConfig struct {
 	Label      string
-	IndexAttrs func(res *Resource, ctx *qor.Context) []interface{}
+	IndexAttrs func(res *Resource, ctx *core.Context) []interface{}
 }
 
 type FragmentConfig struct {
@@ -223,8 +223,8 @@ type FragmentConfig struct {
 	Category  *FragmentCategoryConfig
 	IsLabel   string
 	Is        bool
-	Enabled   func(record fragment.FragmentedModelInterface, ctx *qor.Context) bool
-	Available func(record fragment.FragmentedModelInterface, ctx *qor.Context) bool
+	Enabled   func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
+	Available func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
 }
 
 func (fc *FragmentConfig) Inline() bool {
@@ -280,7 +280,7 @@ func (f *Fragment) Build() {
 		newIndex := index.Clone()
 		newIndex.Intercept(func(chain *Chain) {
 			uri := chain.Context.Resource.GetContextIndexURI(chain.Context.Context)
-			chain.Context.Breadcrumbs().Append(qor.NewBreadcrumb(uri, chain.Context.Resource.PluralLabelKey(), ""))
+			chain.Context.Breadcrumbs().Append(core.NewBreadcrumb(uri, chain.Context.Resource.PluralLabelKey(), ""))
 			chain.Context.PageTitle = f.Resource.PluralLabelKey()
 			chain.Pass()
 		})
@@ -401,7 +401,7 @@ func (f *Fragment) Parents() (parents []*Fragment) {
 	return
 }
 
-func (f *Fragment) Enabled(record fragment.FragmentedModelInterface, ctx *qor.Context) bool {
+func (f *Fragment) Enabled(record fragment.FragmentedModelInterface, ctx *core.Context) bool {
 	if !f.IsForm {
 		return true
 	} else if f.Config.NotInline && record.GetFormFragment(f.ID) != nil {
@@ -423,12 +423,12 @@ func (f *Fragment) Enabled(record fragment.FragmentedModelInterface, ctx *qor.Co
 	return enabled
 }
 
-func (f *Fragment) FormRecordValue(record fragment.FragmentedModelInterface, ctx *qor.Context) *FormFragmentRecordState {
+func (f *Fragment) FormRecordValue(record fragment.FragmentedModelInterface, ctx *core.Context) *FormFragmentRecordState {
 	value := record.GetFormFragment(f.ID)
 	return &FormFragmentRecordState{f, f.Enabled(record, ctx), value, value == nil}
 }
 
-func (f *Fragment) FormGetOrNew(record fragment.FragmentedModelInterface, ctx *qor.Context) fragment.FormFragmentModelInterface {
+func (f *Fragment) FormGetOrNew(record fragment.FragmentedModelInterface, ctx *core.Context) fragment.FormFragmentModelInterface {
 	value := record.GetFormFragment(f.ID)
 	if value == nil {
 		value = f.Resource.NewStruct(ctx.Site).(fragment.FormFragmentModelInterface)
@@ -438,7 +438,7 @@ func (f *Fragment) FormGetOrNew(record fragment.FragmentedModelInterface, ctx *q
 	return value
 }
 
-func (f *Fragment) GetOrNew(record fragment.FragmentedModelInterface, ctx *qor.Context) fragment.FragmentModelInterface {
+func (f *Fragment) GetOrNew(record fragment.FragmentedModelInterface, ctx *core.Context) fragment.FragmentModelInterface {
 	value := record.GetFragment(f.ID)
 	if value == nil {
 		value = f.Resource.NewStruct(ctx.Site).(fragment.FragmentModelInterface)

@@ -10,9 +10,9 @@ import (
 	"github.com/moisespsena/go-error-wrap"
 	"github.com/moisespsena/go-route"
 	"github.com/aghape/fragment"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 )
 
 func (admin *Admin) newResource(value interface{}, config *Config, onUid func(uid string)) *Resource {
@@ -188,7 +188,7 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 	}
 
 	findOneHandler := res.FindOneHandler
-	res.FindOneHandler = func(r resource.Resourcer, result interface{}, metaValues *resource.MetaValues, context *qor.Context) error {
+	res.FindOneHandler = func(r resource.Resourcer, result interface{}, metaValues *resource.MetaValues, context *core.Context) error {
 		if context.ResourceID == "" {
 			context.ResourceID = context.URLParam(res.ParamIDName())
 		}

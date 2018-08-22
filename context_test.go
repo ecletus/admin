@@ -6,7 +6,7 @@ import (
 
 	"github.com/aghape/admin"
 	. "github.com/aghape/admin/tests/dummy"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 // Template helpers test
@@ -36,7 +36,7 @@ func TestUrlForResourceName(t *testing.T) {
 	user := &User{Name: "test"}
 	db.Create(&user)
 
-	context := &admin.Context{Admin: Admin, Context: &qor.Context{}}
+	context := &admin.Context{Admin: Admin, Context: &core.Context{}}
 	context.SetDB(db)
 
 	userLink := context.URLFor(user)

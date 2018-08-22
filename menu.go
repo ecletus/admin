@@ -4,7 +4,7 @@ import (
 	"path"
 
 	"github.com/moisespsena/go-route"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/aghape/roles"
 )
 
@@ -96,7 +96,7 @@ func (menu Menu) URL(context *Context, args ...interface{}) string {
 }
 
 // HasPermission check menu has permission or not
-func (menu Menu) HasPermission(mode roles.PermissionMode, context *qor.Context) bool {
+func (menu Menu) HasPermission(mode roles.PermissionMode, context *core.Context) bool {
 	if menu.Permission != nil {
 		var roles = []interface{}{}
 		for _, role := range context.Roles {

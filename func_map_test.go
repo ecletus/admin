@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 type rawTestCase struct {
@@ -27,7 +27,7 @@ func TestFuncMaps(t *testing.T) {
 	}
 
 	context := Context{
-		Admin: New(qor.NewConfig(nil)),
+		Admin: New(core.NewConfig(nil)),
 	}
 	funcMaps := context.FuncMaps()
 

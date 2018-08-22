@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/moisespsena/go-assetfs"
-	"github.com/aghape/aghape/resource"
+	"github.com/aghape/core/resource"
 )
 
 // CollectionEditConfig meta configuration used for collection edit

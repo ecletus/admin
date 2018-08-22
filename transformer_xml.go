@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/jinzhu/inflection"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
 )
 

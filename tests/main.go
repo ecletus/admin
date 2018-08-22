@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/aghape/admin/tests/dummy"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core/utils"
 )
 
 func main() {

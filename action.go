@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
 )
 
@@ -186,7 +186,7 @@ func (action Action) IsAllowed(mode roles.PermissionMode, context *Context, reco
 }
 
 // HasPermission check if current user has permission for the action
-func (action Action) HasPermission(mode roles.PermissionMode, context *qor.Context) bool {
+func (action Action) HasPermission(mode roles.PermissionMode, context *core.Context) bool {
 	if action.Permission != nil {
 		var roles = []interface{}{}
 		for _, role := range context.Roles {

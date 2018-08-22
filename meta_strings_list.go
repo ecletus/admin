@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/aghape/aghape/resource"
+	"github.com/aghape/core/resource"
 )
 
 type StringsListConfig struct {

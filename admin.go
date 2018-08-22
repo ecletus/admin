@@ -6,7 +6,7 @@ import (
 	"github.com/moisespsena/go-route"
 	"github.com/moisespsena/template/html/template"
 	"github.com/aghape/assets"
-	qorconfig "github.com/aghape/aghape/config"
+	qorconfig "github.com/aghape/core/config"
 	"github.com/aghape/session"
 )
 

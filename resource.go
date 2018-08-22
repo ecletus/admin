@@ -10,9 +10,9 @@ import (
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena/go-route"
 	"github.com/aghape/helpers"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
 	//"github.com/aghape/responder"
 	"strconv"
@@ -409,7 +409,7 @@ func (res *Resource) GetURI(key string, parentkeys ...string) string {
 }
 
 // GetURL
-func (res *Resource) GetContextIndexURI(context *qor.Context, parentkeys ...string) string {
+func (res *Resource) GetContextIndexURI(context *core.Context, parentkeys ...string) string {
 	var p []string
 	if len(parentkeys) == 0 {
 		if res.ParentResource != nil {
@@ -426,7 +426,7 @@ func (res *Resource) GetContextIndexURI(context *qor.Context, parentkeys ...stri
 }
 
 // GetURL
-func (res *Resource) GetContextURI(context *qor.Context, key string, parentkeys ...string) string {
+func (res *Resource) GetContextURI(context *core.Context, key string, parentkeys ...string) string {
 	if key == "" {
 		key = context.URLParam(res.ParamIDName())
 	}
@@ -642,7 +642,7 @@ func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
 	res.ParentResource = parent
 
 	findOneHandler := res.FindOneHandler
-	res.FindOneHandler = func(r resource.Resourcer, value interface{}, metaValues *resource.MetaValues, context *qor.Context) (err error) {
+	res.FindOneHandler = func(r resource.Resourcer, value interface{}, metaValues *resource.MetaValues, context *core.Context) (err error) {
 		if metaValues != nil {
 			return findOneHandler(r, value, metaValues, context)
 		}
@@ -658,7 +658,7 @@ func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
 		return
 	}
 
-	res.FindManyHandler = func(r resource.Resourcer, value interface{}, context *qor.Context) error {
+	res.FindManyHandler = func(r resource.Resourcer, value interface{}, context *core.Context) error {
 		var (
 			err         error
 			clone       = context.Clone()
@@ -672,7 +672,7 @@ func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
 		return err
 	}
 
-	res.SaveHandler = func(r resource.Resourcer, value interface{}, context *qor.Context) error {
+	res.SaveHandler = func(r resource.Resourcer, value interface{}, context *core.Context) error {
 		var (
 			err         error
 			clone       = context.Clone()
@@ -685,7 +685,7 @@ func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
 		return err
 	}
 
-	res.DeleteHandler = func(r resource.Resourcer, value interface{}, context *qor.Context) (err error) {
+	res.DeleteHandler = func(r resource.Resourcer, value interface{}, context *core.Context) (err error) {
 		var clone = context.Clone()
 		var parentValue = parent.NewStruct(context.Site)
 		if primaryKey := context.URLParam(res.ParamIDName()); primaryKey != "" {
@@ -702,7 +702,7 @@ func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
 }
 
 // Decode decode context into a value
-func (res *Resource) Decode(context *qor.Context, value interface{}) error {
+func (res *Resource) Decode(context *core.Context, value interface{}) error {
 	return resource.Decode(context, value, res)
 }
 
@@ -1175,11 +1175,11 @@ func (res *Resource) GetDefaultMenu() *Menu {
 	return res.DefaultMenu
 }
 
-func (res *Resource) GetIndexLink(context *qor.Context, args ...interface{}) string {
+func (res *Resource) GetIndexLink(context *core.Context, args ...interface{}) string {
 	return res.GetLink(nil, context, args...)
 }
 
-func (res *Resource) GetLink(record interface{}, context *qor.Context, args ...interface{}) string {
+func (res *Resource) GetLink(record interface{}, context *core.Context, args ...interface{}) string {
 	var parentKeys []string
 	for _, arg := range args {
 		switch t := arg.(type) {
@@ -1253,7 +1253,7 @@ func (res *Resource) configure() {
 	})
 }
 
-func (res *Resource) ApplyDefaultFilters(context *qor.Context) *qor.Context {
+func (res *Resource) ApplyDefaultFilters(context *core.Context) *core.Context {
 	context = context.Clone()
 	db := context.DB
 	for _, df := range res.DefaultFilters {
@@ -1335,27 +1335,27 @@ func (res *Resource) ReferencedRecord(record interface{}) interface{} {
 	return nil
 }
 
-func (res *Resource) CallSave(r resource.Resourcer, result interface{}, context *qor.Context) error {
+func (res *Resource) CallSave(r resource.Resourcer, result interface{}, context *core.Context) error {
 	context.Data().Inside()
 	defer context.Data().Outside()
 	return res.Resource.CallSave(r, result, context)
 }
 
 // CallSave call save method
-func (res *Resource) Save(result interface{}, context *qor.Context) error {
+func (res *Resource) Save(result interface{}, context *core.Context) error {
 	return res.CallSave(res, result, context)
 }
 
 // CallDelete call delete method
-func (res *Resource) Delete(result interface{}, context *qor.Context) error {
+func (res *Resource) Delete(result interface{}, context *core.Context) error {
 	return res.CallDelete(res, result, context)
 }
 
-func (res *Resource) FindManyLayout(result interface{}, context *qor.Context, layout resource.LayoutInterface) error {
+func (res *Resource) FindManyLayout(result interface{}, context *core.Context, layout resource.LayoutInterface) error {
 	return res.CallFindManyLayout(res, result, context, layout)
 }
 
-func (res *Resource) FindOneLayout(result interface{}, metaValues *resource.MetaValues, context *qor.Context, layout resource.LayoutInterface) error {
+func (res *Resource) FindOneLayout(result interface{}, metaValues *resource.MetaValues, context *core.Context, layout resource.LayoutInterface) error {
 	return res.CallFindOneLayout(res, result, metaValues, context, layout)
 }
 
@@ -1364,7 +1364,7 @@ func (res *Resource) SetParentResource(parent *Resource, fieldName string) {
 	res.ParentResource = parent
 }
 
-func (res *Resource) CallFindManyHandler(r resource.Resourcer, result interface{}, context *qor.Context) error {
+func (res *Resource) CallFindManyHandler(r resource.Resourcer, result interface{}, context *core.Context) error {
 	if len(res.Children.Items) > 0 {
 		referencesColumns := res.Children.Columns()
 		oldDB := context.DB
@@ -1480,7 +1480,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 		})
 		res.Filter(&Filter{
 			Name: "Only",
-			Available: func(context *qor.Context) (ok bool) {
+			Available: func(context *core.Context) (ok bool) {
 				for _, f := range res.Fragments.Fragments {
 					if f.Config.Is {
 						return true
@@ -1577,13 +1577,13 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 			})
 			meta.Fragment = fragRes.Fragment
 			meta.Resource = res
-			meta.NewValuer(func(meta *Meta, old MetaValuer, recorde interface{}, context *qor.Context) interface{} {
+			meta.NewValuer(func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{} {
 				fragmentedRecorde := recorde.(fragment.FragmentedModelInterface)
 				frag := meta.Fragment
 				value := frag.GetOrNew(fragmentedRecorde, context)
 				return meta.ProxyTo.GetValuer()(value, context)
 			})
-			meta.NewSetter(func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, context *qor.Context) error {
+			meta.NewSetter(func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 				fragmentedRecorde := recorde.(fragment.FragmentedModelInterface)
 				frag := meta.Fragment
 				value := frag.GetOrNew(fragmentedRecorde, context)
@@ -1608,7 +1608,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 			ContextMetas: func(record interface{}, ctx *Context) []*Meta {
 				return fragRes.ConvertSectionToMetas(fragRes.ContextSections(ctx, record))
 			},
-			Setter: func(recorde interface{}, metaValue *resource.MetaValue, context *qor.Context) error {
+			Setter: func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 				if _, ok := res.Fragments.Fragments[metaValue.Name]; !ok {
 					return nil
 				}
@@ -1616,7 +1616,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 				err := resource.DecodeToResource(fragRes, value, metaValue.MetaValues, context).Start()
 				return err
 			},
-			Valuer: func(recorde interface{}, context *qor.Context) interface{} {
+			Valuer: func(recorde interface{}, context *core.Context) interface{} {
 				r := recorde.(fragment.FragmentedModelInterface)
 				value := r.GetFormFragment(fragRes.Fragment.ID)
 				isNil := value == nil

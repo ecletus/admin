@@ -13,9 +13,9 @@ import (
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-assetfs"
 	"github.com/moisespsena/go-edis"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
 )
 
@@ -43,8 +43,8 @@ type DependencyQuery struct {
 	Param string
 }
 
-type MetaValuer func(recorde interface{}, context *qor.Context) interface{}
-type MetaSetter func(recorde interface{}, metaValue *resource.MetaValue, context *qor.Context) error
+type MetaValuer func(recorde interface{}, context *core.Context) interface{}
+type MetaSetter func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error
 type MetaEnabled func(recorde interface{}, context *Context, meta *Meta) bool
 
 // Meta meta struct definition
@@ -64,7 +64,7 @@ type Meta struct {
 	Setter            MetaSetter
 	Valuer            MetaValuer
 	FormattedValuer   MetaValuer
-	ContextResourcer  func(meta resource.Metaor, context *qor.Context) resource.Resourcer
+	ContextResourcer  func(meta resource.Metaor, context *core.Context) resource.Resourcer
 	ContextMetas      func(recorde interface{}, context *Context) []*Meta
 	SkipResourceModel bool
 	Resource          *Resource
@@ -141,33 +141,33 @@ func (meta *Meta) Namer() *resource.MetaName {
 	return meta.Meta.Namer()
 }
 
-func (meta *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, context *qor.Context) error) {
+func (meta *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error) {
 	old := meta.Setter
-	meta.Setter = func(recorde interface{}, metaValue *resource.MetaValue, context *qor.Context) error {
+	meta.Setter = func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 		return f(meta, old, recorde, metaValue, context)
 	}
 }
 
-func (meta *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *qor.Context) interface{}) {
+func (meta *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{}) {
 	old := meta.Valuer
-	meta.Valuer = func(recorde interface{}, context *qor.Context) interface{} {
+	meta.Valuer = func(recorde interface{}, context *core.Context) interface{} {
 		return f(meta, old, recorde, context)
 	}
 }
 
-func (meta *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *qor.Context) interface{}) {
+func (meta *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{}) {
 	old := meta.FormattedValuer
-	meta.FormattedValuer = func(recorde interface{}, context *qor.Context) interface{} {
+	meta.FormattedValuer = func(recorde interface{}, context *core.Context) interface{} {
 		return f(meta, old, recorde, context)
 	}
 }
 
-func (meta *Meta) SetValuer(f func(recorde interface{}, context *qor.Context) interface{}) {
+func (meta *Meta) SetValuer(f func(recorde interface{}, context *core.Context) interface{}) {
 	meta.Valuer = f
 	meta.Meta.SetValuer(f)
 }
 
-func (meta *Meta) SetFormattedValuer(f func(recorde interface{}, context *qor.Context) interface{}) {
+func (meta *Meta) SetFormattedValuer(f func(recorde interface{}, context *core.Context) interface{}) {
 	meta.FormattedValuer = f
 	meta.Meta.SetFormattedValuer(f)
 }
@@ -244,7 +244,7 @@ func (meta *Meta) GetMetas() []resource.Metaor {
 	}
 }
 
-func (meta *Meta) GetContextMetas(recorde interface{}, context *qor.Context) []resource.Metaor {
+func (meta *Meta) GetContextMetas(recorde interface{}, context *core.Context) []resource.Metaor {
 	if meta.ContextMetas != nil {
 		metas := meta.ContextMetas(recorde, context.Data().Get(CONTEXT_KEY).(*Context))
 		r := make([]resource.Metaor, len(metas))
@@ -271,14 +271,14 @@ func (meta *Meta) GetResource() resource.Resourcer {
 }
 
 // GetContextResource get resource from meta
-func (meta *Meta) GetContextResourcer() func(meta resource.Metaor, context *qor.Context) resource.Resourcer {
+func (meta *Meta) GetContextResourcer() func(meta resource.Metaor, context *core.Context) resource.Resourcer {
 	if meta.ContextResourcer != nil {
 		return meta.ContextResourcer
 	}
 	return meta.Meta.ContextResourcer
 }
 
-func (meta *Meta) GetContextResource(context *qor.Context) resource.Resourcer {
+func (meta *Meta) GetContextResource(context *core.Context) resource.Resourcer {
 	getter := meta.GetContextResourcer()
 	if getter != nil {
 		return getter(meta, context)
@@ -304,7 +304,7 @@ func (meta *Meta) SetPermission(permission *roles.Permission) {
 }
 
 // HasPermission check has permission or not
-func (meta Meta) HasPermission(mode roles.PermissionMode, context *qor.Context) bool {
+func (meta Meta) HasPermission(mode roles.PermissionMode, context *core.Context) bool {
 	var roles = []interface{}{}
 	for _, role := range context.Roles {
 		roles = append(roles, role)
@@ -320,7 +320,7 @@ func (meta Meta) HasPermission(mode roles.PermissionMode, context *qor.Context) 
 	return true
 }
 
-func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *qor.Context, valuer MetaValuer) interface{} {
+func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer) interface{} {
 	e := &MetaValueEvent{
 		MetaRecordeEvent{
 			MetaEvent{
@@ -339,9 +339,9 @@ func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *qor.
 }
 
 // GetValuer get valuer from meta
-func (meta *Meta) GetValuer() func(interface{}, *qor.Context) interface{} {
+func (meta *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
 	if valuer := meta.Meta.GetValuer(); valuer != nil {
-		return func(i interface{}, context *qor.Context) interface{} {
+		return func(i interface{}, context *core.Context) interface{} {
 			return meta.triggerValueEvent(E_META_VALUE, i, context, valuer)
 		}
 	}
@@ -349,9 +349,9 @@ func (meta *Meta) GetValuer() func(interface{}, *qor.Context) interface{} {
 }
 
 // GetFormattedValuer get formatted valuer from meta
-func (meta *Meta) GetFormattedValuer() func(interface{}, *qor.Context) interface{} {
+func (meta *Meta) GetFormattedValuer() func(interface{}, *core.Context) interface{} {
 	if meta.FormattedValuer != nil {
-		return func(i interface{}, context *qor.Context) interface{} {
+		return func(i interface{}, context *core.Context) interface{} {
 			return meta.triggerValueEvent(E_META_FORMATTED_VALUE, i, context, meta.FormattedValuer)
 		}
 	}
@@ -480,7 +480,7 @@ func (meta *Meta) updateMeta() {
 		} else {
 			if relationship := meta.FieldStruct.Relationship; relationship != nil {
 				if (relationship.Kind == "has_one" || relationship.Kind == "has_many") && meta.Meta.Setter == nil && (meta.Type == "select_one" || meta.Type == "select_many") {
-					meta.SetSetter(func(resource interface{}, metaValue *resource.MetaValue, context *qor.Context) error {
+					meta.SetSetter(func(resource interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 						scope := &aorm.Scope{Value: resource}
 						reflectValue := reflect.Indirect(reflect.ValueOf(resource))
 						field := reflectValue.FieldByName(meta.FieldName)

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 type Product struct {
@@ -34,7 +34,7 @@ func TestEditAttrs(t *testing.T) {
 		EditAttrsTestCase{Params: []string{"Section:Name+Code+Description", "-Name"}, Result: []string{"Code+Description"}},
 	)
 
-	admin := New(&qor.NewConfig(db))
+	admin := New(&core.NewConfig(db))
 	product := admin.AddResource(&Product{})
 	i := 1
 	for _, testCase := range testCases {

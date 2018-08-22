@@ -2,7 +2,7 @@ package admin
 
 import (
 	"github.com/moisespsena/go-edis"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 const (
@@ -15,7 +15,7 @@ type MetaEvent struct {
 	edis.EventInterface
 	Meta     *Meta
 	Resource *Resource
-	Context  *qor.Context
+	Context  *core.Context
 }
 
 type MetaRecordeEvent struct {

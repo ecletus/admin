@@ -2,7 +2,7 @@ package admin
 
 import (
 	"github.com/moisespsena/template/html/template"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 // I18n define admin's i18n interface
@@ -13,7 +13,7 @@ type I18n interface {
 }
 
 // T call i18n backend to translate
-func (admin *Admin) T(context *qor.Context, key string, value string, values ...interface{}) template.HTML {
+func (admin *Admin) T(context *core.Context, key string, value string, values ...interface{}) template.HTML {
 	if len(values) > 1 {
 		panic("Values has many args.")
 	}
@@ -28,7 +28,7 @@ func (admin *Admin) T(context *qor.Context, key string, value string, values ...
 }
 
 // TT call i18n backend to translate template
-func (admin *Admin) TT(context *qor.Context, key string, data interface{}, defaul ...string) template.HTML {
+func (admin *Admin) TT(context *core.Context, key string, data interface{}, defaul ...string) template.HTML {
 	t := context.GetI18nContext().T(key).Data(data)
 	if len(defaul) > 0 {
 		t = t.Default(defaul[0])

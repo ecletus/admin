@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
 	"github.com/aghape/roles"
 )
 
@@ -37,7 +37,7 @@ func configureDefaultLayouts(res *Resource) {
 }
 
 func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
-	res.SetMeta(&Meta{Name: BASIC_META_ID, Valuer: func(r interface{}, context *qor.Context) interface{} {
+	res.SetMeta(&Meta{Name: BASIC_META_ID, Valuer: func(r interface{}, context *core.Context) interface{} {
 		if b, ok := r.(resource.BasicValue); ok {
 			return b.BasicID()
 		}
@@ -54,7 +54,7 @@ func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 		return nil
 	}})
 
-	res.SetMeta(&Meta{Name: BASIC_META_LABEL, Valuer: func(r interface{}, context *qor.Context) interface{} {
+	res.SetMeta(&Meta{Name: BASIC_META_LABEL, Valuer: func(r interface{}, context *core.Context) interface{} {
 		var label string
 		if b, ok := r.(interface {
 			BasicLabel() string
@@ -68,7 +68,7 @@ func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 		return label
 	}})
 
-	res.SetMeta(&Meta{Name: BASIC_META_ICON, Valuer: func(r interface{}, context *qor.Context) interface{} {
+	res.SetMeta(&Meta{Name: BASIC_META_ICON, Valuer: func(r interface{}, context *core.Context) interface{} {
 		var icon string
 		if b, ok := r.(interface {
 			BasicIcon() string
@@ -82,7 +82,7 @@ func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 		return icon
 	}})
 
-	res.SetMeta(&Meta{Name: BASIC_META_HTML, Valuer: func(r interface{}, context *qor.Context) interface{} {
+	res.SetMeta(&Meta{Name: BASIC_META_HTML, Valuer: func(r interface{}, context *core.Context) interface{} {
 		html := context.Htmlify(r)
 		return html
 	}})

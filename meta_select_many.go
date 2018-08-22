@@ -6,9 +6,9 @@ import (
 	"reflect"
 
 	"github.com/moisespsena/go-assetfs"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 )
 
 // SelectManyConfig meta configuration used for select many
@@ -49,7 +49,7 @@ func (selectManyConfig *SelectManyConfig) ConfigureQorMeta(metaor resource.Metao
 
 		// Set FormattedValuer
 		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(record interface{}, context *qor.Context) interface{} {
+			meta.SetFormattedValuer(func(record interface{}, context *core.Context) interface{} {
 				reflectValues := reflect.Indirect(reflect.ValueOf(meta.GetValuer()(record, context)))
 				var results []string
 				if reflectValues.IsValid() {

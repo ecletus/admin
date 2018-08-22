@@ -10,7 +10,7 @@ import (
 	"github.com/moisespsena/go-topsort"
 	"github.com/aghape/auth"
 	"github.com/aghape/common"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/aghape/roles"
 )
 
@@ -18,7 +18,7 @@ type Interseptor func(w http.ResponseWriter, req *http.Request, serv func(w http
 
 // ServeHTTP dispatches the handler registered in the matched route
 func (admin *Admin) routeInterseptor(chain *route.ChainHandler) {
-	qorContext := qor.ContexFromRouteContext(chain.Context)
+	qorContext := core.ContexFromRouteContext(chain.Context)
 	staticURL := qorContext.StaticURL + "/admin"
 	req, qorContext := qorContext.NewChild(nil, admin.Config.MountPath)
 	qorContext.StaticURL = staticURL
@@ -57,7 +57,7 @@ func (admin *Admin) routeInterseptor(chain *route.ChainHandler) {
 			context.DB = context.DB.Set(PKG+".current_user", context.CurrentUser)
 		}
 		context.Roles = roles.MatchedRoles(req, currentUser)
-		context.Breadcrumbs().Append(qor.NewBreadcrumb(context.GenURL(), I18NGROUP+".layout.title", ""))
+		context.Breadcrumbs().Append(core.NewBreadcrumb(context.GenURL(), I18NGROUP+".layout.title", ""))
 
 		oldKey := chain.Context.DefaultValueKey
 		defer func() {
@@ -244,7 +244,7 @@ func (admin *Admin) NewServeMux(name ...string) *route.Mux {
 					for i, id := range parentIds {
 						p = parents[i]
 						uri := p.GetContextIndexURI(context.Context, ids...)
-						context.Breadcrumbs().Append(qor.NewBreadcrumb(uri, p.GetLabelKey(true), ""))
+						context.Breadcrumbs().Append(core.NewBreadcrumb(uri, p.GetLabelKey(true), ""))
 						model, err := p.FindOneBasic(db, id)
 
 						if err != nil {
@@ -252,13 +252,13 @@ func (admin *Admin) NewServeMux(name ...string) *route.Mux {
 						}
 
 						uri = p.GetContextURI(context.Context, id, ids...)
-						context.Breadcrumbs().Append(qor.NewBreadcrumb(uri, model.BasicLabel(), model.BasicIcon()))
+						context.Breadcrumbs().Append(core.NewBreadcrumb(uri, model.BasicLabel(), model.BasicIcon()))
 						ids = append(ids, id)
 					}
 
 					if context.ResourceID != "" {
 						uri := res.GetContextIndexURI(context.Context, ids...)
-						context.Breadcrumbs().Append(qor.NewBreadcrumb(uri, res.GetLabelKey(true), ""))
+						context.Breadcrumbs().Append(core.NewBreadcrumb(uri, res.GetLabelKey(true), ""))
 					}
 
 					topsort.Reverse(parentIds)

@@ -13,16 +13,16 @@ import (
 	"mime/multipart"
 
 	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 	"gopkg.in/fatih/set.v0"
 )
 
 // PaginationPageCount default pagination page count
 var PaginationPageCount = 20
 
-type scopeFunc func(db *aorm.DB, context *qor.Context) *aorm.DB
+type scopeFunc func(db *aorm.DB, context *core.Context) *aorm.DB
 
 // Pagination is used to hold pagination related information when rendering tables
 type Pagination struct {
@@ -176,7 +176,7 @@ func (s *Searcher) FindOne() (interface{}, error) {
 
 var filterRegexp = regexp.MustCompile(`^filters\[(.*?)\]`)
 
-func (s *Searcher) callScopes(context *qor.Context) *qor.Context {
+func (s *Searcher) callScopes(context *core.Context) *core.Context {
 	db := context.DB
 
 	// call default scopes
@@ -269,7 +269,7 @@ func (s *Searcher) FilterRawPairs(args ...string) *Searcher {
 	return s.FilterRaw(data)
 }
 
-func (s *Searcher) parseContext() *qor.Context {
+func (s *Searcher) parseContext() *core.Context {
 	var (
 		searcher = s.clone()
 		context  = s.Resource.ApplyDefaultFilters(searcher.Context.Context)
@@ -328,7 +328,7 @@ type filterField struct {
 	Operation string
 }
 
-func filterResourceByFields(res *Resource, filterFields []filterField, keyword string, db *aorm.DB, context *qor.Context) *aorm.DB {
+func filterResourceByFields(res *Resource, filterFields []filterField, keyword string, db *aorm.DB, context *core.Context) *aorm.DB {
 	if keyword != "" {
 		var (
 			joinConditionsMap  = map[string][]string{}

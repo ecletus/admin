@@ -3,14 +3,14 @@ package admin
 import (
 	"time"
 
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/utils"
 )
 
 var metaConfigorMaps = map[string]func(*Meta){
 	"date": func(meta *Meta) {
 		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(value interface{}, context *qor.Context) interface{} {
+			meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
 				switch date := meta.GetValuer()(value, context).(type) {
 				case *time.Time:
 					if date == nil {
@@ -34,7 +34,7 @@ var metaConfigorMaps = map[string]func(*Meta){
 
 	"datetime": func(meta *Meta) {
 		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(value interface{}, context *qor.Context) interface{} {
+			meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
 				switch date := meta.GetValuer()(value, context).(type) {
 				case *time.Time:
 					if date == nil {
@@ -58,7 +58,7 @@ var metaConfigorMaps = map[string]func(*Meta){
 
 	"string": func(meta *Meta) {
 		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(value interface{}, context *qor.Context) interface{} {
+			meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
 				switch str := meta.GetValuer()(value, context).(type) {
 				case *string:
 					if str != nil {
@@ -76,7 +76,7 @@ var metaConfigorMaps = map[string]func(*Meta){
 
 	"text": func(meta *Meta) {
 		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(value interface{}, context *qor.Context) interface{} {
+			meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
 				switch str := meta.GetValuer()(value, context).(type) {
 				case *string:
 					if str != nil {

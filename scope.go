@@ -2,7 +2,7 @@ package admin
 
 import (
 	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 // Scope register scope for qor resource
@@ -19,6 +19,6 @@ type Scope struct {
 	Label   string
 	Group   string
 	Visible func(context *Context) bool
-	Handler func(*aorm.DB, *Searcher, *qor.Context) *aorm.DB
+	Handler func(*aorm.DB, *Searcher, *core.Context) *aorm.DB
 	Default bool
 }

@@ -9,7 +9,7 @@ import (
 	"gopkg.in/oleiade/reflections.v1"
 	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/admin"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 func RecordInfoFields(r *admin.Resource) {
@@ -26,7 +26,7 @@ func RecordInfoFields(r *admin.Resource) {
 
 	if _, found := reflectValue.FieldByName("DeletedAt"); found {
 		r.Scope(&admin.Scope{Name: "All", Default: true,
-			Handler: func(db *aorm.DB, s *admin.Searcher, context *qor.Context) *aorm.DB {
+			Handler: func(db *aorm.DB, s *admin.Searcher, context *core.Context) *aorm.DB {
 				if db.NewScope(r.Value).Search.Unscoped || s.CurrentScopes.Has("trash") {
 					return db
 				}
@@ -34,7 +34,7 @@ func RecordInfoFields(r *admin.Resource) {
 				return db.Where(db.NewScope(r.Value).QuotedTableName() + ".deleted_at IS NULL")
 			}})
 
-		r.Scope(&admin.Scope{Name: "trash", Handler: func(db *aorm.DB, s *admin.Searcher, context *qor.Context) *aorm.DB {
+		r.Scope(&admin.Scope{Name: "trash", Handler: func(db *aorm.DB, s *admin.Searcher, context *core.Context) *aorm.DB {
 			return db.Where(db.NewScope(r.Value).QuotedTableName() + ".deleted_at IS NOT NULL").Unscoped()
 		}})
 

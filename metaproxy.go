@@ -4,9 +4,9 @@ import (
 	"reflect"
 
 	"github.com/jinzhu/copier"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/serializer"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/serializer"
 )
 
 func NewMetaFieldProxy(name string, parts []string, to *Meta) *Meta {
@@ -47,12 +47,12 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 
 	meta.Name = name
 	if to.Valuer != nil {
-		meta.Valuer = func(i interface{}, context *qor.Context) interface{} {
+		meta.Valuer = func(i interface{}, context *core.Context) interface{} {
 			return to.Valuer(record(i), context)
 		}
 	}
 	if to.FormattedValuer != nil {
-		meta.FormattedValuer = func(i interface{}, context *qor.Context) interface{} {
+		meta.FormattedValuer = func(i interface{}, context *core.Context) interface{} {
 			return to.FormattedValuer(record(i), context)
 		}
 	}
@@ -67,12 +67,12 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 		}
 	}
 	if to.Setter != nil {
-		meta.Setter = func(resource interface{}, metaValue *resource.MetaValue, context *qor.Context) error {
+		meta.Setter = func(resource interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 			return to.Setter(resource, metaValue, context)
 		}
 	}
 	if to.ContextResourcer != nil {
-		meta.ContextResourcer = func(meta resource.Metaor, context *qor.Context) resource.Resourcer {
+		meta.ContextResourcer = func(meta resource.Metaor, context *core.Context) resource.Resourcer {
 			return to.ContextResourcer(meta, context)
 		}
 	}

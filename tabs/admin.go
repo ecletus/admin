@@ -4,8 +4,8 @@ import (
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-path-helpers"
 	"github.com/aghape/admin"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/utils"
 )
 
 var (
@@ -45,7 +45,7 @@ func PrepareResource(res *admin.Resource, tabs Tabs, defaultTab *Tab) {
 		res.Router.Get("/"+tab.Path, TabHandler(res, index.Config, indexHandler, tab))
 	}
 
-	res.DefaultFilter(func(context *qor.Context, db *aorm.DB) *aorm.DB {
+	res.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
 		scopePath := GetTabPath(context)
 		if scope, ok := scopesMap.ByPath[scopePath]; ok {
 			return scope.Handler(res, context, db)

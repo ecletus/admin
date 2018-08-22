@@ -9,9 +9,9 @@ import (
 
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-assetfs"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 )
 
 var SelectOne2ResultTemplateBasicHTMLWithIcon = RawJS(`
@@ -223,7 +223,7 @@ func (selectOneConfig *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor)
 
 			// Set FormattedValuer
 			if meta.FormattedValuer == nil {
-				meta.SetFormattedValuer(func(record interface{}, context *qor.Context) interface{} {
+				meta.SetFormattedValuer(func(record interface{}, context *core.Context) interface{} {
 					if record != nil {
 						record = meta.GetValuer()(record, context)
 						return ContextFromQorContext(context).HtmlifyRecord(selectOneConfig.RemoteDataResource.Resource, record)
@@ -234,7 +234,7 @@ func (selectOneConfig *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor)
 		}
 		// Set FormattedValuer
 		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(record interface{}, context *qor.Context) interface{} {
+			meta.SetFormattedValuer(func(record interface{}, context *core.Context) interface{} {
 				return utils.Stringify(meta.GetValuer()(record, context))
 			})
 		}
@@ -247,7 +247,7 @@ func (selectOneConfig *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor)
 
 func (selectOneConfig *SelectOneConfig) ConfigureQORAdminFilter(filter *Filter) {
 	var structField *aorm.StructField
-	if field, ok := qor.FakeDB.NewScope(filter.Resource.Value).FieldByName(filter.Name); ok {
+	if field, ok := core.FakeDB.NewScope(filter.Resource.Value).FieldByName(filter.Name); ok {
 		structField = field.StructField
 	}
 
@@ -308,7 +308,7 @@ func (selectOneConfig *SelectOneConfig) prepareDataSource(field *aorm.StructFiel
 			selectOneConfig.getCollection = func(record interface{}, context *Context) [][]string {
 				return cl(context)
 			}
-		case func(interface{}, *qor.Context) [][]string:
+		case func(interface{}, *core.Context) [][]string:
 			selectOneConfig.getCollection = func(record interface{}, context *Context) [][]string {
 				return cl(record, context.Context)
 			}

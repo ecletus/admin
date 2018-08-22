@@ -13,8 +13,8 @@ import (
 	"github.com/moisespsena/go-route"
 	"github.com/moisespsena/template/cache"
 	"github.com/moisespsena/template/html/template"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/utils"
 	"github.com/aghape/responder"
 	"github.com/aghape/roles"
 	"github.com/aghape/session"
@@ -40,7 +40,7 @@ const (
 
 // Context admin context, which is used for admin controller
 type Context struct {
-	*qor.Context
+	*core.Context
 	*Searcher
 	Scheme       *Scheme
 	Resource     *Resource
@@ -68,16 +68,16 @@ const (
 // NewContext new admin context
 func (admin *Admin) NewContext(args ...interface{}) (c *Context) {
 	if len(args) == 0 {
-		return admin.NewContext(&qor.Context{})
+		return admin.NewContext(&core.Context{})
 	}
 	for i, arg := range args {
 		switch ctx := arg.(type) {
-		case qor.SiteInterface:
+		case core.SiteInterface:
 			return admin.NewContext(ctx.NewContext())
-		case *qor.Context:
+		case *core.Context:
 			c = &Context{Context: ctx}
 		case http.ResponseWriter:
-			_, qorCtx := qor.NewContextFromRequestPair(ctx, args[i+1].(*http.Request), admin.Router.Prefix())
+			_, qorCtx := core.NewContextFromRequestPair(ctx, args[i+1].(*http.Request), admin.Router.Prefix())
 			qorCtx.Config = admin.Config.Config
 			c = &Context{Context: qorCtx}
 		}
@@ -85,7 +85,7 @@ func (admin *Admin) NewContext(args ...interface{}) (c *Context) {
 
 	if c != nil {
 		if c.Context == nil {
-			_, c.Context = qor.NewContextFromRequestPair(c.Writer, c.Request, admin.Router.Prefix())
+			_, c.Context = core.NewContextFromRequestPair(c.Writer, c.Request, admin.Router.Prefix())
 			c.Request = c.Context.Request
 		}
 		c.Settings = map[string]interface{}{}
@@ -705,11 +705,11 @@ func (context *Context) GetActionLabel() string {
 	return string(context.t(key, defaul))
 }
 
-func ContextFromQorContext(ctx *qor.Context) *Context {
+func ContextFromQorContext(ctx *core.Context) *Context {
 	return ctx.Data().Get(CONTEXT_KEY).(*Context)
 }
 
-func ContextFromQorContextOrNew(ctx *qor.Context, admin *Admin) *Context {
+func ContextFromQorContextOrNew(ctx *core.Context, admin *Admin) *Context {
 	c, ok := ctx.Data().GetOk(CONTEXT_KEY)
 	if ok {
 		return c.(*Context)

@@ -3,7 +3,7 @@ package admin
 import (
 	"fmt"
 	"strings"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/moisespsena-go/aorm"
 )
 
@@ -31,7 +31,7 @@ func resourceParamIDName(level int, paramName string) string {
 }
 
 func subResourceConfigureFilters(res *Resource) {
-	res.DefaultFilter(func(context *qor.Context, db *aorm.DB) *aorm.DB {
+	res.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
 		return res.FilterByParent(db, context.URLParam(res.ParentResource.paramIDName))
 	})
 
@@ -50,7 +50,7 @@ func subResourceConfigureFilters(res *Resource) {
 				panic("Field \"" + fieldName + "\" does not exists.")
 			}
 		}
-		res.DefaultFilter(func(context *qor.Context, db *aorm.DB) *aorm.DB {
+		res.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
 			return db.Where(strings.Join(rawDbFields, " AND "), rawDbFieldsValues...)
 		})
 	}

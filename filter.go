@@ -2,9 +2,9 @@ package admin
 
 import (
 	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 )
 
 // Filter register filter for qor resource
@@ -52,7 +52,7 @@ func (res *Resource) Filter(filter *Filter) {
 	}
 }
 
-func (res *Resource) GetFilters(context *qor.Context) (filters []*Filter) {
+func (res *Resource) GetFilters(context *core.Context) (filters []*Filter) {
 	for _, filter := range res.filters {
 		if filter.Available == nil || filter.Available(context) {
 			filters = append(filters, filter)
@@ -70,7 +70,7 @@ type Filter struct {
 	Resource   *Resource
 	Handler    func(*aorm.DB, *FilterArgument) *aorm.DB
 	Config     FilterConfigInterface
-	Available func(context *qor.Context) bool
+	Available func(context *core.Context) bool
 }
 
 // FilterConfigInterface filter config interface
@@ -82,5 +82,5 @@ type FilterConfigInterface interface {
 type FilterArgument struct {
 	Value    *resource.MetaValues
 	Resource *Resource
-	Context  *qor.Context
+	Context  *core.Context
 }

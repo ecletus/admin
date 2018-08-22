@@ -3,8 +3,8 @@ package admin
 import (
 	"testing"
 
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/test/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/test/utils"
 )
 
 type User struct {
@@ -15,7 +15,7 @@ type User struct {
 var db = utils.TestDB()
 
 func TestAddResource(t *testing.T) {
-	admin := New(qor.NewConfig(db))
+	admin := New(core.NewConfig(db))
 	user := admin.AddResource(&User{})
 
 	if user != admin.resources[0] {
@@ -28,7 +28,7 @@ func TestAddResource(t *testing.T) {
 }
 
 func TestAddResourceWithInvisibleOption(t *testing.T) {
-	admin := New(qor.NewConfig(db))
+	admin := New(core.NewConfig(db))
 	user := admin.AddResource(&User{}, &Config{Invisible: true})
 
 	if user != admin.resources[0] {
@@ -41,7 +41,7 @@ func TestAddResourceWithInvisibleOption(t *testing.T) {
 }
 
 func TestGetResource(t *testing.T) {
-	admin := New(qor.NewConfig(db))
+	admin := New(core.NewConfig(db))
 	user := admin.AddResource(&User{})
 
 	if admin.GetResourceByName("User") != user {
@@ -50,7 +50,7 @@ func TestGetResource(t *testing.T) {
 }
 
 func TestNewResource(t *testing.T) {
-	admin := New(qor.NewConfig(db))
+	admin := New(core.NewConfig(db))
 	user := admin.NewResource(&User{})
 
 	if user.Name != "User" {
@@ -65,7 +65,7 @@ func (u *UserWithCustomizedName) ResourceName() string {
 }
 
 func TestNewResourceWithCustomizedName(t *testing.T) {
-	admin := New(qor.NewConfig(db))
+	admin := New(core.NewConfig(db))
 	user := admin.NewResource(&UserWithCustomizedName{})
 
 	if user.Name != "CustomizedName" {

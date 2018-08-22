@@ -22,8 +22,8 @@ import (
 	"github.com/moisespsena/template/funcs"
 	"github.com/moisespsena/template/html/template"
 	"github.com/aghape/common"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
 	"github.com/aghape/session"
 )
@@ -154,7 +154,7 @@ func (context *Context) linkTo(text interface{}, link interface{}) template.HTML
 	return template.HTML(fmt.Sprintf(`<a href="%v">%v</a>`, context.URLFor(link), text))
 }
 
-func (context *Context) valueOf(valuer func(interface{}, *qor.Context) interface{}, value interface{}, meta *Meta) interface{} {
+func (context *Context) valueOf(valuer func(interface{}, *core.Context) interface{}, value interface{}, meta *Meta) interface{} {
 	if valuer != nil {
 		reflectValue := reflect.ValueOf(value)
 		if reflectValue.Kind() != reflect.Ptr {
@@ -738,7 +738,7 @@ OUT:
 
 // HasPermissioner has permission interface
 type HasPermissioner interface {
-	HasPermission(roles.PermissionMode, *qor.Context) bool
+	HasPermission(roles.PermissionMode, *core.Context) bool
 }
 
 func (context *Context) hasCreatePermission(permissioner HasPermissioner) bool {
@@ -1202,12 +1202,12 @@ func (context *Context) FuncValues() *funcs.FuncValues {
 func (context *Context) FuncMaps() []funcs.FuncMap {
 	funcMaps := []template.FuncMap{
 		{
-			"qor_context": func() *qor.Context { return context.Context },
+			"qor_context": func() *core.Context { return context.Context },
 			"get_route_handler": func() interface{} {
 				rctx := context.RouteContext
 				return rctx.Handler
 			},
-			"site":          func() qor.SiteInterface { return context.Context.Site },
+			"site":          func() core.SiteInterface { return context.Context.Site },
 			"public_url":    func(args ...string) string { return context.Context.Site.PublicURL() },
 			"public_urlf":   func(args ...interface{}) string { return context.Context.Site.PublicURLf(args...) },
 			"admin_context": func() *Context { return context },
@@ -1348,7 +1348,7 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 			"locale": func() string {
 				return context.Locale
 			},
-			"crumbs": func() []qor.Breadcrumb {
+			"crumbs": func() []core.Breadcrumb {
 				return context.Breadcrumbs().Items
 			},
 			"resource_key": func() string {

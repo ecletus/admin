@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/moisespsena/go-route"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/aghape/roles"
 )
 
@@ -26,7 +26,7 @@ type RouteConfig struct {
 	PermissionMode roles.PermissionMode
 	Values         map[interface{}]interface{}
 	Data           DataStack
-	Available      func(context *qor.Context) bool
+	Available      func(context *core.Context) bool
 }
 
 func (c *RouteConfig) Set(key, value interface{}) {
@@ -133,7 +133,7 @@ func NewHandler(handle Handler, configs ...*RouteConfig) *RouteHandler {
 	return &handler
 }
 
-func (handler RouteHandler) HasPermission(permissionMode roles.PermissionMode, context *qor.Context) bool {
+func (handler RouteHandler) HasPermission(permissionMode roles.PermissionMode, context *core.Context) bool {
 	if handler.Config.Available != nil && !handler.Config.Available(context) {
 		return false
 	}

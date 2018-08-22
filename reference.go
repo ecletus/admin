@@ -9,9 +9,9 @@ import (
 
 	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/db/inheritance"
-	"github.com/aghape/aghape"
-	"github.com/aghape/aghape/resource"
-	"github.com/aghape/aghape/utils"
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 )
 
 type ChildMeta struct {
@@ -31,7 +31,7 @@ func (meta *ChildMeta) GetFormattedValuer() ChildMetaValuer {
 type ChildOptions struct {
 	Data map[interface{}]interface{}
 }
-type ChildMetaValuer func(record interface{}, context *qor.Context, original MetaValuer) interface{}
+type ChildMetaValuer func(record interface{}, context *core.Context, original MetaValuer) interface{}
 
 func (ro *ChildOptions) Meta(meta *ChildMeta) *ChildOptions {
 	if ro.Data == nil {
@@ -201,7 +201,7 @@ func (res *Resource) SetInheritedMeta(meta *Meta) *Meta {
 	if meta.DefaultLabel == "" {
 		meta.DefaultLabel = utils.HumanizeString(name)
 	}
-	meta.Valuer = func(i interface{}, context *qor.Context) interface{} {
+	meta.Valuer = func(i interface{}, context *core.Context) interface{} {
 		originalMeta := res.GetDefinedMeta(name).Valuer
 		if meta := res.GetChildMeta(i, name); meta != nil {
 			valuer := meta.GetFormattedValuer()
@@ -212,7 +212,7 @@ func (res *Resource) SetInheritedMeta(meta *Meta) *Meta {
 		}
 		return nil
 	}
-	meta.FormattedValuer = func(i interface{}, context *qor.Context) interface{} {
+	meta.FormattedValuer = func(i interface{}, context *core.Context) interface{} {
 		originalMeta := res.GetDefinedMeta(name).GetFormattedValuer()
 		if meta := res.GetChildMeta(i, name); meta != nil {
 			valuer := meta.GetFormattedValuer()

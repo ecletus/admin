@@ -7,12 +7,12 @@ import (
 
 	"database/sql"
 
-	"github.com/go-errors/errors"
-	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/fragment"
 	"github.com/aghape/core"
 	"github.com/aghape/core/utils"
+	"github.com/aghape/fragment"
 	"github.com/aghape/roles"
+	"github.com/go-errors/errors"
+	"github.com/moisespsena-go/aorm"
 )
 
 var NotFragmentableError = errors.New("Not fragmentable")
@@ -242,6 +242,7 @@ type Fragment struct {
 	fields      []*aorm.StructField
 	query       string
 	isURI       string
+	Scheme      *Scheme
 }
 
 func (f *Fragment) FieldsCount() int {
@@ -282,6 +283,7 @@ func (f *Fragment) Build() {
 			uri := chain.Context.Resource.GetContextIndexURI(chain.Context.Context)
 			chain.Context.Breadcrumbs().Append(core.NewBreadcrumb(uri, chain.Context.Resource.PluralLabelKey(), ""))
 			chain.Context.PageTitle = f.Resource.PluralLabelKey()
+			chain.Context.Scheme = f.Scheme
 			chain.Pass()
 		})
 		super.Router.Get(f.isURI, newIndex)

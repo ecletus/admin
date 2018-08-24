@@ -26,3 +26,22 @@ func (l *Layout) MetaNameDiscovery(key string) *resource.MetaName {
 	}
 	return nil
 }
+
+func (l *Layout) SetMetaNames(names ...interface{}) {
+	var mnames []*resource.MetaName
+	for _, name := range names {
+		switch nt := name.(type) {
+		case *resource.MetaName:
+			mnames = append(mnames, nt)
+		case []*resource.MetaName:
+			mnames = append(mnames, nt...)
+		case []string:
+			for _, nameString := range nt {
+				mnames = append(mnames, &resource.MetaName{nameString, nameString})
+			}
+		case string:
+			mnames = append(mnames, &resource.MetaName{nt, nt})
+		}
+	}
+	l.MetaNames = mnames
+}

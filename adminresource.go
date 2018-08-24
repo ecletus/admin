@@ -5,14 +5,14 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/aghape/core"
+	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
+	"github.com/aghape/fragment"
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena/go-edis"
 	"github.com/moisespsena/go-error-wrap"
 	"github.com/moisespsena/go-route"
-	"github.com/aghape/fragment"
-	"github.com/aghape/core"
-	"github.com/aghape/core/resource"
-	"github.com/aghape/core/utils"
 )
 
 func (admin *Admin) newResource(value interface{}, config *Config, onUid func(uid string)) *Resource {
@@ -74,7 +74,6 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		Config:           config,
 		cachedMetas:      &map[string][]*Meta{},
 		admin:            admin,
-		filters:          make(map[string]*Filter),
 		Resources:        make(map[string]*Resource),
 		ResourcesByParam: make(map[string]*Resource),
 		Layouts:          make(map[string]*Layout),
@@ -84,8 +83,13 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		Inherits:         make(map[string]*Child),
 	}
 
-	res.Scheme = &Scheme{Resource: res}
-	res.SetDispatcher(res)
+	res.Scheme = &Scheme{
+		SchemeName: "Default",
+		Resource:   res,
+		filters:    make(map[string]*Filter),
+	}
+
+	res.Resource.SetDispatcher(res)
 
 	if _, ok := value.(fragment.FragmentedModelInterface); ok {
 		res.Fragments = NewFragments()
@@ -267,11 +271,16 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 		res.Config.Setup(res)
 	}
 
+	admin.triggerResourceAdded(res)
+
+	return res
+}
+
+func (admin *Admin) triggerResourceAdded(res *Resource) {
 	err := admin.TriggerResource(&ResourceEvent{edis.NewEvent(E_RESOURCE_ADDED), res, true})
 	if err != nil {
 		panic(errwrap.Wrap(err, "Trigger Resource Added"))
 	}
-	return res
 }
 
 // GetResources get defined resources from admin

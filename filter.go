@@ -1,15 +1,15 @@
 package admin
 
 import (
-	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
+	"github.com/moisespsena-go/aorm"
 )
 
 // Filter register filter for qor resource
-func (res *Resource) Filter(filter *Filter) {
-	filter.Resource = res
+func (s *Scheme) Filter(filter *Filter) {
+	filter.Resource = s.Resource
 
 	if filter.Label == "" {
 		filter.Label = utils.HumanizeString(filter.Name)
@@ -38,7 +38,7 @@ func (res *Resource) Filter(filter *Filter) {
 						}
 					}
 
-					return filterResourceByFields(res, []filterField{field}, keyword, db, filterArgument.Context)
+					return filterResourceByFields(s.Resource, []filterField{field}, keyword, db, filterArgument.Context)
 				}
 			}
 			return db
@@ -46,14 +46,14 @@ func (res *Resource) Filter(filter *Filter) {
 	}
 
 	if filter.Type != "" {
-		res.filters[filter.Name] = filter
+		s.filters[filter.Name] = filter
 	} else {
-		utils.ExitWithMsg("Invalid filter definition %v for resource %v", filter.Name, res.Name)
+		utils.ExitWithMsg("Invalid filter definition %v for resource %v at scheme %v", filter.Name, s.Resource.Name, s.SchemeName)
 	}
 }
 
-func (res *Resource) GetFilters(context *core.Context) (filters []*Filter) {
-	for _, filter := range res.filters {
+func (s *Scheme) GetFilters(context *core.Context) (filters []*Filter) {
+	for _, filter := range s.filters {
 		if filter.Available == nil || filter.Available(context) {
 			filters = append(filters, filter)
 		}
@@ -70,7 +70,7 @@ type Filter struct {
 	Resource   *Resource
 	Handler    func(*aorm.DB, *FilterArgument) *aorm.DB
 	Config     FilterConfigInterface
-	Available func(context *core.Context) bool
+	Available  func(context *core.Context) bool
 }
 
 // FilterConfigInterface filter config interface

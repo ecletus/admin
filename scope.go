@@ -1,16 +1,16 @@
 package admin
 
 import (
-	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/core"
+	"github.com/moisespsena-go/aorm"
 )
 
 // Scope register scope for qor resource
-func (res *Resource) Scope(scope *Scope) {
+func (s *Scheme) Scope(scope *Scope) {
 	if scope.Label == "" {
 		scope.Label = scope.Name
 	}
-	res.scopes = append(res.scopes, scope)
+	s.scopes = append(s.scopes, scope)
 }
 
 // Scope scope definiation

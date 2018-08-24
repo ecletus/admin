@@ -3,22 +3,28 @@ package admin
 import (
 	"strings"
 
-	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/core"
 	"github.com/aghape/roles"
+	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena/go-edis"
 )
 
 type Scheme struct {
-	Resource       *Resource
-	indexSections  []*Section
-	newSections    []*Section
-	editSections   []*Section
-	isSetShowAttrs bool
-	showSections   []*Section
-	customSections *map[string]*[]*Section
-	sortableAttrs  *[]string
+	EventDispatcher edis.EventDispatcher
+	SchemeName      string
+	Resource        *Resource
+	indexSections   []*Section
+	newSections     []*Section
+	editSections    []*Section
+	isSetShowAttrs  bool
+	showSections    []*Section
+	customSections  *map[string]*[]*Section
+	sortableAttrs   *[]string
 
 	SearchHandler func(keyword string, context *core.Context) *aorm.DB
+
+	scopes  []*Scope
+	filters map[string]*Filter
 }
 
 // IndexAttrs set attributes will be shown in the index page

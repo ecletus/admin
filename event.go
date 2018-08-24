@@ -1,10 +1,10 @@
 package admin
 
 import (
-	"github.com/moisespsena/go-edis"
-	"github.com/aghape/plug"
 	"github.com/aghape/core"
 	"github.com/aghape/core/utils"
+	"github.com/aghape/plug"
+	"github.com/moisespsena/go-edis"
 )
 
 const (
@@ -49,12 +49,24 @@ func (admin *Admin) OnResourceAddedE(cb func(e *ResourceEvent) error) error {
 }
 
 func (admin *Admin) OnResourceValueAdded(value interface{}, cb func(e *ResourceEvent)) error {
+	uid := utils.TypeId(value)
+	if res := admin.ResourcesByUID[uid]; res != nil {
+		admin.triggerResourceAdded(res)
+		return nil
+	}
+
 	return admin.OnE(E_RESOURCE_ADDED+":"+utils.TypeId(value), func(e edis.EventInterface) {
 		cb(e.(*ResourceEvent))
 	})
 }
 
 func (admin *Admin) OnResourceValueAddedE(value interface{}, cb func(e *ResourceEvent) error) error {
+	uid := utils.TypeId(value)
+	if res := admin.ResourcesByUID[uid]; res != nil {
+		admin.triggerResourceAdded(res)
+		return nil
+	}
+
 	return admin.OnE(E_RESOURCE_ADDED+":"+utils.TypeId(value), func(e edis.EventInterface) error {
 		return cb(e.(*ResourceEvent))
 	})

@@ -105,8 +105,6 @@ type Resource struct {
 
 	admin           *Admin
 	mounted         bool
-	scopes          []*Scope
-	filters         map[string]*Filter
 	cachedMetas     *map[string][]*Meta
 	AdminController *Controller
 
@@ -1419,6 +1417,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 					}
 					return recorde != nil
 				}
+				fragRes.Fragment.Scheme = res.RegisterScheme(fragRes.ID)
 			} else {
 				meta.SkipDefaultLabel = true
 				meta.Label = fragRes.SingularLabelKey()

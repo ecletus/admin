@@ -94,7 +94,7 @@ func (ac *Controller) Create(context *Context) {
 	res := context.Resource
 	result := res.NewStruct(context.Context.Site)
 	if context.AddError(res.Decode(context.Context, result)); !context.HasError() {
-		context.AddError(res.Save(result, context.Context))
+		context.AddError(res.Crud(context.Context).Update(result))
 	}
 
 	if context.HasError() {
@@ -124,7 +124,7 @@ func (ac *Controller) renderSingleton(context *Context) (interface{}, bool, erro
 
 	if res.Config.Singleton {
 		result = res.NewStruct(context.Context.Site)
-		if err = res.FindMany(result, res.ApplyDefaultFilters(context.Context)); err == aorm.ErrRecordNotFound {
+		if err = res.Crud(res.ApplyDefaultFilters(context.Context)).FindMany(result); err == aorm.ErrRecordNotFound {
 			context.Type = NEW
 			context.Execute("", result)
 			return nil, true, nil
@@ -202,7 +202,7 @@ func (ac *Controller) Update(context *Context) {
 	if !context.HasError() {
 		decerror := res.Decode(context.Context, result)
 		if context.AddError(decerror); !context.HasError() {
-			context.AddError(res.Save(result, context.Context))
+			context.AddError(res.Crud(context.Context).Update(result))
 		}
 	}
 
@@ -254,7 +254,7 @@ func (ac *Controller) Delete(context *Context) {
 	res := context.Resource
 	status := http.StatusOK
 
-	if context.AddError(res.Delete(res.NewStruct(context.Context.Site), res.ApplyDefaultFilters(context.Context))); context.HasError() {
+	if context.AddError(res.Crud(res.ApplyDefaultFilters(context.Context)).Delete(res.NewStruct(context.Context.Site))); context.HasError() {
 		context.Flash(string(context.t(I18NGROUP+".form.failed_to_delete", "Failed to delete {{.}}", res)), "error")
 		status = http.StatusNotFound
 	}

@@ -275,7 +275,7 @@ func (selectOneConfig *SelectOneConfig) FilterValue(filter *Filter, context *Con
 		result := selectOneConfig.RemoteDataResource.Resource.NewStruct(context.Context.Site)
 		clone := context.Clone()
 		clone.ResourceID = keyword
-		if selectOneConfig.RemoteDataResource.Resource.FindOne(result, nil, clone) == nil {
+		if selectOneConfig.RemoteDataResource.Resource.Crud(clone).FindOne(result) == nil {
 			return result
 		}
 	}

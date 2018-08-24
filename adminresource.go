@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
 	"github.com/aghape/fragment"
@@ -76,7 +75,6 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		admin:            admin,
 		Resources:        make(map[string]*Resource),
 		ResourcesByParam: make(map[string]*Resource),
-		Layouts:          make(map[string]*Layout),
 		MetaAliases:      make(map[string]*resource.MetaName),
 		MetasByName:      make(map[string]*Meta),
 		MetasByFieldName: make(map[string]*Meta),
@@ -95,12 +93,7 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		res.Fragments = NewFragments()
 	}
 
-	res.TransformToBasicValueFunc = res.TransformToBasic
 	res.Children = &Inheritances{resource: res}
-
-	for layoutName, layout := range res.Resource.Layouts {
-		res.Layout(layoutName, &Layout{Layout: *layout})
-	}
 
 	if config.ID != "" {
 		res.ID = config.ID
@@ -191,13 +184,11 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		injector.ConfigureQorResourceBeforeInitialize(res)
 	}
 
-	findOneHandler := res.FindOneHandler
-	res.FindOneHandler = func(r resource.Resourcer, result interface{}, metaValues *resource.MetaValues, context *core.Context) error {
-		if context.ResourceID == "" {
-			context.ResourceID = context.URLParam(res.ParamIDName())
+	res.OnDBAction(func(e *resource.DBEvent) {
+		if e.Context.ResourceID == "" {
+			e.Context.ResourceID = e.Context.URLParam(res.ParamIDName())
 		}
-		return findOneHandler(r, result, metaValues, context)
-	}
+	}, resource.E_DB_ACTION_FIND_ONE.Before())
 
 	res.UseTheme("slideout")
 	configureDefaultLayouts(res)

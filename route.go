@@ -245,7 +245,7 @@ func (admin *Admin) NewServeMux(name ...string) *route.Mux {
 						p = parents[i]
 						uri := p.GetContextIndexURI(context.Context, ids...)
 						context.Breadcrumbs().Append(core.NewBreadcrumb(uri, p.GetLabelKey(true), ""))
-						model, err := p.FindOneBasic(db, id)
+						model, err := p.CrudDB(db).FindOneBasic(id)
 
 						if err != nil {
 							panic(err)

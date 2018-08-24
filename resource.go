@@ -118,7 +118,6 @@ type Resource struct {
 	Resources          map[string]*Resource
 	ResourcesByParam   map[string]*Resource
 	menus              []*Menu
-	Layouts            map[string]*Layout
 	MetaAliases        map[string]*resource.MetaName
 	defaultDisplayName string
 	Children           *Inheritances
@@ -127,25 +126,6 @@ type Resource struct {
 	Fragment           *Fragment
 	DefaultMenu        *Menu
 	Schemes            map[string]*Scheme
-}
-
-func (res *Resource) GetLayoutOrDefault(name string) *Layout {
-	return res.GetLayout(name, DEFAULT_LAYOUT)
-}
-
-func (res *Resource) GetLayout(name string, defaul ...string) *Layout {
-	if v, ok := res.Layouts[name]; ok {
-		return v
-	}
-	if len(defaul) > 0 && defaul[0] != "" {
-		return res.GetLayout(defaul[0])
-	}
-	return nil
-}
-
-func (res *Resource) Layout(name string, layout *Layout) {
-	res.Layouts[name] = layout
-	res.Resource.Layouts[name] = &layout.Layout
 }
 
 // GetMenus get all sidebar menus for admin
@@ -250,20 +230,6 @@ func (res *Resource) GetActionLabel(context *Context, action *Action) template.H
 // Meta register meta for admin resource
 func (res *Resource) SetMeta(meta *Meta, notUpdate ...bool) *Meta {
 	return res.Meta(meta, true)
-}
-
-func (res *Resource) SetInline(fieldName string, inlineResource *Resource, config ...*SingleEditConfig) *resource.InlineResourcer {
-	inline := &resource.InlineResourcer{Resource: inlineResource, FieldName: fieldName}
-	res.Resource.Inline(inline)
-	if len(config) == 0 || config[0] == nil {
-		config = []*SingleEditConfig{{}}
-	}
-	res.SetMeta(&Meta{
-		Name: fieldName, Type: "single_edit",
-		Resource: inlineResource,
-		Config:   config[0],
-	})
-	return inline
 }
 
 // Meta register meta for admin resource
@@ -615,69 +581,6 @@ func (res *Resource) GetPathLevel() int {
 	return res.PathLevel
 }
 
-func (res *Resource) setupParentResource(fieldName string, parent *Resource) {
-	res.ParentResource = parent
-
-	findOneHandler := res.FindOneHandler
-	res.FindOneHandler = func(r resource.Resourcer, value interface{}, metaValues *resource.MetaValues, context *core.Context) (err error) {
-		if metaValues != nil {
-			return findOneHandler(r, value, metaValues, context)
-		}
-
-		if primaryKey := context.URLParam(res.ParamIDName()); primaryKey != "" {
-			clone := context.Clone()
-			parentValue := parent.NewStruct(context.Site)
-			if err = parent.FindOneHandler(r, parentValue, nil, clone); err == nil {
-				primaryQuerySQL, primaryParams := res.ToPrimaryQueryParams(primaryKey)
-				err = context.DB.Model(parentValue).Where(primaryQuerySQL, primaryParams...).Related(value).Error
-			}
-		}
-		return
-	}
-
-	res.FindManyHandler = func(r resource.Resourcer, value interface{}, context *core.Context) error {
-		var (
-			err         error
-			clone       = context.Clone()
-			parentValue = parent.NewStruct(context.Site)
-		)
-
-		if err = parent.FindOneHandler(r, parentValue, nil, clone); err == nil {
-			parent.FindOneHandler(r, parentValue, nil, clone)
-			return context.DB.Model(parentValue).Related(value).Error
-		}
-		return err
-	}
-
-	res.SaveHandler = func(r resource.Resourcer, value interface{}, context *core.Context) error {
-		var (
-			err         error
-			clone       = context.Clone()
-			parentValue = parent.NewStruct(context.Site)
-		)
-		if err = parent.FindOneHandler(r, parentValue, nil, clone); err == nil {
-			parent.FindOneHandler(r, parentValue, nil, clone)
-			return context.DB.Model(parentValue).Association(fieldName).Append(value).Error
-		}
-		return err
-	}
-
-	res.DeleteHandler = func(r resource.Resourcer, value interface{}, context *core.Context) (err error) {
-		var clone = context.Clone()
-		var parentValue = parent.NewStruct(context.Site)
-		if primaryKey := context.URLParam(res.ParamIDName()); primaryKey != "" {
-			primaryQuerySQL, primaryParams := res.ToPrimaryQueryParams(primaryKey)
-			if err = context.DB.Where(primaryQuerySQL, primaryParams...).First(value).Error; err == nil {
-				if err = parent.FindOneHandler(r, parentValue, nil, clone); err == nil {
-					parent.FindOneHandler(r, parentValue, nil, clone)
-					return context.DB.Model(parentValue).Association(fieldName).Delete(value).Error
-				}
-			}
-		}
-		return
-	}
-}
-
 // Decode decode context into a value
 func (res *Resource) Decode(context *core.Context, value interface{}) error {
 	return resource.Decode(context, value, res)
@@ -842,9 +745,7 @@ func (res *Resource) GetMeta(name string, notUpdate ...bool) *Meta {
 			if len(parts) > 1 {
 				r := res
 				for _, p := range parts[0 : len(parts)-1] {
-					if inline, ok := r.Inlines.ByFieldName[p]; ok {
-						r = inline.Resource.(*Resource)
-					} else if r.Fragments != nil && r.Fragments.Get(p) != nil {
+					if r.Fragments != nil && r.Fragments.Get(p) != nil {
 						r = r.Fragments.Get(p).Resource
 						meta := r.GetMeta(parts[len(parts)-1])
 						if meta != nil {
@@ -929,7 +830,7 @@ func (res *Resource) MetasFromLayoutContext(layout string, context *Context, val
 		defaultRole := DefaultPermission(layout)
 		roles = append(roles, defaultRole)
 	}
-	l := res.GetLayout(layout)
+	l := res.GetLayout(layout).(*Layout)
 	if l != nil {
 		if l.MetasFunc != nil {
 			metas, names = l.MetasFunc(res, context, value, roles...)
@@ -967,7 +868,7 @@ func (res *Resource) MetasFromLayoutContext(layout string, context *Context, val
 	return
 }
 
-func (res *Resource) TransformToBasic(record interface{}) resource.BasicValue {
+func (res *Resource) BasicValue(record interface{}) resource.BasicValue {
 	metaId, metaLabel, metaIcon := res.MetasByName[BASIC_META_ID], res.MetasByName[BASIC_META_LABEL], res.MetasByName[BASIC_META_ICON]
 	return &resource.Basic{metaId.Valuer(record, nil).(string), metaLabel.Valuer(record, nil).(string), metaIcon.Valuer(record, nil).(string)}
 }
@@ -1312,45 +1213,17 @@ func (res *Resource) ReferencedRecord(record interface{}) interface{} {
 	return nil
 }
 
-func (res *Resource) CallSave(r resource.Resourcer, result interface{}, context *core.Context) error {
-	context.Data().Inside()
-	defer context.Data().Outside()
-	return res.Resource.CallSave(r, result, context)
+func (res *Resource) Crud(ctx *core.Context) *resource.CRUD {
+	return resource.NewCrud(res, ctx)
 }
 
-// CallSave call save method
-func (res *Resource) Save(result interface{}, context *core.Context) error {
-	return res.CallSave(res, result, context)
-}
-
-// CallDelete call delete method
-func (res *Resource) Delete(result interface{}, context *core.Context) error {
-	return res.CallDelete(res, result, context)
-}
-
-func (res *Resource) FindManyLayout(result interface{}, context *core.Context, layout resource.LayoutInterface) error {
-	return res.CallFindManyLayout(res, result, context, layout)
-}
-
-func (res *Resource) FindOneLayout(result interface{}, metaValues *resource.MetaValues, context *core.Context, layout resource.LayoutInterface) error {
-	return res.CallFindOneLayout(res, result, metaValues, context, layout)
+func (res *Resource) CrudDB(db *aorm.DB) *resource.CRUD {
+	return res.Crud(&core.Context{DB: db})
 }
 
 func (res *Resource) SetParentResource(parent *Resource, fieldName string) {
 	res.Resource.SetParent(parent, fieldName)
 	res.ParentResource = parent
-}
-
-func (res *Resource) CallFindManyHandler(r resource.Resourcer, result interface{}, context *core.Context) error {
-	if len(res.Children.Items) > 0 {
-		referencesColumns := res.Children.Columns()
-		oldDB := context.DB
-		context.SetDB(context.DB.ExtraSelect(inheritance.EXTRA_COLUMNS_KEY, res.Children.NewSlice(), referencesColumns))
-		defer func() {
-			context.DB = oldDB
-		}()
-	}
-	return res.Resource.CallFindManyHandler(r, result, context)
 }
 
 func (res *Resource) RegisterScheme(name string) *Scheme {
@@ -1498,7 +1371,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 					if fr.GetID() == "" {
 						fr.SetID(r.GetID())
 					}
-					if err = fragRes.Save(fr, e.OriginalContext); err != nil {
+					if err = fragRes.Crud(e.OriginalContext).Update(fr); err != nil {
 						return errwrap.Wrap(err, "Fragment "+id)
 					}
 				}
@@ -1507,7 +1380,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 					if fr.GetID() == "" {
 						fr.SetID(r.GetID())
 					}
-					if err = fragRes.Save(fr, e.OriginalContext); err != nil {
+					if err = fragRes.Crud(e.OriginalContext).Update(fr); err != nil {
 						return errwrap.Wrap(err, "Fragment "+id)
 					}
 				}

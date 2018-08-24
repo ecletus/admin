@@ -8,7 +8,7 @@ import (
 
 func configureDefaultLayouts(res *Resource) {
 	defaultLayout := &Layout{
-		Layout: resource.Layout{res.Value, res.CallFindManyHandler, res.CallFindOneHandler, nil},
+		Layout: resource.Layout{Type: res.Value},
 		MetasFunc: func(res *Resource, context *Context, record interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName) {
 			metas = res.ConvertSectionToMetas(res.allowedSections(record, res.IndexAttrs(), context, roles...))
 			return

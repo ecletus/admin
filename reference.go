@@ -7,11 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/db/inheritance"
 	"github.com/aghape/core"
-	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
+	"github.com/aghape/db/inheritance"
+	"github.com/moisespsena-go/aorm"
 )
 
 type ChildMeta struct {
@@ -178,12 +177,6 @@ func (res *Resource) Inherit(super *Resource, fieldName string, options ...*Chil
 	return r
 }
 
-func (res *Resource) InlineInherit(super *Resource, fieldName string, options *ChildOptions, config *SingleEditConfig) (*Inheritance, *resource.InlineResourcer) {
-	i := res.Inherit(super, fieldName, options)
-	inline := res.SetInline(fieldName, super, config)
-	return i, inline
-}
-
 func (res *Resource) GetChildMeta(record interface{}, fieldName string) *ChildMeta {
 	if record != nil {
 		r := record.(inheritance.ParentModelInterface)
@@ -220,6 +213,6 @@ func (res *Resource) SetInheritedMeta(meta *Meta) *Meta {
 		}
 		return originalMeta(i, context)
 	}
-	res.Meta(&Meta{Name: name, Label:meta.Label})
+	res.Meta(&Meta{Name: name, Label: meta.Label})
 	return res.SetMeta(meta)
 }

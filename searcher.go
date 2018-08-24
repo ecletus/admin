@@ -12,10 +12,10 @@ import (
 
 	"mime/multipart"
 
-	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
+	"github.com/moisespsena-go/aorm"
 	"gopkg.in/fatih/set.v0"
 )
 
@@ -139,23 +139,17 @@ func (s *Searcher) Filter(filter *Filter, values *resource.MetaValues) *Searcher
 
 // FindMany find many records based on current conditions
 func (s *Searcher) FindMany() (interface{}, error) {
-	var (
-		err     error
-		context = s.parseContext()
-		layout  = s.Resource.GetLayoutOrDefault(s.Layout)
-		result  = layout.NewSlice()
-	)
+	context := s.parseContext()
 
 	if context.HasError() {
-		return result, context.Errors
+		return nil, context.Errors
 	}
 
 	if s.Fragment != nil {
 		context.SetDB(s.Fragment.Filter(context.GetDB()))
 	}
 
-	err = s.Resource.FindManyLayout(result, context, layout)
-	return result, err
+	return s.Resource.Crud(context).FindManyLayoutOrDefault(s.Layout)
 }
 
 // FindOne find one record based on current conditions
@@ -170,7 +164,7 @@ func (s *Searcher) FindOne() (interface{}, error) {
 		return result, context.Errors
 	}
 
-	err = s.Resource.FindOneLayout(result, nil, context, s.Resource.GetLayoutOrDefault(s.Layout))
+	err = s.Resource.Crud(context).SetLayoutOrDefault(s.Layout).FindOne(result)
 	return result, err
 }
 
@@ -288,7 +282,10 @@ func (s *Searcher) parseContext() *core.Context {
 
 	// pagination
 	context.DB = db.Model(s.Resource.Value).Set("qor:getting_total_count", true)
-	s.Resource.FindManyLayout(&s.Pagination.Total, context, s.Resource.GetLayoutOrDefault(s.Layout))
+	if err := s.Resource.Crud(context).SetLayoutOrDefault(s.Layout).FindMany(&s.Pagination.Total); err != nil {
+		context.AddError(err)
+		return context
+	}
 
 	if s.Pagination.CurrentPage == 0 {
 		if s.Context.Request != nil {

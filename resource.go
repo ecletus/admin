@@ -6,21 +6,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moisespsena-go/aorm"
-	"github.com/jinzhu/inflection"
-	"github.com/moisespsena/go-route"
-	"github.com/aghape/helpers"
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
+	"github.com/aghape/helpers"
 	"github.com/aghape/roles"
+	"github.com/jinzhu/inflection"
+	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena/go-route"
+
 	//"github.com/aghape/responder"
 	"strconv"
 
-	"github.com/moisespsena/go-error-wrap"
-	"github.com/moisespsena/template/html/template"
 	"github.com/aghape/db/inheritance"
 	"github.com/aghape/fragment"
+	"github.com/moisespsena/go-error-wrap"
+	"github.com/moisespsena/template/html/template"
 )
 
 const (
@@ -88,28 +89,6 @@ func (res *SubResource) CreateMenu(plural bool, parentParams ...string) *Menu {
 
 func (res *SubResource) CreateDefaultMenu(parentParams ...string) *Menu {
 	return res.CreateMenu(!res.Resource.Config.Singleton, parentParams...)
-}
-
-type Layout struct {
-	resource.Layout
-	Parent        *Layout
-	Metas         []string
-	MetaNames     []*resource.MetaName
-	MetasFunc     func(res *Resource, context *Context, recorde interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName)
-	MetaNamesFunc func(res *Resource, context *Context, recorde interface{}, roles ...roles.PermissionMode) []string
-	MetaAliases   map[string]*resource.MetaName
-}
-
-func (l *Layout) MetaNameDiscovery(key string) *resource.MetaName {
-	for l != nil {
-		if l.MetaAliases != nil {
-			if name, ok := l.MetaAliases[key]; ok {
-				return name
-			}
-		}
-		l = l.Parent
-	}
-	return nil
 }
 
 // Resource is the most important thing for qor admin, every model is defined as a resource, qor admin will genetate management interface based on its definition

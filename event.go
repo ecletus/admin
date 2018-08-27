@@ -51,7 +51,7 @@ func (admin *Admin) OnResourceAddedE(cb func(e *ResourceEvent) error) error {
 func (admin *Admin) OnResourceValueAdded(value interface{}, cb func(e *ResourceEvent)) error {
 	uid := utils.TypeId(value)
 	if res := admin.ResourcesByUID[uid]; res != nil {
-		admin.triggerResourceAdded(res)
+		admin.triggerResourceAdded(res, cb)
 		return nil
 	}
 

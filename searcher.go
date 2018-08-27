@@ -149,7 +149,7 @@ func (s *Searcher) FindMany() (interface{}, error) {
 		context.SetDB(s.Fragment.Filter(context.GetDB()))
 	}
 
-	return s.Resource.Crud(context).FindManyLayoutOrDefault(s.Layout)
+	return s.Resource.CrudScheme(context, s.Scheme).FindManyLayoutOrDefault(s.Layout)
 }
 
 // FindOne find one record based on current conditions
@@ -164,7 +164,7 @@ func (s *Searcher) FindOne() (interface{}, error) {
 		return result, context.Errors
 	}
 
-	err = s.Resource.Crud(context).SetLayoutOrDefault(s.Layout).FindOne(result)
+	err = s.Resource.CrudScheme(context, s.Scheme).SetLayoutOrDefault(s.Layout).FindOne(result)
 	return result, err
 }
 

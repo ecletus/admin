@@ -93,8 +93,11 @@ func (ac *Controller) Create(context *Context) {
 	context.Type = NEW
 	res := context.Resource
 	result := res.NewStruct(context.Context.Site)
+
 	if context.AddError(res.Decode(context.Context, result)); !context.HasError() {
-		context.AddError(res.Crud(context.Context).Update(result))
+		context.WithTransaction(func() {
+			context.AddError(context.Crud().Create(result))
+		})
 	}
 
 	if context.HasError() {
@@ -124,7 +127,7 @@ func (ac *Controller) renderSingleton(context *Context) (interface{}, bool, erro
 
 	if res.Config.Singleton {
 		result = res.NewStruct(context.Context.Site)
-		if err = res.Crud(res.ApplyDefaultFilters(context.Context)).FindMany(result); err == aorm.ErrRecordNotFound {
+		if err = context.Crud(res.ApplyDefaultFilters(context.Context)).FindMany(result); err == aorm.ErrRecordNotFound {
 			context.Type = NEW
 			context.Execute("", result)
 			return nil, true, nil
@@ -202,7 +205,9 @@ func (ac *Controller) Update(context *Context) {
 	if !context.HasError() {
 		decerror := res.Decode(context.Context, result)
 		if context.AddError(decerror); !context.HasError() {
-			context.AddError(res.Crud(context.Context).Update(result))
+			context.WithTransaction(func() {
+				context.AddError(context.Crud().Update(result))
+			})
 		}
 	}
 
@@ -253,8 +258,10 @@ func (ac *Controller) Update(context *Context) {
 func (ac *Controller) Delete(context *Context) {
 	res := context.Resource
 	status := http.StatusOK
-
-	if context.AddError(res.Crud(res.ApplyDefaultFilters(context.Context)).Delete(res.NewStruct(context.Context.Site))); context.HasError() {
+	context.WithTransaction(func() {
+		context.AddError(context.Crud(res.ApplyDefaultFilters(context.Context)).Delete(res.NewStruct(context.Context.Site)))
+	})
+	if context.HasError() {
 		context.Flash(string(context.t(I18NGROUP+".form.failed_to_delete", "Failed to delete {{.}}", res)), "error")
 		status = http.StatusNotFound
 	}

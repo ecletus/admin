@@ -128,6 +128,14 @@ type Resource struct {
 	Schemes            map[string]*Scheme
 }
 
+func (res *Resource) OnDBActionE(cb func(e *resource.DBEvent) error, action ...resource.DBActionEvent) (err error) {
+	return resource.OnDBActionE(res, cb, action...)
+}
+
+func (res *Resource) OnDBAction(cb func(e *resource.DBEvent), action ...resource.DBActionEvent) (err error) {
+	return resource.OnDBAction(res, cb, action...)
+}
+
 // GetMenus get all sidebar menus for admin
 func (res *Resource) GetMenus() []*Menu {
 	return res.menus
@@ -1213,6 +1221,34 @@ func (res *Resource) ReferencedRecord(record interface{}) interface{} {
 	return nil
 }
 
+func (res *Resource) CrudScheme(ctx *core.Context, scheme interface{}) *resource.CRUD {
+	s := res.Scheme
+	switch st := scheme.(type) {
+	case string:
+		if st != "" {
+			s = res.Schemes[st]
+		}
+	default:
+		if scheme != nil {
+			s = scheme.(*Scheme)
+		}
+	}
+	return res.Crud(ctx).Dispatcher(s.EventDispatcher)
+}
+
+func (res *Resource) CrudSchemeDB(db *aorm.DB, scheme interface{}) *resource.CRUD {
+	s := res.Scheme
+	switch st := scheme.(type) {
+	case string:
+		if st != "" {
+			s = res.Schemes[st]
+		}
+	default:
+		s = scheme.(*Scheme)
+	}
+	return res.CrudDB(db).Dispatcher(s.EventDispatcher)
+}
+
 func (res *Resource) Crud(ctx *core.Context) *resource.CRUD {
 	return resource.NewCrud(res, ctx)
 }
@@ -1227,7 +1263,10 @@ func (res *Resource) SetParentResource(parent *Resource, fieldName string) {
 }
 
 func (res *Resource) RegisterScheme(name string) *Scheme {
-	s := &Scheme{Resource: res}
+	s := NewScheme(res, name)
+	if res.Schemes == nil {
+		res.Schemes = map[string]*Scheme{}
+	}
 	res.Schemes[name] = s
 	return s
 }
@@ -1290,7 +1329,6 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 					}
 					return recorde != nil
 				}
-				fragRes.Fragment.Scheme = res.RegisterScheme(fragRes.ID)
 			} else {
 				meta.SkipDefaultLabel = true
 				meta.Label = fragRes.SingularLabelKey()
@@ -1365,13 +1403,13 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 		res.OnDBActionE(func(e *resource.DBEvent) (err error) {
 			context := e.Context
 			if v := context.Data().Get("skip.fragments"); v == nil {
-				r := e.Recorde.(fragment.FragmentedModelInterface)
+				r := e.Result().(fragment.FragmentedModelInterface)
 				for id, fr := range r.GetFragments() {
 					fragRes := res.Fragments.Get(id).Resource
 					if fr.GetID() == "" {
 						fr.SetID(r.GetID())
 					}
-					if err = fragRes.Crud(e.OriginalContext).Update(fr); err != nil {
+					if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
 						return errwrap.Wrap(err, "Fragment "+id)
 					}
 				}
@@ -1380,7 +1418,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 					if fr.GetID() == "" {
 						fr.SetID(r.GetID())
 					}
-					if err = fragRes.Crud(e.OriginalContext).Update(fr); err != nil {
+					if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
 						return errwrap.Wrap(err, "Fragment "+id)
 					}
 				}
@@ -1402,7 +1440,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 				context.SetDB(DB)
 			}
 			return nil
-		}, resource.E_DB_ACTION_FIND_MANY.Before(), resource.E_DB_ACTION_FIND_ONE.Before())
+		}, resource.BEFORE|resource.E_DB_ACTION_FIND_MANY|resource.E_DB_ACTION_FIND_ONE)
 
 		res.FakeScope.GetModelStruct().BeforeRelatedCallback(func(fromScope *aorm.Scope, toScope *aorm.Scope, DB *aorm.DB, fromField *aorm.Field) *aorm.DB {
 			fields, query := res.Fragments.Fields(), res.Fragments.Query()
@@ -1525,6 +1563,10 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 	}
 
 	return fragRes
+}
+
+func (res *Resource) GetAdminLayout(name string, defaul ...string) *Layout {
+	return res.GetLayout(name, defaul...).(*Layout)
 }
 
 func (res *Resource) AddFragment(value fragment.FragmentModelInterface) *Resource {

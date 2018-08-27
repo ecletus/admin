@@ -242,11 +242,31 @@ type Fragment struct {
 	fields      []*aorm.StructField
 	query       string
 	isURI       string
-	Scheme      *Scheme
+	scheme      *Scheme
 }
 
 func (f *Fragment) FieldsCount() int {
 	return f.fieldsCount
+}
+
+func (f *Fragment) Scheme() *Scheme {
+	if f.scheme == nil {
+		return f.Resource.Scheme
+	}
+	return f.scheme
+}
+
+func (f *Fragment) BaseResource() *Resource {
+	baseResource := f.Resource
+	for baseResource.Fragment != nil {
+		baseResource = baseResource.ParentResource
+	}
+	return baseResource
+}
+
+func (f *Fragment) CreateScheme() *Scheme {
+	f.scheme = f.BaseResource().RegisterScheme(f.ID)
+	return f.scheme
 }
 
 func (f *Fragment) Build() {
@@ -283,10 +303,13 @@ func (f *Fragment) Build() {
 			uri := chain.Context.Resource.GetContextIndexURI(chain.Context.Context)
 			chain.Context.Breadcrumbs().Append(core.NewBreadcrumb(uri, chain.Context.Resource.PluralLabelKey(), ""))
 			chain.Context.PageTitle = f.Resource.PluralLabelKey()
-			chain.Context.Scheme = f.Scheme
+			if f.scheme != nil {
+				chain.Context.Scheme = f.scheme
+			}
 			chain.Pass()
 		})
 		super.Router.Get(f.isURI, newIndex)
+		// create with
 	}
 }
 

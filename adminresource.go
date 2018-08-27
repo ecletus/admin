@@ -81,12 +81,7 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		Inherits:         make(map[string]*Child),
 	}
 
-	res.Scheme = &Scheme{
-		SchemeName: "Default",
-		Resource:   res,
-		filters:    make(map[string]*Filter),
-	}
-
+	res.Scheme = NewScheme(res, "Default")
 	res.Resource.SetDispatcher(res)
 
 	if _, ok := value.(fragment.FragmentedModelInterface); ok {
@@ -267,8 +262,15 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 	return res
 }
 
-func (admin *Admin) triggerResourceAdded(res *Resource) {
-	err := admin.TriggerResource(&ResourceEvent{edis.NewEvent(E_RESOURCE_ADDED), res, true})
+func (admin *Admin) triggerResourceAdded(res *Resource, cb ...func(e *ResourceEvent)) {
+	e := &ResourceEvent{edis.NewEvent(E_RESOURCE_ADDED), res, true}
+	if len(cb) > 0 {
+		for _, cb := range cb {
+			cb(e)
+		}
+		return
+	}
+	err := admin.TriggerResource(e)
 	if err != nil {
 		panic(errwrap.Wrap(err, "Trigger Resource Added"))
 	}

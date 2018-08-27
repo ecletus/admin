@@ -7,11 +7,11 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena/go-assetfs"
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
+	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena/go-assetfs"
 )
 
 var SelectOne2ResultTemplateBasicHTMLWithIcon = RawJS(`
@@ -98,11 +98,11 @@ func (d *DataResource) ToURLString(context *Context) string {
 	}
 
 	if d.Layout != "" {
-		query = append(query, P_LAYOUT + "="+d.Layout)
+		query = append(query, P_LAYOUT+"="+d.Layout)
 	}
 
 	if d.Display != "" {
-		query = append(query, P_DISPLAY + "="+d.Display)
+		query = append(query, P_DISPLAY+"="+d.Display)
 	}
 
 	for _, scope := range d.Scopes {
@@ -138,6 +138,7 @@ type SelectOneConfig struct {
 	SelectionTemplate        string
 	Layout                   string
 	Display                  string
+	Scheme                   string
 	SelectMode               string // select, select_async, bottom_sheet
 	PrimaryField             string
 	Select2ResultTemplate    *JS
@@ -275,7 +276,7 @@ func (selectOneConfig *SelectOneConfig) FilterValue(filter *Filter, context *Con
 		result := selectOneConfig.RemoteDataResource.Resource.NewStruct(context.Context.Site)
 		clone := context.Clone()
 		clone.ResourceID = keyword
-		if selectOneConfig.RemoteDataResource.Resource.Crud(clone).FindOne(result) == nil {
+		if selectOneConfig.RemoteDataResource.Resource.CrudScheme(clone, selectOneConfig.Scheme).FindOne(result) == nil {
 			return result
 		}
 	}

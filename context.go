@@ -8,16 +8,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-assetfs/api"
-	"github.com/moisespsena/go-route"
-	"github.com/moisespsena/template/cache"
-	"github.com/moisespsena/template/html/template"
+	"github.com/aghape/core/resource"
+
 	"github.com/aghape/core"
 	"github.com/aghape/core/utils"
 	"github.com/aghape/responder"
 	"github.com/aghape/roles"
 	"github.com/aghape/session"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena/go-route"
+	"github.com/moisespsena/template/cache"
+	"github.com/moisespsena/template/html/template"
 )
 
 type ContextType string
@@ -703,6 +705,47 @@ func (context *Context) GetActionLabel() string {
 	}
 
 	return string(context.t(key, defaul))
+}
+
+func (context *Context) Crud(ctx ...*core.Context) *resource.CRUD {
+	if len(ctx) == 0 {
+		ctx = append(ctx, context.Context)
+	}
+	return context.Resource.CrudScheme(ctx[0], context.Scheme)
+}
+
+func (context *Context) WithTransaction(f func()) {
+	defer context.Transaction()()
+	f()
+}
+
+func (context *Context) Transaction(f ...func(commit func())) func() {
+	oldDB := context.GetDB()
+	context.SetDB(context.GetDB().Begin())
+	if len(f) == 0 {
+		return func() {
+			if context.HasError() {
+				context.AddError(context.DB.Rollback().Error)
+			} else {
+				context.AddError(context.DB.Commit().Error)
+			}
+			context.DB = oldDB
+		}
+	}
+	var commit bool
+	defer func() {
+		if !commit {
+			context.AddError(context.DB.Rollback().Error)
+		}
+		context.DB = oldDB
+	}()
+	f[0](func() {
+		if err := context.DB.Commit().Error; err == nil {
+			context.AddError(err)
+			commit = true
+		}
+	})
+	return nil
 }
 
 func ContextFromQorContext(ctx *core.Context) *Context {

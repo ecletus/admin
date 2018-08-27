@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-edis"
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
+	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena/go-edis"
 )
 
 const (
@@ -78,7 +78,7 @@ type Meta struct {
 	baseResource     *Resource
 	EditName         string
 	TemplateData     map[string]interface{}
-	I18nPrefix       string
+	i18nGroup        string
 	Dependency       []interface{}
 	ProxyTo          *Meta
 	Include          bool
@@ -100,10 +100,27 @@ func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
 	return m
 }
 
-func (meta *Meta) SetData(key, value interface{}) {
+func (meta *Meta) I18nGroup(defaul ...bool) string {
+	if len(defaul) > 0 && meta.i18nGroup == "" {
+		return I18NGROUP
+	}
+	return meta.i18nGroup
+}
+
+func (meta *Meta) SetI18nGroup(group string) *Meta {
+	meta.i18nGroup = group
+	return meta
+}
+
+func (meta *Meta) TKey(key string) string {
+	return meta.I18nGroup(true) + ":meta." + meta.Type + "." + key
+}
+
+func (meta *Meta) SetData(key, value interface{}) *Meta {
 	if meta.Data == nil {
 		meta.Data = make(map[interface{}]interface{})
 	}
+	return meta
 }
 
 func (meta *Meta) GetData(key interface{}) (v interface{}, ok bool) {
@@ -141,25 +158,28 @@ func (meta *Meta) Namer() *resource.MetaName {
 	return meta.Meta.Namer()
 }
 
-func (meta *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error) {
+func (meta *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error) *Meta {
 	old := meta.Setter
 	meta.Setter = func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 		return f(meta, old, recorde, metaValue, context)
 	}
+	return meta
 }
 
-func (meta *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{}) {
+func (meta *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{}) *Meta {
 	old := meta.Valuer
 	meta.Valuer = func(recorde interface{}, context *core.Context) interface{} {
 		return f(meta, old, recorde, context)
 	}
+	return meta
 }
 
-func (meta *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{}) {
+func (meta *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{}) *Meta {
 	old := meta.FormattedValuer
 	meta.FormattedValuer = func(recorde interface{}, context *core.Context) interface{} {
 		return f(meta, old, recorde, context)
 	}
+	return meta
 }
 
 func (meta *Meta) SetValuer(f func(recorde interface{}, context *core.Context) interface{}) {
@@ -172,11 +192,12 @@ func (meta *Meta) SetFormattedValuer(f func(recorde interface{}, context *core.C
 	meta.Meta.SetFormattedValuer(f)
 }
 
-func (meta *Meta) NewEnabled(f func(old MetaEnabled, recorde interface{}, context *Context, meta *Meta) bool) {
+func (meta *Meta) NewEnabled(f func(old MetaEnabled, recorde interface{}, context *Context, meta *Meta) bool) *Meta {
 	old := meta.Enabled
 	meta.Enabled = func(recorde interface{}, context *Context, meta *Meta) bool {
 		return f(old, recorde, context, meta)
 	}
+	return meta
 }
 
 func (meta *Meta) GetType(record interface{}, context *Context) string {
@@ -197,17 +218,11 @@ func (meta *Meta) GetLabelPair() (string, string) {
 		return meta.baseResource.GetMeta(meta.EditName).GetLabelPair()
 	}
 
-	prefix := meta.I18nPrefix
-
-	if prefix == "" {
-		prefix = meta.baseResource.I18nPrefix
-	}
-
 	key := meta.Label
 	defaul := meta.DefaultLabel
 
 	if key == "" {
-		key = fmt.Sprintf("%v.attributes.%v", prefix, name)
+		key = fmt.Sprintf("%v.attributes.%v", meta.baseResource.I18nPrefix, name)
 	}
 
 	if meta.SkipDefaultLabel {

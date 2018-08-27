@@ -3,14 +3,21 @@ package admin
 import (
 	"strings"
 
+	"github.com/aghape/core/resource"
+
 	"github.com/aghape/core"
 	"github.com/aghape/roles"
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-edis"
 )
 
+type SchemeDispatcher struct {
+	edis.EventDispatcher
+	Scheme *Scheme
+}
+
 type Scheme struct {
-	EventDispatcher edis.EventDispatcher
+	EventDispatcher *SchemeDispatcher
 	SchemeName      string
 	Resource        *Resource
 	indexSections   []*Section
@@ -25,6 +32,24 @@ type Scheme struct {
 
 	scopes  []*Scope
 	filters map[string]*Filter
+}
+
+func NewScheme(res *Resource, name string) *Scheme {
+	s := &Scheme{
+		Resource:   res,
+		SchemeName: name,
+		filters:    make(map[string]*Filter),
+	}
+	s.EventDispatcher = &SchemeDispatcher{Scheme: s}
+	return s
+}
+
+func (s *Scheme) OnDBActionE(cb func(e *resource.DBEvent) error, action ...resource.DBActionEvent) (err error) {
+	return resource.OnDBActionE(s.EventDispatcher, cb, action...)
+}
+
+func (s *Scheme) OnDBAction(cb func(e *resource.DBEvent), action ...resource.DBActionEvent) (err error) {
+	return resource.OnDBAction(s.EventDispatcher, cb, action...)
 }
 
 // IndexAttrs set attributes will be shown in the index page

@@ -51,14 +51,17 @@ func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, 
 	case reflect.Slice:
 		values := []interface{}{}
 		for i := 0; i < reflectValue.Len(); i++ {
-			if reflect.Indirect(reflectValue.Index(i)).Kind() == reflect.Struct {
-				if reflectValue.Index(i).Kind() == reflect.Ptr {
-					values = append(values, convertObjectToJSONMap(res, context, reflectValue.Index(i).Interface(), layout))
-				} else {
-					values = append(values, convertObjectToJSONMap(res, context, reflectValue.Index(i).Addr().Interface(), layout))
+			indexValue := reflect.Indirect(reflectValue.Index(i))
+			if k := indexValue.Kind(); k == reflect.Struct || k == reflect.Interface {
+				if k == reflect.Interface {
+					indexValue = reflect.Indirect(indexValue.Elem())
 				}
+				indexValue = indexValue.Addr()
+				values = append(values, convertObjectToJSONMap(res, context, indexValue.Interface(), layout))
 			} else {
-				values = append(values, fmt.Sprint(reflectValue.Index(i).Interface()))
+				k := indexValue.Kind()
+				println(k)
+				values = append(values, fmt.Sprint(indexValue.Interface()))
 			}
 		}
 		return values
@@ -73,7 +76,10 @@ func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, 
 			if meta.Resource != nil && (meta.FieldStruct != nil && meta.FieldStruct.Relationship != nil && (meta.FieldStruct.Relationship.Kind == "has_one" || meta.FieldStruct.Relationship.Kind == "has_many" || meta.Type == "single_edit" || meta.Type == "collection_edit")) {
 				values[metaNames[i].GetEncodedNameOrDefault()] = convertObjectToJSONMap(meta.Resource, context, context.RawValueOf(value, meta), layout)
 			} else {
-				values[metaNames[i].GetEncodedNameOrDefault()] = context.FormattedValueOf(value, meta)
+				formattedValue := context.FormattedValueOf(value, meta)
+				if meta.ForceShowZero || !meta.IsZero(value, formattedValue) {
+					values[metaNames[i].GetEncodedNameOrDefault()] = formattedValue
+				}
 			}
 		}
 		return values

@@ -3,6 +3,8 @@ package admin
 import (
 	"strings"
 
+	"github.com/aghape/core/utils"
+
 	"github.com/aghape/core/resource"
 
 	"github.com/aghape/core"
@@ -10,6 +12,8 @@ import (
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-edis"
 )
+
+const E_SCHEME_ADDED = "schemeAdded"
 
 type SchemeDispatcher struct {
 	edis.EventDispatcher
@@ -19,6 +23,7 @@ type SchemeDispatcher struct {
 type Scheme struct {
 	EventDispatcher *SchemeDispatcher
 	SchemeName      string
+	SchemeParam     string
 	Resource        *Resource
 	indexSections   []*Section
 	newSections     []*Section
@@ -30,15 +35,94 @@ type Scheme struct {
 
 	SearchHandler func(keyword string, context *core.Context) *aorm.DB
 
-	scopes  []*Scope
-	filters map[string]*Filter
+	scopes             []*Scope
+	filters            map[string]*Filter
+	Categories         []string
+	parentScheme       *Scheme
+	Children           map[string]*Scheme
+	Crumbs             core.BreadcrumberFunc
+	DefaultFilters     []func(context *core.Context, db *aorm.DB) *aorm.DB
+	i18nKey            string
+	NotMount           bool
+	handler            *RouteHandler
+	PrepareContextFunc func(ctx *core.Context)
+}
+
+func (s *Scheme) SetI18nKey(key string) *Scheme {
+	s.i18nKey = key
+	return s
+}
+
+func (s *Scheme) I18nKey() string {
+	if s.i18nKey != "" {
+		return s.i18nKey
+	}
+	return s.Resource.I18nPrefix + ".schemes." + s.SchemeName
+}
+
+func (s *Scheme) DefaultFilter(fns ...func(context *core.Context, db *aorm.DB) *aorm.DB) {
+	s.DefaultFilters = append(s.DefaultFilters, fns...)
+}
+
+func (s *Scheme) ApplyDefaultFilters(context *core.Context) *core.Context {
+	if s.DefaultFilters == nil {
+		return context
+	}
+	context = context.Clone()
+	db := context.DB
+	for _, df := range s.DefaultFilters {
+		db = df(context, db)
+	}
+	context.SetDB(db)
+	return context
+}
+
+func (s *Scheme) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
+	if s == s.Resource.Scheme {
+		return
+	}
+	if s.Crumbs != nil {
+		return s.Crumbs(ctx)
+	}
+	crumbs = append(crumbs, core.NewBreadcrumb(s.Resource.GetIndexURI(), s.I18nKey()))
+	return
+}
+
+func (s *Scheme) Path() string {
+	if s.parentScheme != nil && s.parentScheme.parentScheme != nil {
+		return s.parentScheme.Path() + "/" + s.SchemeParam
+	}
+	return "/" + s.SchemeParam
+}
+
+func (s *Scheme) GetScheme(param string) (child *Scheme, ok bool) {
+	if param == "" {
+		return s, true
+	}
+
+	parts := strings.Split(param, ".")
+
+	if parts[0] == "" {
+		parts = parts[1:]
+	}
+
+	for _, p := range parts {
+		if s.Children == nil {
+			return nil, false
+		}
+		if s, ok = s.Children[p]; !ok {
+			return nil, false
+		}
+	}
+	return s, true
 }
 
 func NewScheme(res *Resource, name string) *Scheme {
 	s := &Scheme{
-		Resource:   res,
-		SchemeName: name,
-		filters:    make(map[string]*Filter),
+		Resource:    res,
+		SchemeName:  name,
+		filters:     make(map[string]*Filter),
+		SchemeParam: utils.ToParamString(name),
 	}
 	s.EventDispatcher = &SchemeDispatcher{Scheme: s}
 	return s
@@ -273,6 +357,8 @@ func (s *Scheme) ContextSections(context *Context, recorde interface{}, action .
 	var actio ContextType
 	if len(action) > 0 && action[0] != "" {
 		actio = ContextType(action[0])
+	} else {
+		actio = context.Type
 	}
 	switch actio {
 	case NEW:
@@ -285,4 +371,60 @@ func (s *Scheme) ContextSections(context *Context, recorde interface{}, action .
 		return s.IndexSections(context)
 	}
 	return nil
+}
+
+func (s *Scheme) Parents() (parents []*Scheme) {
+	p := s.parentScheme
+	for p != nil {
+		parents = append(parents, p)
+		p = p.parentScheme
+	}
+	l := len(parents)
+	for i := l/2 - 1; i >= 0; i-- {
+		opp := l - 1 - i
+		parents[i], parents[opp] = parents[opp], parents[i]
+	}
+	return
+}
+
+func (s *Scheme) PrepareContext(ctx *core.Context) {
+	for _, p := range s.Parents() {
+		if p.PrepareContextFunc != nil {
+			p.PrepareContextFunc(ctx)
+		}
+	}
+
+	if s.PrepareContextFunc != nil {
+		s.PrepareContextFunc(ctx)
+	}
+}
+
+func (s *Scheme) AddChild(name string, setup ...func(s *Scheme)) *Scheme {
+	child := NewScheme(s.Resource, name)
+	child.parentScheme = s
+
+	if s.Children == nil {
+		s.Children = map[string]*Scheme{}
+	}
+	if len(setup) > 0 {
+		setup[0](child)
+	}
+
+	if !child.NotMount {
+		child.handler = s.Resource.IndexHandler().Child()
+		child.Resource.Router.Get(child.Path(), child.handler)
+	}
+
+	s.Children[child.SchemeParam] = child
+	s.Resource.triggerSchemeAdded(s)
+	return child
+}
+
+func (s *Scheme) IndexIntersept(interseptor func(chain *Chain)) {
+	s.Resource.IndexHandler().Intercept(interseptor)
+}
+
+type SchemeEvent struct {
+	edis.EventInterface
+	Scheme *Scheme
 }

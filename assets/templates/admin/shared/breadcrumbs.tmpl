@@ -1,6 +1,6 @@
 <div class="qor-breadcrumbs mdl-layout__header qor-page-subnav__header">
     <nav>
-{{t "layout.breadcrumb.you_are_here" "You are here:"}}
+{{t "github_com:aghape:admin:layout.breadcrumb.you_are_here"}}
 {{range crumbs}}
     {{$icon := .Icon}}
     <a href="{{.URI qor_context}}">{{if $icon}}<i class="material-icons"{{if (contains $icon "/")}} style="background-position-y:bottom;background-image: url('{{$icon}}');background-repeat:no-repeat;background-size:contain"> {{else}}>{{$icon}}{{end}}</i> {{end}}{{t .Label}}</a>

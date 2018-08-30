@@ -1,10 +1,13 @@
+{{$tabs := (admin_tabs .Context.Data)}}
+{{if $tabs}}
 {{$res := .Resource}}
 {{$context := .Context}}
-{{$currentTab := (admin_tab (.Context.Data))}}
+{{$currentTab := (admin_tab .Context.Data)}}
 <div class="qor-actions mdl-layout__header qor-page-subnav__header">
     <div class="mdl-layout__tab-bar mdl-layout__tab-bar-container">
-    {{range $tab := ((admin_tabs $res.Data).Tabs)}}
+    {{range $tab := $tabs}}
         <a class="mdl-layout__tab{{if (eq $currentTab.Path $tab.Path)}} is-active{{end}}" href="{{$tab.URL $res $context}}">{{t $tab.TitleKey $tab.Title}}</a>
     {{end}}
     </div>
 </div>
+{{end}}

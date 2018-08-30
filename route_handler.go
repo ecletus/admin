@@ -3,16 +3,16 @@ package admin
 import (
 	"net/http"
 
-	"github.com/moisespsena/go-route"
 	"github.com/aghape/core"
 	"github.com/aghape/roles"
+	"github.com/moisespsena/go-route"
 )
 
 var blankPermissionMode roles.PermissionMode
 
 type DataStack struct {
 	Parent *DataStack
-	Map   map[interface{}]interface{}
+	Map    map[interface{}]interface{}
 }
 
 func (d *DataStack) NewChild() DataStack {
@@ -89,9 +89,10 @@ func (c *Chain) Next() {
 }
 
 type RouteHandler struct {
-	Handle       Handler
-	Interseptors []func(chain *Chain)
-	Config       *RouteConfig
+	Handle             Handler
+	ParentInterseptors [][]func(chain *Chain)
+	Interseptors       []func(chain *Chain)
+	Config             *RouteConfig
 }
 
 func (h RouteHandler) Clone() *RouteHandler {
@@ -100,9 +101,22 @@ func (h RouteHandler) Clone() *RouteHandler {
 	h.Config.Data = h.Config.Data.NewChild()
 	return &h
 }
+
+func (h RouteHandler) Child() *RouteHandler {
+	h.ParentInterseptors = append(h.ParentInterseptors, h.Interseptors)
+	h.Interseptors = nil
+	h.Config = &(*h.Config)
+	h.Config.Data = h.Config.Data.NewChild()
+	return &h
+}
 func (h *RouteHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
 	context := ContextFromRouteContext(rctx)
-	NewChain(context, h.Handle, h.Interseptors).Next()
+	var interseptors []func(chain *Chain)
+	for _, p := range h.ParentInterseptors {
+		interseptors = append(interseptors, p...)
+	}
+	interseptors = append(interseptors, h.Interseptors...)
+	NewChain(context, h.Handle, interseptors).Next()
 }
 
 func (h *RouteHandler) Intercept(f ...func(chain *Chain)) {

@@ -3,12 +3,13 @@ package admin
 import (
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
+	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
 )
 
 func configureDefaultLayouts(res *Resource) {
 	defaultLayout := &Layout{
-		Layout: resource.Layout{Type: res.Value},
+		Layout: &resource.Layout{StructValue: resource.NewStructValue(res.Value)},
 		MetasFunc: func(res *Resource, context *Context, record interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName) {
 			metas = res.ConvertSectionToMetas(res.allowedSections(record, res.IndexAttrs(), context, roles...))
 			return
@@ -39,7 +40,7 @@ func configureDefaultLayouts(res *Resource) {
 func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 	res.SetMeta(&Meta{Name: BASIC_META_ID, Valuer: func(r interface{}, context *core.Context) interface{} {
 		if b, ok := r.(resource.BasicValue); ok {
-			return b.BasicID()
+			return b.GetID()
 		}
 		if b, ok := r.(interface {
 			GetID() string
@@ -56,23 +57,17 @@ func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 
 	res.SetMeta(&Meta{Name: BASIC_META_LABEL, Valuer: func(r interface{}, context *core.Context) interface{} {
 		var label string
-		if b, ok := r.(interface {
-			BasicLabel() string
-		}); ok {
+		if b, ok := r.(resource.BasicValue); ok {
 			label = b.BasicLabel()
-		} else if b, ok := r.(interface {
-			Stringify() string
-		}); ok {
-			label = b.Stringify()
+		} else {
+			label = utils.Stringify(r)
 		}
 		return label
 	}})
 
 	res.SetMeta(&Meta{Name: BASIC_META_ICON, Valuer: func(r interface{}, context *core.Context) interface{} {
 		var icon string
-		if b, ok := r.(interface {
-			BasicIcon() string
-		}); ok {
+		if b, ok := r.(resource.BasicValue); ok {
 			icon = b.BasicIcon()
 		} else if b, ok := r.(interface {
 			GetIcon() string
@@ -99,23 +94,25 @@ func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 		metaHTMLNamesWithIcon = append(metaHTMLNames, BASIC_META_ICON)
 	)
 
+	basicLayout := resource.NewBasicLayout()
+
 	res.Layout(BASIC_LAYOUT, &Layout{
-		Layout: defaultLayout.Layout,
+		Layout: basicLayout,
 		Metas:  metaNames,
 	})
 
 	res.Layout(BASIC_LAYOUT_WITH_ICON, &Layout{
-		Layout: defaultLayout.Layout,
+		Layout: basicLayout,
 		Metas:  metaNamesWithIcon,
 	})
 
 	res.Layout(BASIC_LAYOUT_HTML, &Layout{
-		Layout: defaultLayout.Layout,
+		Layout: basicLayout,
 		Metas:  metaHTMLNames,
 	})
 
 	res.Layout(BASIC_LAYOUT_HTML_WITH_ICON, &Layout{
-		Layout: defaultLayout.Layout,
+		Layout: basicLayout,
 		Metas:  metaHTMLNamesWithIcon,
 	})
 }

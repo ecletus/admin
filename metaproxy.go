@@ -19,7 +19,7 @@ func NewMetaFieldProxy(name string, parts []string, to *Meta) *Meta {
 		for _, p := range parts[0 : len(parts)-2] {
 			r = r.FieldByName(p)
 			if !r.IsValid() && r.Type().Implements(serializer.SerializableFieldType) {
-				if ri, ok := r.Interface().(serializer.SerializableField).GetSerializableField(p); ok {
+				if ri, ok := r.Interface().(serializer.SerializableField).GetVirtualField(p); ok {
 					r = reflect.ValueOf(ri)
 				}
 			} else {
@@ -81,11 +81,11 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 			return to.GetMetasFunc()
 		}
 	}
-	if to.ShowRenderIgnore != nil {
-		meta.ShowRenderIgnore = func(recorde, value interface{}) bool {
-			return to.ShowRenderIgnore(record(recorde), value)
+	if to.IsZeroFunc != nil {
+		meta.IsZeroFunc = func(recorde, value interface{}) bool {
+			return to.IsZeroFunc(record(recorde), value)
 		}
 	}
-	meta.ForceShowRender = to.ForceShowRender
+	meta.ForceShowZero = to.ForceShowZero
 	return meta
 }

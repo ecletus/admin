@@ -19,11 +19,19 @@ type Display struct {
 	Label                string
 	GetViewPathsFunc     func() []string
 	ConfigAdminThemeFunc func(*Resource)
+	EnabledFunc          func(ctx *Context) bool
 }
 
 // GetName get name from theme
 func (d *Display) GetName() string {
 	return d.Name
+}
+
+func (d *Display) Enabled(ctx *Context) bool {
+	if d.EnabledFunc != nil {
+		return d.EnabledFunc(ctx)
+	}
+	return true
 }
 
 // GetViewPaths get view paths from theme

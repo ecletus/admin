@@ -58,7 +58,6 @@ type Searcher struct {
 	Pagination    Pagination
 	CurrentScopes ImmutableScopes
 	Layout        string
-	Fragment      *Fragment
 }
 
 func (s *Searcher) DefaulLayout(layout ...string) {
@@ -143,10 +142,6 @@ func (s *Searcher) FindMany() (interface{}, error) {
 
 	if context.HasError() {
 		return nil, context.Errors
-	}
-
-	if s.Fragment != nil {
-		context.SetDB(s.Fragment.Filter(context.GetDB()))
 	}
 
 	return s.Resource.CrudScheme(context, s.Scheme).FindManyLayoutOrDefault(s.Layout)
@@ -266,8 +261,13 @@ func (s *Searcher) FilterRawPairs(args ...string) *Searcher {
 func (s *Searcher) parseContext() *core.Context {
 	var (
 		searcher = s.clone()
-		context  = s.Resource.ApplyDefaultFilters(searcher.Context.Context)
+		context  = searcher.Context.Context
 	)
+
+	if s.Scheme == nil {
+		s.Scheme = s.Resource.Scheme
+	}
+	context = s.Scheme.ApplyDefaultFilters(context)
 
 	if context != nil && context.Request != nil {
 		// parse scopes
@@ -276,13 +276,14 @@ func (s *Searcher) parseContext() *core.Context {
 		searcher = searcher.FilterFromParams(context.Request.Form, context.Request.MultipartForm)
 	}
 
+	s.Scheme.PrepareContext(context)
 	searcher.callScopes(context)
 
 	db := context.DB
 
 	// pagination
 	context.DB = db.Model(s.Resource.Value).Set("qor:getting_total_count", true)
-	if err := s.Resource.Crud(context).SetLayoutOrDefault(s.Layout).FindMany(&s.Pagination.Total); err != nil {
+	if err := s.Resource.CrudScheme(context, s.Scheme).SetLayoutOrDefault(s.Layout).FindMany(&s.Pagination.Total); err != nil {
 		context.AddError(err)
 		return context
 	}

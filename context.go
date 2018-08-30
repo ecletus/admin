@@ -128,8 +128,15 @@ func (context *Context) WithResource(res *Resource, value interface{}) func() {
 	}
 
 	context.ResourceID,
-		context.ParentResourceID, context.Resource, context.Searcher, context.DB, context.Result, context.Scheme = "",
-		[]string{}, res, context.NewSearcher(), newDB, value, res.Scheme
+		context.ParentResourceID, context.Resource, context.Searcher, context.DB, context.Result = "",
+		[]string{}, res, context.NewSearcher(), newDB, value
+
+	if scheme == nil {
+		context.Scheme = res.Scheme
+	} else if scheme.Resource != res {
+		context.Scheme = res.Scheme
+	}
+
 	if value != nil {
 		context.ResourceID = res.GetKey(value)
 	}
@@ -329,6 +336,7 @@ func (context *Context) clone() *Context {
 		Context:      context.Context,
 		Searcher:     context.Searcher,
 		Resource:     context.Resource,
+		Scheme:       context.Scheme,
 		ResourceType: context.ResourceType,
 		Admin:        context.Admin,
 		Result:       context.Result,
@@ -385,13 +393,24 @@ func (context *Context) NewSearcher() *Searcher {
 func (context *Context) setResource(res *Resource, recorde ...interface{}) *Context {
 	if res != nil {
 		context.Resource = res
-		context.Scheme = res.Scheme
+		if context.Scheme == nil || (context.Scheme != nil && context.Scheme.Resource != res) {
+			context.Scheme = res.Scheme
+		}
 		if len(recorde) == 1 && recorde[1] != nil {
 			context.ResourceID = res.GetKey(recorde)
 		} else {
 			context.ResourceID = context.URLParam(res.ParamIDName())
 		}
 	}
+	context.Searcher = context.NewSearcher()
+	return context
+}
+
+func (context *Context) setResourceFromCrumber(crumber *ResourceCrumber) *Context {
+	context.Resource = crumber.Resource
+	context.ResourceID = crumber.ID
+	context.ParentResourceID = crumber.ParentID
+	context.Scheme = crumber.Resource.Scheme
 	context.Searcher = context.NewSearcher()
 	return context
 }
@@ -612,6 +631,11 @@ func (context *Context) Execute(name string, result interface{}) {
 	}
 
 	if name == "show" && !context.Resource.isSetShowAttrs {
+		oldType := context.Type
+		defer func() {
+			context.Type = oldType
+		}()
+		context.Type = EDIT
 		name = "edit"
 	}
 

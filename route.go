@@ -6,12 +6,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/moisespsena/go-route"
-	"github.com/moisespsena/go-topsort"
 	"github.com/aghape/auth"
 	"github.com/aghape/common"
 	"github.com/aghape/core"
 	"github.com/aghape/roles"
+	"github.com/moisespsena/go-route"
 )
 
 type Interseptor func(w http.ResponseWriter, req *http.Request, serv func(w http.ResponseWriter, req *http.Request))
@@ -203,66 +202,55 @@ func (admin *Admin) NewServeMux(name ...string) *route.Mux {
 
 				resourceParam := strings.TrimSuffix(patterns[0][1:], "/*")
 				res := admin.GetResourceByParam(resourceParam)
+
 				if res == nil {
 					chain.Pass()
 					return
 				}
 
+				resCrumber := &ResourceCrumber{Resource: res}
+				var lastScheme *Scheme
+				crubers := []core.Breadcrumber{resCrumber}
+				context := ContextFromChain(chain)
+
 				for i, l := 1, len(patterns); i < l; i += 2 {
 					// id pattern
-					idPattern := "/" + res.ParamIDPattern() + "/*"
+					idPattern := "/" + res.ParamIDPattern()
 					pattern := patterns[i]
-					if pattern != idPattern {
+					if !strings.HasPrefix(pattern, idPattern) {
+						schemePath := strings.Replace(pattern[1:], "/", ".", -1)
+						if scheme, ok := res.GetScheme(schemePath); ok {
+							crubers = append(crubers, scheme)
+							lastScheme = scheme
+							continue
+						}
 						break
 					}
+
+					resCrumber.ID = context.URLParam(res.ParamIDName())
 					resourceParam := strings.TrimSuffix(patterns[i+1][1:], "/*")
 					subRes := res.GetResourceByParam(resourceParam)
 					if subRes != nil {
+						if subRes.Config.Singleton {
+							resCrumber = &ResourceCrumber{Resource: subRes, ParentID: append(resCrumber.ParentID, resCrumber.ID), ID: resCrumber.ID}
+						} else {
+							resCrumber = &ResourceCrumber{Resource: subRes, ParentID: append(resCrumber.ParentID, resCrumber.ID)}
+						}
 						res = subRes
+						crubers = append(crubers, resCrumber)
 					}
 				}
 
-				context := ContextFromChain(chain)
-				context.setResource(res)
-
-				if context.URLParams().Size > 0 {
-					var parentIds []string
-					var parents []*Resource
-					p := res.ParentResource
-
-					for p != nil {
-						parents = append(parents, p)
-						key := p.ParamIDName()
-						id := context.URLParam(key)
-						parentIds = append(parentIds, id)
-						p = p.ParentResource
+				if resCrumber != nil {
+					context.setResourceFromCrumber(resCrumber)
+					if lastScheme != nil && lastScheme.Resource == resCrumber.Resource {
+						context.Scheme = lastScheme
 					}
+				}
 
-					context.ResourceID = context.URLParam(res.ParamIDName())
-					db := context.Top().DB
-					var ids []string
-					for i, id := range parentIds {
-						p = parents[i]
-						uri := p.GetContextIndexURI(context.Context, ids...)
-						context.Breadcrumbs().Append(core.NewBreadcrumb(uri, p.GetLabelKey(true), ""))
-						model, err := p.CrudDB(db).FindOneBasic(id)
-
-						if err != nil {
-							panic(err)
-						}
-
-						uri = p.GetContextURI(context.Context, id, ids...)
-						context.Breadcrumbs().Append(core.NewBreadcrumb(uri, model.BasicLabel(), model.BasicIcon()))
-						ids = append(ids, id)
-					}
-
-					if context.ResourceID != "" {
-						uri := res.GetContextIndexURI(context.Context, ids...)
-						context.Breadcrumbs().Append(core.NewBreadcrumb(uri, res.GetLabelKey(true), ""))
-					}
-
-					topsort.Reverse(parentIds)
-					context.ParentResourceID = parentIds
+				contextCrumbs := context.Breadcrumbs()
+				for _, crumber := range crubers {
+					contextCrumbs.Append(crumber.Breadcrumbs(context.Context)...)
 				}
 
 				chain.Pass()

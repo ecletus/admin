@@ -239,7 +239,7 @@ func (ac *Controller) Update(context *Context) {
 						if f.IsValid() {
 							newResult[key] = f.Interface()
 						} else if gsf, ok := result.(serializer.SerializableField); ok {
-							if value, ok := gsf.GetSerializableField(key); ok {
+							if value, ok := gsf.GetVirtualField(key); ok {
 								newResult[key] = value
 							}
 						}

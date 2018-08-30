@@ -1,7 +1,7 @@
 {{$current_value := (raw_value_of .ResourceValue .Meta)}}
 {{$is_existing_record := (not (is_new_record $current_value))}}
 
-{{if not (and (not $is_existing_record) (.Context.Is "show"))}}
+{{if (or $is_existing_record (.Context.Is "edit"))}}
 <div class="qor-field">
   <label class="qor-field__label" for="{{.InputId}}">
     {{meta_label .Meta}}

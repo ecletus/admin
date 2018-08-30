@@ -16,6 +16,7 @@ import (
 )
 
 var NotFragmentableError = errors.New("Not fragmentable")
+var FRAGMENT_KEY = PKG + ".fragment"
 
 type Fragments struct {
 	Sorted       []string
@@ -113,6 +114,40 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 		a, b := f.Fragments[f.Sorted[i]], f.Fragments[f.Sorted[j]]
 		return a.Config.Priority < b.Config.Priority || b.Resource.Name < b.Resource.Name
 	})
+
+	if fr.Config.Is {
+		var param []string
+		super := fr.Resource
+		for super.Fragment != nil {
+			param = append(param, utils.ToParamString(super.PluralName))
+			super = super.ParentResource
+		}
+		vf := res.ParentResource.FakeScope.SetVirtualField(res.Name, res.Value)
+		vf.Setter = func(recorde, value interface{}) {
+			recorde.(fragment.FragmentedModelInterface).SetFormFragment(fr.ID, value.(fragment.FormFragmentModelInterface))
+		}
+		vf.Getter = func(recorde interface{}) (value interface{}, ok bool) {
+			v := recorde.(fragment.FragmentedModelInterface).GetFormFragment(fr.ID)
+			return v, v != nil
+		}
+		fr.isURI = "/" + strings.Join(param, "/")
+		res.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
+			return db.AutoInlinePreload(res.Value)
+		})
+		super.Scheme.AddChild(fr.ID, func(s *Scheme) {
+			s.Categories = []string{"fragment"}
+			s.SetI18nKey(res.PluralLabelKey())
+			s.SchemeParam = utils.ToParamString(res.PluralName)
+			s.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
+				db = db.InlinePreload(res.Name, aorm.IPO_INNER_JOIN)
+				return fr.Filter(db)
+			})
+			fr.scheme = s
+			if fr.Config.SchemeSetup != nil {
+				fr.Config.SchemeSetup(s)
+			}
+		})
+	}
 
 	return fr
 }
@@ -217,14 +252,15 @@ type FragmentCategoryConfig struct {
 }
 
 type FragmentConfig struct {
-	Config    *Config
-	NotInline bool
-	Priority  int
-	Category  *FragmentCategoryConfig
-	IsLabel   string
-	Is        bool
-	Enabled   func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
-	Available func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
+	Config      *Config
+	NotInline   bool
+	Priority    int
+	Category    *FragmentCategoryConfig
+	IsLabel     string
+	Is          bool
+	Enabled     func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
+	Available   func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
+	SchemeSetup func(s *Scheme)
 }
 
 func (fc *FragmentConfig) Inline() bool {
@@ -264,11 +300,6 @@ func (f *Fragment) BaseResource() *Resource {
 	return baseResource
 }
 
-func (f *Fragment) CreateScheme() *Scheme {
-	f.scheme = f.BaseResource().RegisterScheme(f.ID)
-	return f.scheme
-}
-
 func (f *Fragment) Build() {
 	if f.fieldsCount > 0 {
 		return
@@ -286,30 +317,6 @@ func (f *Fragment) Build() {
 	if f.Resource.Fragments != nil {
 		f.Resource.Fragments.Build()
 		f.fieldsCount += f.Resource.Fragments.columnsCount
-	}
-
-	if f.Config.Is {
-		var param []string
-		super := f.Resource
-		for super.Fragment != nil {
-			param = append(param, utils.ToParamString(super.PluralName))
-			super = super.ParentResource
-		}
-		f.isURI = "/" + strings.Join(param, "/")
-
-		index := super.Router.FindHandler("GET", P_INDEX).(*RouteHandler)
-		newIndex := index.Clone()
-		newIndex.Intercept(func(chain *Chain) {
-			uri := chain.Context.Resource.GetContextIndexURI(chain.Context.Context)
-			chain.Context.Breadcrumbs().Append(core.NewBreadcrumb(uri, chain.Context.Resource.PluralLabelKey(), ""))
-			chain.Context.PageTitle = f.Resource.PluralLabelKey()
-			if f.scheme != nil {
-				chain.Context.Scheme = f.scheme
-			}
-			chain.Pass()
-		})
-		super.Router.Get(f.isURI, newIndex)
-		// create with
 	}
 }
 
@@ -406,7 +413,7 @@ func (f *Fragment) Join(DB *aorm.DB) *aorm.DB {
 func (f *Fragment) Filter(DB *aorm.DB) *aorm.DB {
 	super := f
 	for super != nil {
-		DB = DB.Where(super.QTN + ".fragment_enabled")
+		DB = DB.Where(aorm.IQ("{" + f.ID + "}.fragment_enabled"))
 		super = super.Resource.ParentResource.Fragment
 	}
 	return DB

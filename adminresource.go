@@ -212,6 +212,12 @@ func (admin *Admin) NewResourceConfig(value interface{}, cfg *Config) *Resource 
 	if res.Config.Setup != nil {
 		res.Config.Setup(res)
 	}
+	res.initializeLayouts()
+	for _, cb := range res.afterRegister {
+		cb()
+	}
+	res.afterRegister = nil
+	res.registered = true
 	err := admin.TriggerResource(&ResourceEvent{edis.NewEvent(E_RESOURCE_ADDED), res, false})
 	if err != nil {
 		panic(errwrap.Wrap(err, "Trigger Resource Added"))
@@ -256,6 +262,12 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 	if res.Config.Setup != nil {
 		res.Config.Setup(res)
 	}
+	res.initializeLayouts()
+	for _, cb := range res.afterRegister {
+		cb()
+	}
+	res.afterRegister = nil
+	res.registered = true
 
 	admin.triggerResourceAdded(res)
 

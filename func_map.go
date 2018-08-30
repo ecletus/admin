@@ -15,17 +15,17 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/moisespsena-go/aorm"
-	"github.com/jinzhu/inflection"
-	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-assetfs/api"
-	"github.com/moisespsena/template/funcs"
-	"github.com/moisespsena/template/html/template"
 	"github.com/aghape/common"
 	"github.com/aghape/core"
 	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
 	"github.com/aghape/session"
+	"github.com/jinzhu/inflection"
+	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena/template/funcs"
+	"github.com/moisespsena/template/html/template"
 )
 
 var TemplateExecutorMetaValue *template.Executor
@@ -43,10 +43,10 @@ func init() {
 func (context *Context) NewResourceContext(name ...interface{}) *Context {
 	clone := &Context{
 		Context: context.Context.Clone(),
-		Admin: context.Admin,
-		Result: context.Result,
-		Action: context.Action,
-		Type: context.Type,
+		Admin:   context.Admin,
+		Result:  context.Result,
+		Action:  context.Action,
+		Type:    context.Type,
 	}
 
 	if len(name) > 0 {
@@ -221,9 +221,6 @@ func (context *Context) renderSections(value interface{}, sections []*Section, p
 			columnsHTML := bytes.NewBufferString("")
 			var exclude int
 			for _, col := range column {
-				if col == "A" {
-					println()
-				}
 				meta := section.Resource.GetMeta(col)
 				if meta != nil {
 					if meta.Enabled == nil || meta.Enabled(value, context, meta) {
@@ -300,32 +297,18 @@ func (context *Context) renderFilter(filter *Filter) template.HTML {
 
 func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []string, metaType string, writer *bytes.Buffer) {
 	var (
-		err        error
-		funcsMap   = funcs.FuncMap{}
-		executor   *template.Executor
-		dataValue  = context.FormattedValueOf(value, meta)
-		showAction = context.Action == "show"
+		err            error
+		funcsMap       = funcs.FuncMap{}
+		executor       *template.Executor
+		formattedValue = context.FormattedValueOf(value, meta)
+		show           = context.Type == SHOW
 	)
-	if showAction && !meta.ForceShowRender {
-		if dataValue == nil {
+	if show && !meta.ForceShowZero {
+		if formattedValue == nil {
 			return
 		}
-		if meta.ShowRenderIgnore != nil && meta.ShowRenderIgnore(value, dataValue) {
+		if meta.IsZero(value, formattedValue) {
 			return
-		}
-		switch vt := dataValue.(type) {
-		case string:
-			if vt == "" {
-				return
-			}
-		case int, uint, uint8, uint16, uint32, uint64:
-			if vt == 0 {
-				return
-			}
-		case float32, float64:
-			if vt == 0.0 {
-				return
-			}
 		}
 	}
 
@@ -425,7 +408,7 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 			"BaseResource":  meta.baseResource,
 			"Meta":          meta,
 			"ResourceValue": value,
-			"Value":         dataValue,
+			"Value":         formattedValue,
 			"Label":         meta.Label,
 			"InputName":     strings.Join(prefix, "."),
 		}
@@ -526,7 +509,11 @@ func (context *Context) getResource(resources ...*Resource) *Resource {
 
 func (context *Context) indexSections(resources ...*Resource) []*Section {
 	res := context.getResource(resources...)
-	return res.allowedSections(nil, res.IndexAttrs(), context, roles.Read)
+	scheme := context.Scheme
+	if scheme == nil {
+		scheme = res.Scheme
+	}
+	return res.allowedSections(nil, scheme.IndexAttrs(), context, roles.Read)
 }
 
 func (context *Context) editSections(res *Resource, record ...interface{}) []*Section {
@@ -1165,13 +1152,15 @@ func (context *Context) pageTitle() template.HTML {
 		return context.t(context.PageTitle)
 	}
 
+	if crumb := context.Breadcrumbs().Last(); crumb != nil {
+		return context.t(crumb.Label())
+	}
+
 	var (
-		defaultValue string
+		defaultValue = context.GetActionLabel()
 		titleKey     = fmt.Sprintf("qor_admin.form.%v.title", context.Action)
 		usePlural    bool
 	)
-
-	defaultValue = context.GetActionLabel()
 
 	if defaultValue == "" {
 		defaultValue = "{{.}}"
@@ -1349,7 +1338,7 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 				return context.Locale
 			},
 			"crumbs": func() []core.Breadcrumb {
-				return context.Breadcrumbs().Items
+				return context.Breadcrumbs().ItemsWithoutLast()
 			},
 			"resource_key": func() string {
 				return context.ResourceID

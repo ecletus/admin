@@ -50,8 +50,8 @@ type MetaEnabled func(recorde interface{}, context *Context, meta *Meta) bool
 // Meta meta struct definition
 type Meta struct {
 	edis.EventDispatcher
-
 	Name              string
+	DB                *aorm.Alias
 	Type              string
 	TypeHandler       func(recorde interface{}, context *Context, meta *Meta) string
 	Enabled           MetaEnabled
@@ -75,17 +75,17 @@ type Meta struct {
 	GetMetasFunc func() []resource.Metaor
 	Collection   interface{}
 	*resource.Meta
-	baseResource     *Resource
-	EditName         string
-	TemplateData     map[string]interface{}
-	i18nGroup        string
-	Dependency       []interface{}
-	ProxyTo          *Meta
-	Include          bool
-	ForceShowRender  bool
-	ShowRenderIgnore func(recorde, value interface{}) bool
-	Fragment         *Fragment
-	Data             map[interface{}]interface{}
+	baseResource  *Resource
+	EditName      string
+	TemplateData  map[string]interface{}
+	i18nGroup     string
+	Dependency    []interface{}
+	ProxyTo       *Meta
+	Include       bool
+	ForceShowZero bool
+	IsZeroFunc    func(recorde, value interface{}) bool
+	Fragment      *Fragment
+	Data          map[interface{}]interface{}
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -604,4 +604,34 @@ func (meta *Meta) updateMeta() {
 			}
 		}
 	}
+}
+
+func (meta *Meta) IsZero(value, formattedValue interface{}) bool {
+	if !meta.ForceShowZero {
+		if formattedValue == nil {
+			return true
+		}
+		if meta.IsZeroFunc != nil {
+			return meta.IsZeroFunc(value, formattedValue)
+		}
+		switch vt := formattedValue.(type) {
+		case string:
+			if vt == "" {
+				return true
+			}
+		case int, uint, uint8, uint16, uint32, uint64:
+			if vt == 0 {
+				return true
+			}
+		case float32:
+			if vt == 0.0 {
+				return true
+			}
+		case float64:
+			if vt == 0.0 {
+				return true
+			}
+		}
+	}
+	return false
 }

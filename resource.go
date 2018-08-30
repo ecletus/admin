@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moisespsena/go-edis"
+
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
@@ -125,7 +127,12 @@ type Resource struct {
 	Fragments          *Fragments
 	Fragment           *Fragment
 	DefaultMenu        *Menu
-	Schemes            map[string]*Scheme
+	registered         bool
+	afterRegister      []func()
+}
+
+func (res *Resource) IndexHandler() *RouteHandler {
+	return res.Router.FindHandler("GET", P_INDEX).(*RouteHandler)
 }
 
 func (res *Resource) OnDBActionE(cb func(e *resource.DBEvent) error, action ...resource.DBActionEvent) (err error) {
@@ -878,7 +885,11 @@ func (res *Resource) MetasFromLayoutContext(layout string, context *Context, val
 
 func (res *Resource) BasicValue(record interface{}) resource.BasicValue {
 	metaId, metaLabel, metaIcon := res.MetasByName[BASIC_META_ID], res.MetasByName[BASIC_META_LABEL], res.MetasByName[BASIC_META_ICON]
-	return &resource.Basic{metaId.Valuer(record, nil).(string), metaLabel.Valuer(record, nil).(string), metaIcon.Valuer(record, nil).(string)}
+	return &resource.Basic{
+		metaId.GetFormattedValuer()(record, nil).(string),
+		metaLabel.GetFormattedValuer()(record, nil).(string),
+		metaIcon.GetFormattedValuer()(record, nil).(string),
+	}
 }
 
 func (res *Resource) MountTo(param string) *Resource {
@@ -1139,16 +1150,6 @@ func (res *Resource) configure() {
 	})
 }
 
-func (res *Resource) ApplyDefaultFilters(context *core.Context) *core.Context {
-	context = context.Clone()
-	db := context.DB
-	for _, df := range res.DefaultFilters {
-		db = df(context, db)
-	}
-	context.SetDB(db)
-	return context
-}
-
 // GetResources get defined resources from admin
 func (res *Resource) GetResources() (resources []*Resource) {
 	for _, r := range res.Resources {
@@ -1225,9 +1226,7 @@ func (res *Resource) CrudScheme(ctx *core.Context, scheme interface{}) *resource
 	s := res.Scheme
 	switch st := scheme.(type) {
 	case string:
-		if st != "" {
-			s = res.Schemes[st]
-		}
+		s, _ = res.GetScheme(st)
 	default:
 		if scheme != nil {
 			s = scheme.(*Scheme)
@@ -1240,11 +1239,11 @@ func (res *Resource) CrudSchemeDB(db *aorm.DB, scheme interface{}) *resource.CRU
 	s := res.Scheme
 	switch st := scheme.(type) {
 	case string:
-		if st != "" {
-			s = res.Schemes[st]
-		}
+		s, _ = res.GetScheme(st)
 	default:
-		s = scheme.(*Scheme)
+		if scheme != nil {
+			s = scheme.(*Scheme)
+		}
 	}
 	return res.CrudDB(db).Dispatcher(s.EventDispatcher)
 }
@@ -1262,23 +1261,30 @@ func (res *Resource) SetParentResource(parent *Resource, fieldName string) {
 	res.ParentResource = parent
 }
 
-func (res *Resource) RegisterScheme(name string) *Scheme {
-	s := NewScheme(res, name)
-	if res.Schemes == nil {
-		res.Schemes = map[string]*Scheme{}
+func (res *Resource) RegisterScheme(name string, setup ...func(s *Scheme)) *Scheme {
+	f := func() *Scheme {
+		return res.Scheme.AddChild(name, setup...)
 	}
-	res.Schemes[name] = s
-	return s
+	if res.registered {
+		return f()
+	}
+	res.afterRegister = append(res.afterRegister, func() {
+		f()
+	})
+	return nil
 }
 
-func (res *Resource) GetScheme(name string) (s *Scheme, ok bool) {
-	s, ok = res.Schemes[name]
-	return
+func (res *Resource) triggerSchemeAdded(s *Scheme) {
+	s.Resource.Trigger(&SchemeEvent{edis.NewEvent(E_SCHEME_ADDED), s})
 }
 
 func (res *Resource) HasScheme(name string) bool {
-	_, ok := res.Schemes[name]
+	_, ok := res.GetScheme(name)
 	return ok
+}
+
+func (res *Resource) DefaultFilter(fns ...func(context *core.Context, db *aorm.DB) *aorm.DB) {
+	res.Scheme.DefaultFilter(fns...)
 }
 
 func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cfg *FragmentConfig) *Resource {
@@ -1327,7 +1333,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 					if context.Type == SHOW {
 						return false
 					}
-					return recorde != nil
+					return true
 				}
 			} else {
 				meta.SkipDefaultLabel = true
@@ -1426,7 +1432,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 			return nil
 		}, resource.E_DB_ACTION_SAVE.After())
 
-		res.OnDBActionE(func(e *resource.DBEvent) (err error) {
+		res.Scheme.OnDBActionE(func(e *resource.DBEvent) (err error) {
 			context := e.Context
 			if v := context.Data().Get("skip.fragments"); v == nil {
 				DB := context.DB
@@ -1441,6 +1447,22 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 			}
 			return nil
 		}, resource.BEFORE|resource.E_DB_ACTION_FIND_MANY|resource.E_DB_ACTION_FIND_ONE)
+
+		/*res.OnDBActionE(func(e *resource.DBEvent) (err error) {
+			context := e.Context
+			if v := context.Data().Get("skip.fragments"); v == nil {
+				DB := context.DB
+				fields, query := res.Fragments.Fields(), res.Fragments.Query()
+				DB = DB.ExtraSelectFieldsSetter(
+					PKG+".fragments",
+					func(result interface{}, values []interface{}, set func(result interface{}, low, hight int) interface{}) {
+						res.Fragments.ExtraFieldsScan(result.(fragment.FragmentedModelInterface), values, set)
+					}, fields, query)
+				DB = res.Fragments.JoinLeft(DB)
+				context.SetDB(DB)
+			}
+			return nil
+		}, resource.BEFORE|resource.E_DB_ACTION_FIND_MANY|resource.E_DB_ACTION_FIND_ONE)*/
 
 		res.FakeScope.GetModelStruct().BeforeRelatedCallback(func(fromScope *aorm.Scope, toScope *aorm.Scope, DB *aorm.DB, fromField *aorm.Field) *aorm.DB {
 			fields, query := res.Fragments.Fields(), res.Fragments.Query()

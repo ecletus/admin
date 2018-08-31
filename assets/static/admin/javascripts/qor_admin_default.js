@@ -6773,6 +6773,8 @@ $(function () {
         this.init();
     }
 
+    var lock = {lock:false};
+
     QorSelectMany.prototype = {
         constructor: QorSelectMany,
 
@@ -6816,6 +6818,14 @@ $(function () {
         },
 
         openBottomSheets: function (e) {
+            if (lock.lock) {
+                e.preventDefault();
+                return false;
+            }
+
+            lock.lock = true;
+            setTimeout(function () {lock.lock = false}, 1000*3);
+
             let $this = $(e.target),
                 data = $this.data();
 
@@ -7110,6 +7120,8 @@ $(function () {
         return keys[0];
     }
 
+    var lock = {lock: false};
+
     QorSelectOne.prototype = {
         constructor: QorSelectOne,
 
@@ -7152,6 +7164,13 @@ $(function () {
         },
 
         openBottomSheets: function (e) {
+            if (lock.lock) {
+                e.preventDefault();
+                return false;
+            }
+
+            lock.lock = true;
+            setTimeout(function () {lock.lock = false}, 1000*3);
             var $this = $(e.target),
                 data = $this.data();
 

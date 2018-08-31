@@ -44,6 +44,8 @@
     return keys[0];
   }
 
+  var lock = {lock: false};
+
   QorSelectOne.prototype = {
     constructor: QorSelectOne,
 
@@ -86,6 +88,13 @@
     },
 
     openBottomSheets: function(e) {
+      if (lock.lock) {
+          e.preventDefault();
+          return false;
+      }
+
+      lock.lock = true;
+      setTimeout(function () {lock.lock = false}, 1000*3);
       var $this = $(e.target),
         data = $this.data();
 

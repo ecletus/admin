@@ -883,13 +883,12 @@ func (res *Resource) MetasFromLayoutContext(layout string, context *Context, val
 	return
 }
 
-func (res *Resource) BasicValue(record interface{}) resource.BasicValue {
+func (res *Resource) BasicValue(ctx *core.Context, recorde interface{}) resource.BasicValue {
 	metaId, metaLabel, metaIcon := res.MetasByName[BASIC_META_ID], res.MetasByName[BASIC_META_LABEL], res.MetasByName[BASIC_META_ICON]
-	return &resource.Basic{
-		metaId.GetFormattedValuer()(record, nil).(string),
-		metaLabel.GetFormattedValuer()(record, nil).(string),
-		metaIcon.GetFormattedValuer()(record, nil).(string),
-	}
+	id, label, icon := metaId.OutputFormattedValue(ctx, recorde).(string),
+		metaLabel.OutputFormattedValue(ctx, recorde).(string),
+		metaIcon.OutputFormattedValue(ctx, recorde).(string)
+	return &resource.Basic{id, label, icon}
 }
 
 func (res *Resource) MountTo(param string) *Resource {

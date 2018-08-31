@@ -1,3 +1,12 @@
+{{define "new_buttom"}}
+  {{if has_create_permission .Resource}}
+  {{$new_url := (new_resource_path .Resource)}}
+  <a class="mdl-button mdl-button--fab mdl-button--primary qor-button--new" href="{{$new_url}}" data-url="{{$new_url}}">
+      <i class="material-icons">add</i>
+  </a>
+  {{end}}
+{{end}}
+
 <div class="qor-page__header">
   {{$actions := load_actions "index" }}
   {{if $actions}}{{$actions}}{{end}}
@@ -7,16 +16,16 @@
   {{render "shared/flashes"}}
   {{render "shared/errors"}}
 
-  <div class="qor-table-container">
-    {{render "index/table"}}
-  </div>
+  {{if .Result}}
+    <div class="qor-table-container">
+      {{render "index/table"}}
+    </div>
 
-  {{if has_create_permission .Resource}}
-    {{$new_url := (new_resource_path .Resource)}}
-    <a class="mdl-button mdl-button--fab mdl-button--primary qor-button--new" href="{{$new_url}}" data-url="{{$new_url}}">
-      <i class="material-icons">add</i>
-    </a>
+    {{template "new_buttom" .}}
+
+    {{render "index/pagination"}}
+  {{else}}
+    <div style="text-align: center">{{t "github_com:aghape:admin:layouts.no_records_found" "No records found."}}</div>
+    {{template "new_buttom" .}}
   {{end}}
-
-  {{render "index/pagination"}}
 </div>

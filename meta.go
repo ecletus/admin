@@ -43,6 +43,7 @@ type DependencyQuery struct {
 	Param string
 }
 
+type MetaOutputValuer func(context *core.Context, recorde, value interface{}) interface{}
 type MetaValuer func(recorde interface{}, context *core.Context) interface{}
 type MetaSetter func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error
 type MetaEnabled func(recorde interface{}, context *Context, meta *Meta) bool
@@ -75,17 +76,18 @@ type Meta struct {
 	GetMetasFunc func() []resource.Metaor
 	Collection   interface{}
 	*resource.Meta
-	baseResource  *Resource
-	EditName      string
-	TemplateData  map[string]interface{}
-	i18nGroup     string
-	Dependency    []interface{}
-	ProxyTo       *Meta
-	Include       bool
-	ForceShowZero bool
-	IsZeroFunc    func(recorde, value interface{}) bool
-	Fragment      *Fragment
-	Data          map[interface{}]interface{}
+	baseResource          *Resource
+	EditName              string
+	TemplateData          map[string]interface{}
+	i18nGroup             string
+	Dependency            []interface{}
+	ProxyTo               *Meta
+	Include               bool
+	ForceShowZero         bool
+	IsZeroFunc            func(recorde, value interface{}) bool
+	Fragment              *Fragment
+	Data                  map[interface{}]interface{}
+	OutputFormattedValuer MetaOutputValuer
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -178,6 +180,14 @@ func (meta *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde 
 	old := meta.FormattedValuer
 	meta.FormattedValuer = func(recorde interface{}, context *core.Context) interface{} {
 		return f(meta, old, recorde, context)
+	}
+	return meta
+}
+
+func (meta *Meta) NewOutputFormattedValuer(f func(meta *Meta, old MetaOutputValuer, context *core.Context, recorde, value interface{}) interface{}) *Meta {
+	old := meta.OutputFormattedValuer
+	meta.OutputFormattedValuer = func(context *core.Context, recorde, value interface{}) interface{} {
+		return f(meta, old, context, recorde, value)
 	}
 	return meta
 }
@@ -335,7 +345,11 @@ func (meta Meta) HasPermission(mode roles.PermissionMode, context *core.Context)
 	return true
 }
 
-func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer) interface{} {
+func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer, value ...interface{}) interface{} {
+	var v interface{}
+	if len(value) > 0 {
+		v = value[0]
+	}
 	e := &MetaValueEvent{
 		MetaRecordeEvent{
 			MetaEvent{
@@ -345,10 +359,12 @@ func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *core
 				ctx,
 			},
 			recorde,
-		}, valuer, nil, nil, false}
+		}, valuer, v, v, false}
 	meta.Trigger(e)
-	if e.Value == nil && !e.originalValueCalled {
-		return valuer(recorde, ctx)
+	if valuer == nil {
+		if e.Value == nil && !e.originalValueCalled {
+			return valuer(recorde, ctx)
+		}
 	}
 	return e.Value
 }
@@ -371,6 +387,23 @@ func (meta *Meta) GetFormattedValuer() func(interface{}, *core.Context) interfac
 		}
 	}
 	return meta.GetValuer()
+}
+
+// GetOutputFormattedValuer get formatted valuer from meta
+func (meta *Meta) GetOutputFormattedValuer() MetaOutputValuer {
+	return func(context *core.Context, record, formattedValue interface{}) interface{} {
+		var value interface{}
+		if meta.OutputFormattedValuer != nil {
+			value = meta.OutputFormattedValuer(context, record, formattedValue)
+		}
+		return meta.triggerValueEvent(E_META_OUTPUT_FORMATTED_VALUE, record, context, nil, value)
+	}
+}
+
+// OutputFormattedValue get formatted valuer from meta
+func (meta *Meta) OutputFormattedValue(ctx *core.Context, recorde interface{}) interface{} {
+	formattedValue := meta.GetFormattedValuer()(recorde, ctx)
+	return meta.GetOutputFormattedValuer()(ctx, recorde, formattedValue).(string)
 }
 
 func (meta *Meta) updateMeta() {

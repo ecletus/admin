@@ -5,6 +5,7 @@ import (
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
+	"github.com/moisespsena-go/aorm"
 )
 
 func configureDefaultLayouts(res *Resource) {
@@ -39,42 +40,30 @@ func configureDefaultLayouts(res *Resource) {
 
 func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 	res.SetMeta(&Meta{Name: BASIC_META_ID, Valuer: func(r interface{}, context *core.Context) interface{} {
-		if b, ok := r.(resource.BasicValue); ok {
+		if b, ok := r.(aorm.KeyString); ok {
 			return b.GetID()
 		}
-		if b, ok := r.(interface {
-			GetID() string
-		}); ok {
-			return b.GetID()
-		}
-		if b, ok := r.(interface {
-			GetID() int64
-		}); ok {
-			return b.GetID()
-		}
-		return nil
+		return ""
 	}})
 
 	res.SetMeta(&Meta{Name: BASIC_META_LABEL, Valuer: func(r interface{}, context *core.Context) interface{} {
-		var label string
 		if b, ok := r.(resource.BasicValue); ok {
-			label = b.BasicLabel()
-		} else {
-			label = utils.Stringify(r)
+			return b.BasicLabel()
 		}
-		return label
+		return utils.Stringify(r)
 	}})
 
 	res.SetMeta(&Meta{Name: BASIC_META_ICON, Valuer: func(r interface{}, context *core.Context) interface{} {
-		var icon string
-		if b, ok := r.(resource.BasicValue); ok {
-			icon = b.BasicIcon()
-		} else if b, ok := r.(interface {
-			GetIcon() string
-		}); ok {
-			icon = b.GetIcon()
+		switch rt := r.(type) {
+		case resource.IconGetter:
+			return rt.GetIcon()
+		case resource.IconContextGetter:
+			return rt.GetIcon(context)
+		case resource.BasicValue:
+			return rt.BasicIcon()
+		default:
+			return ""
 		}
-		return icon
 	}})
 
 	res.SetMeta(&Meta{Name: BASIC_META_HTML, Valuer: func(r interface{}, context *core.Context) interface{} {

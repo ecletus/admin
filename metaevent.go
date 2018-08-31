@@ -1,14 +1,15 @@
 package admin
 
 import (
-	"github.com/moisespsena/go-edis"
 	"github.com/aghape/core"
+	"github.com/moisespsena/go-edis"
 )
 
 const (
 	// Meta events
-	E_META_VALUE           = "value"
-	E_META_FORMATTED_VALUE = "formattedValue"
+	E_META_VALUE                  = "value"
+	E_META_FORMATTED_VALUE        = "formattedValue"
+	E_META_OUTPUT_FORMATTED_VALUE = "outputFormattedValue"
 )
 
 type MetaEvent struct {

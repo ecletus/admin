@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"github.com/moisespsena/template/html/template"
 	"github.com/aghape/core"
+	"github.com/moisespsena/template/html/template"
 )
 
 // I18n define admin's i18n interface

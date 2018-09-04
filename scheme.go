@@ -20,7 +20,13 @@ type SchemeDispatcher struct {
 	Scheme *Scheme
 }
 
+type SchemeConfig struct {
+	Visible bool
+	Setup func(scheme *Scheme)
+}
+
 type Scheme struct {
+	SchemeConfig SchemeConfig
 	EventDispatcher *SchemeDispatcher
 	SchemeName      string
 	SchemeParam     string
@@ -46,6 +52,37 @@ type Scheme struct {
 	NotMount           bool
 	handler            *RouteHandler
 	PrepareContextFunc func(ctx *core.Context)
+	defaultMenu        *Menu
+}
+
+func (s *Scheme) DefaultMenu() *Menu {
+	if s.defaultMenu == nil {
+		if s == s.Resource.Scheme {
+			s.defaultMenu = s.Resource.CreateMenu(!s.Resource.Config.Singleton)
+		} else {
+			s.defaultMenu = s.parentScheme.AddDefaultMenuChild(&Menu{
+				Name:s.SchemeName,
+				LabelFunc: func() string {
+					return s.I18nKey()
+				},
+				RelativePath:"/" + s.Resource.Param + s.Path(),
+			})
+		}
+	}
+	return s.defaultMenu
+}
+
+func (s *Scheme) AddDefaultMenuChild(child *Menu) *Menu {
+	m := s.DefaultMenu()
+	if len(m.subMenus) == 0 {
+		c := *m
+		m.Resource = nil
+		m.Permissioner = nil
+		c.Name += "All"
+		m.subMenus = appendMenu(m.subMenus, m.Ancestors, &c)
+	}
+	m.subMenus = appendMenu(m.subMenus, m.Ancestors, child)
+	return child
 }
 
 func (s *Scheme) SetI18nKey(key string) *Scheme {
@@ -399,20 +436,29 @@ func (s *Scheme) PrepareContext(ctx *core.Context) {
 	}
 }
 
-func (s *Scheme) AddChild(name string, setup ...func(s *Scheme)) *Scheme {
+func (s *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
 	child := NewScheme(s.Resource, name)
 	child.parentScheme = s
+	var c *SchemeConfig
+	if len(cfg) > 0 {
+		c = cfg[0]
+	}
 
 	if s.Children == nil {
 		s.Children = map[string]*Scheme{}
 	}
-	if len(setup) > 0 {
-		setup[0](child)
+
+	if c.Setup != nil {
+		c.Setup(child)
 	}
 
 	if !child.NotMount {
 		child.handler = s.Resource.IndexHandler().Child()
 		child.Resource.Router.Get(child.Path(), child.handler)
+
+		if c.Visible {
+			child.DefaultMenu()
+		}
 	}
 
 	s.Children[child.SchemeParam] = child

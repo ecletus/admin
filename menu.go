@@ -3,9 +3,9 @@ package admin
 import (
 	"path"
 
-	"github.com/moisespsena/go-route"
 	"github.com/aghape/core"
 	"github.com/aghape/roles"
+	"github.com/moisespsena/go-route"
 )
 
 // GetMenus get all sidebar menus for admin
@@ -33,6 +33,7 @@ func (admin Admin) GetMenu(name string) *Menu {
 type Menu struct {
 	Name         string
 	Label        string
+	LabelFunc    func()string
 	Link         string
 	Icon         string
 	RelativePath string
@@ -51,10 +52,13 @@ type Menu struct {
 
 // GetLabel return menu's Label
 func (menu Menu) GetLabel() string {
+	if menu.LabelFunc != nil {
+		return menu.LabelFunc()
+	}
 	if menu.Label != "" {
 		return menu.Label
 	}
-	return "qor_admin.menus." + menu.Name
+	return I18NGROUP + ".menus." + menu.Name
 }
 
 // GetLabel return menu's Label
@@ -88,11 +92,7 @@ func (menu Menu) URL(context *Context, args ...interface{}) string {
 		return menu.Link
 	}
 
-	//if (menu.router != nil) && (menu.RelativePath != "") {
-	//	return "@" + path.Join(menu.router.Prefix, menu.RelativePath)
-	//}
-
-	return "@" + menu.RelativePath
+	return context.GenURL(menu.RelativePath)
 }
 
 // HasPermission check menu has permission or not

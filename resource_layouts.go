@@ -5,7 +5,6 @@ import (
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
-	"github.com/moisespsena-go/aorm"
 )
 
 func configureDefaultLayouts(res *Resource) {
@@ -40,10 +39,7 @@ func configureDefaultLayouts(res *Resource) {
 
 func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 	res.SetMeta(&Meta{Name: BASIC_META_ID, Valuer: func(r interface{}, context *core.Context) interface{} {
-		if b, ok := r.(aorm.KeyString); ok {
-			return b.GetID()
-		}
-		return ""
+		return res.GetKey(r)
 	}})
 
 	res.SetMeta(&Meta{Name: BASIC_META_LABEL, Valuer: func(r interface{}, context *core.Context) interface{} {
@@ -72,8 +68,8 @@ func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 	}})
 
 	res.MetaAliases[BASIC_META_ID] = &resource.MetaName{Name: "ID"}
-	res.MetaAliases[BASIC_META_LABEL] = &resource.MetaName{Name: "Text"}
-	res.MetaAliases[BASIC_META_HTML] = &resource.MetaName{Name: "HTML"}
+	res.MetaAliases[BASIC_META_LABEL] = &resource.MetaName{Name: "Title"}
+	res.MetaAliases[BASIC_META_HTML] = &resource.MetaName{Name: "Title"}
 	res.MetaAliases[BASIC_META_ICON] = &resource.MetaName{Name: "Icon"}
 
 	var (

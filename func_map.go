@@ -2,7 +2,6 @@ package admin
 
 import (
 	"bytes"
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -195,12 +194,6 @@ func (context *Context) RawValueOf(value interface{}, meta *Meta) interface{} {
 // FormattedValueOf return formatted value of a meta for current resource
 func (context *Context) FormattedValueOf(value interface{}, meta *Meta) interface{} {
 	result := context.valueOf(meta.GetFormattedValuer(), value, meta)
-	if resultValuer, ok := result.(driver.Valuer); ok {
-		if result, err := resultValuer.Value(); err == nil {
-			return result
-		}
-	}
-
 	return result
 }
 
@@ -296,6 +289,9 @@ func (context *Context) renderFilter(filter *Filter) template.HTML {
 }
 
 func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []string, metaType string, writer *bytes.Buffer) {
+	if meta.Name == "Turma" {
+		println()
+	}
 	var (
 		err            error
 		funcsMap       = funcs.FuncMap{}
@@ -303,13 +299,8 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 		formattedValue = context.FormattedValueOf(value, meta)
 		show           = context.Type == SHOW
 	)
-	if show && !meta.ForceShowZero {
-		if formattedValue == nil {
-			return
-		}
-		if meta.IsZero(value, formattedValue) {
-			return
-		}
+	if show && !meta.ForceShowZero && meta.IsZero(value, formattedValue) {
+		return
 	}
 
 	if !meta.Include {
@@ -602,11 +593,7 @@ func (context *Context) getMenus() (menus []*menu) {
 			}
 			if m.HasPermission(roles.Read, context.Context) {
 				var menu = &menu{Menu: m}
-				url := m.URL(context)
-
-				if url[0:1] == "@" {
-					url = url[1:]
-				}
+				url := m.RelativePath
 
 				if strings.HasPrefix(path, url) && len(url) > mostMatchedLength {
 					mostMatchedMenu = menu
@@ -662,15 +649,15 @@ func (context *Context) getResourceMenus() (menus []*menu) {
 	return globalMenu.SubMenus
 }
 
-func (context *Context) getResourceMenuActions() map[string]interface{} {
-	if context.Resource != nil && context.ResourceID != "" {
+func (context *Context) getResourceMenuActions() interface{} {
+	if context.Resource != nil && context.ResourceID != "" && context.Resource.GetKey(context.Result) != "" {
 		actions := context.AllowedActions(context.Resource.Actions, "menu_item", context.Result)
-		return map[string]interface{}{
-			"Context":  context,
-			"Actions":  actions,
-			"Resource": context.Resource,
-			"Result":   context.Result,
-		}
+		return &struct {
+			Context  *Context
+			Actions  []*Action
+			Resource *Resource
+			Result   interface{}
+		}{context, actions, context.Resource, context.Result}
 	}
 	return nil
 }
@@ -1132,14 +1119,14 @@ func (context *Context) pageTitle() template.HTML {
 		return title.(template.HTML)
 	}
 	if context.Action == "search_center" {
-		return context.t("qor_admin.search_center.title", "Search Center")
+		return context.t(PKG + ".search_center.title")
 	}
 
 	if context.Resource == nil {
 		if context.PageTitle != "" {
 			return context.t(context.PageTitle)
 		}
-		return context.t("qor_admin.layout.title", "Admin")
+		return context.t(PKG + ".layout.title")
 	}
 
 	if context.Action == "action" {
@@ -1158,7 +1145,7 @@ func (context *Context) pageTitle() template.HTML {
 
 	var (
 		defaultValue = context.GetActionLabel()
-		titleKey     = fmt.Sprintf("qor_admin.form.%v.title", context.Action)
+		titleKey     = fmt.Sprintf(PKG+".form.%v.title", context.Action)
 		usePlural    bool
 	)
 

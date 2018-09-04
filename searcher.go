@@ -261,7 +261,7 @@ func (s *Searcher) FilterRawPairs(args ...string) *Searcher {
 func (s *Searcher) parseContext() *core.Context {
 	var (
 		searcher = s.clone()
-		context  = searcher.Context.Context
+		context  = s.Context.Context.Clone()
 	)
 
 	if s.Scheme == nil {

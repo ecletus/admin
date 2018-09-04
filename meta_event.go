@@ -7,9 +7,10 @@ import (
 
 const (
 	// Meta events
-	E_META_VALUE                  = "value"
-	E_META_FORMATTED_VALUE        = "formattedValue"
-	E_META_OUTPUT_FORMATTED_VALUE = "outputFormattedValue"
+	E_META_VALUE                = "value"
+	E_META_FORMATTED_VALUE      = "formattedValue"
+	E_META_POST_FORMATTED_VALUE = "postFormattedValue"
+	E_META_DEFAULT_VALUE        = "defaultValue"
 )
 
 type MetaEvent struct {
@@ -45,4 +46,10 @@ func (mve *MetaValueEvent) GetOrOriginalValue() interface{} {
 		mve.Value = mve.OriginalValue()
 	}
 	return mve.OriginalValue()
+}
+
+func OnMetaValue(meta *Meta, eventName string, cb func(e *MetaValueEvent)) {
+	meta.On(eventName, func(e edis.EventInterface) {
+		cb(e.(*MetaValueEvent))
+	})
 }

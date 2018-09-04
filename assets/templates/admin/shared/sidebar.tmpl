@@ -1,6 +1,6 @@
 <div class="qor-layout__sidebar">
   <div class="sidebar-header">
-    {{$logo := (tt "qor_admin.layout.logo" (_tpl_funcs) "-")}}
+    {{$logo := (tt "github_com:aghape:admin.layout.logo" (_tpl_funcs) "-")}}
     {{if eq $logo "-"}}
       {{render "shared/logo" .}}
     {{else}}
@@ -11,8 +11,10 @@
     <div class="sidebar-userinfo">
         <h5>{{.CurrentUser.DisplayName}}</h5>
       <div style="height:30px">
-      <a class="mdl-button mdl-js-button mdl-button--icon" href="{{profile_url}}" title="{{t "qor_admin.account.profile" "profile"}}" alt="{{t "qor_admin.account.profile" "profile"}}"><i class="material-icons">account_circle</i></a>
-      <a class="mdl-button mdl-js-button mdl-button--icon" href="{{logout_url}}" title="{{t "qor_admin.account.logout" "logout"}}" alt="{{t "qor_admin.account.logout" "logout"}}"><i class="material-icons">exit_to_app</i></a>
+      {{$profile := t "github_com:aghape:admin.account.profile"}}
+      {{$logout := t "github_com:aghape:admin.account.logout"}}
+      <a class="mdl-button mdl-js-button mdl-button--icon" href="{{profile_url}}" title="{{$profile}}" alt="{{$profile}}"><i class="material-icons">account_circle</i></a>
+      <a class="mdl-button mdl-js-button mdl-button--icon" href="{{logout_url}}" title="{{$profile}}" alt="{{$logout}}"><i class="material-icons">exit_to_app</i></a>
       </div>
     </div>
   {{end}}
@@ -20,7 +22,7 @@
     <div class="qor-menu-container">
       {{if .GetSearchableResources }}
         <div qor-icon-name="Search">
-          <span class="qor-global-search--show {{if (eq .Action "search_center")}}active{{end}}" data-placeholder="{{t "qor_admin.search_center.hint" "Search…"}}" data-action-url="{{search_center_path}}">{{t "qor_admin.search_center.title" "Search Center" }}</span>
+          <span class="qor-global-search--show {{if (eq .Action "search_center")}}active{{end}}" data-placeholder="{{t "qor_admin.search_center.hint" "Search…"}}" data-action-url="{{search_center_path}}">{{t "github_com:aghape:admin.search_center.title" }}</span>
         </div>
       {{end}}
 
@@ -29,6 +31,6 @@
     </div>
   </div>
   <div class="sidebar-footer">
-    {{t "qor_admin.layout.powered_by" "Powered by <a href=\"http://getqor.com\" target=\"_blank\">QOR</a>"}}
+    {{t "github_com:aghape:admin.layout.powered_by"}}
   </div>
 </div>

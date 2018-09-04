@@ -10,6 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aghape/core/helpers"
+
+	"github.com/moisespsena/go-options"
+
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
@@ -47,6 +51,10 @@ type MetaOutputValuer func(context *core.Context, recorde, value interface{}) in
 type MetaValuer func(recorde interface{}, context *core.Context) interface{}
 type MetaSetter func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error
 type MetaEnabled func(recorde interface{}, context *Context, meta *Meta) bool
+
+type MetaPostFormatted interface {
+	MetaPostFormatted(meta *Meta, ctx *core.Context, recorde, value interface{}) interface{}
+}
 
 // Meta meta struct definition
 type Meta struct {
@@ -86,8 +94,10 @@ type Meta struct {
 	ForceShowZero         bool
 	IsZeroFunc            func(recorde, value interface{}) bool
 	Fragment              *Fragment
-	Data                  map[interface{}]interface{}
+	Options               options.Options
 	OutputFormattedValuer MetaOutputValuer
+	DefaultValueFunc      MetaValuer
+	proxyPath             []ProxyPath
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -116,41 +126,6 @@ func (meta *Meta) SetI18nGroup(group string) *Meta {
 
 func (meta *Meta) TKey(key string) string {
 	return meta.I18nGroup(true) + ":meta." + meta.Type + "." + key
-}
-
-func (meta *Meta) SetData(key, value interface{}) *Meta {
-	if meta.Data == nil {
-		meta.Data = make(map[interface{}]interface{})
-	}
-	return meta
-}
-
-func (meta *Meta) GetData(key interface{}) (v interface{}, ok bool) {
-	if meta.Data != nil {
-		v, ok = meta.Data[key]
-	}
-	return
-}
-
-func (meta *Meta) GetDataSlice(key interface{}) (v []interface{}, ok bool) {
-	if meta.Data != nil {
-		if v, ok := meta.Data[key]; ok {
-			return v.([]interface{}), true
-		}
-	}
-	return
-}
-
-func (meta *Meta) DataSliceAppend(key interface{}, value ...interface{}) (v []interface{}, ok bool) {
-	if meta.Data == nil {
-		meta.Data = map[interface{}]interface{}{}
-	}
-	if _, ok := meta.Data[key]; ok {
-		s := append(meta.Data[key].([]interface{}), value...)
-		return s, true
-	}
-	meta.Data[key] = value
-	return v, false
 }
 
 func (meta *Meta) Namer() *resource.MetaName {
@@ -345,7 +320,7 @@ func (meta Meta) HasPermission(mode roles.PermissionMode, context *core.Context)
 	return true
 }
 
-func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer, value ...interface{}) interface{} {
+func (meta *Meta) TriggerValueEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer, value ...interface{}) interface{} {
 	var v interface{}
 	if len(value) > 0 {
 		v = value[0]
@@ -361,7 +336,7 @@ func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *core
 			recorde,
 		}, valuer, v, v, false}
 	meta.Trigger(e)
-	if valuer == nil {
+	if valuer != nil {
 		if e.Value == nil && !e.originalValueCalled {
 			return valuer(recorde, ctx)
 		}
@@ -373,7 +348,7 @@ func (meta *Meta) triggerValueEvent(ename string, recorde interface{}, ctx *core
 func (meta *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
 	if valuer := meta.Meta.GetValuer(); valuer != nil {
 		return func(i interface{}, context *core.Context) interface{} {
-			return meta.triggerValueEvent(E_META_VALUE, i, context, valuer)
+			return meta.TriggerValueEvent(E_META_VALUE, i, context, valuer)
 		}
 	}
 	return nil
@@ -381,29 +356,43 @@ func (meta *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
 
 // GetFormattedValuer get formatted valuer from meta
 func (meta *Meta) GetFormattedValuer() func(interface{}, *core.Context) interface{} {
+	var valuer MetaValuer
 	if meta.FormattedValuer != nil {
-		return func(i interface{}, context *core.Context) interface{} {
-			return meta.triggerValueEvent(E_META_FORMATTED_VALUE, i, context, meta.FormattedValuer)
-		}
+		valuer = meta.FormattedValuer
+	} else {
+		valuer = meta.GetValuer()
 	}
-	return meta.GetValuer()
-}
-
-// GetOutputFormattedValuer get formatted valuer from meta
-func (meta *Meta) GetOutputFormattedValuer() MetaOutputValuer {
-	return func(context *core.Context, record, formattedValue interface{}) interface{} {
-		var value interface{}
-		if meta.OutputFormattedValuer != nil {
-			value = meta.OutputFormattedValuer(context, record, formattedValue)
-		}
-		return meta.triggerValueEvent(E_META_OUTPUT_FORMATTED_VALUE, record, context, nil, value)
+	return func(i interface{}, context *core.Context) interface{} {
+		v := meta.TriggerValueEvent(E_META_FORMATTED_VALUE, i, context, valuer)
+		v = meta.TriggerValueEvent(E_META_POST_FORMATTED_VALUE, i, context, nil, v)
+		return v
 	}
 }
 
-// OutputFormattedValue get formatted valuer from meta
-func (meta *Meta) OutputFormattedValue(ctx *core.Context, recorde interface{}) interface{} {
-	formattedValue := meta.GetFormattedValuer()(recorde, ctx)
-	return meta.GetOutputFormattedValuer()(ctx, recorde, formattedValue).(string)
+// FormattedValue get formatted valuer from meta
+func (meta *Meta) Value(ctx *core.Context, recorde interface{}) interface{} {
+	return meta.GetValuer()(recorde, ctx)
+}
+
+// FormattedValue get formatted valuer from meta
+func (meta *Meta) FormattedValue(ctx *core.Context, recorde interface{}) interface{} {
+	return meta.GetFormattedValuer()(recorde, ctx)
+}
+
+// FormattedValue get formatted valuer from meta
+func (meta *Meta) GetDefaultValue(ctx *core.Context, recorde interface{}) interface{} {
+	var zero interface{}
+	if meta.DefaultValueFunc != nil {
+		zero = meta.DefaultValueFunc(recorde, ctx)
+	} else if meta.FieldStruct != nil {
+		z := reflect.New(meta.FieldStruct.Struct.Type).Elem()
+		if meta.FieldStruct.Struct.Type.Kind() == reflect.Struct {
+			zero = z.Addr().Interface()
+		} else {
+			zero = z.Interface()
+		}
+	}
+	return meta.TriggerValueEvent(E_META_DEFAULT_VALUE, recorde, ctx, nil, zero)
 }
 
 func (meta *Meta) updateMeta() {
@@ -438,6 +427,10 @@ func (meta *Meta) updateMeta() {
 		meta.Meta.Config = meta.Config
 		meta.Meta.EditName = meta.EditName
 		meta.Meta.ContextResourcer = meta.ContextResourcer
+	}
+
+	if meta.Options == nil {
+		meta.Options = make(options.Options)
 	}
 
 	if meta.EventDispatcher.GetDefinedDispatcher() == nil {
@@ -639,31 +632,31 @@ func (meta *Meta) updateMeta() {
 	}
 }
 
-func (meta *Meta) IsZero(value, formattedValue interface{}) bool {
-	if !meta.ForceShowZero {
-		if formattedValue == nil {
+func (meta *Meta) IsZero(recorde, value interface{}) bool {
+	if value == nil {
+		return true
+	}
+	if meta.IsZeroFunc != nil {
+		return meta.IsZeroFunc(recorde, value)
+	}
+	switch vt := value.(type) {
+	case helpers.Zeroer:
+		return vt.IsZero()
+	case string:
+		if vt == "" {
 			return true
 		}
-		if meta.IsZeroFunc != nil {
-			return meta.IsZeroFunc(value, formattedValue)
+	case int, uint, uint8, uint16, uint32, uint64:
+		if vt == 0 {
+			return true
 		}
-		switch vt := formattedValue.(type) {
-		case string:
-			if vt == "" {
-				return true
-			}
-		case int, uint, uint8, uint16, uint32, uint64:
-			if vt == 0 {
-				return true
-			}
-		case float32:
-			if vt == 0.0 {
-				return true
-			}
-		case float64:
-			if vt == 0.0 {
-				return true
-			}
+	case float32:
+		if vt == 0.0 {
+			return true
+		}
+	case float64:
+		if vt == 0.0 {
+			return true
 		}
 	}
 	return false

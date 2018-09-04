@@ -60,6 +60,7 @@ type Context struct {
 	PermissionMode roles.PermissionMode
 	Display        string
 	Type           ContextType
+	NotFound       bool
 }
 
 const (
@@ -107,15 +108,6 @@ func (admin *Admin) NewContext(args ...interface{}) (c *Context) {
 	}
 
 	return
-}
-
-func (admin *Admin) NewContextForResource(context *Context, resource *Resource) *Context {
-	clone := &(*context)
-	clone.Searcher = clone.NewSearcher()
-	clone.Resource = resource
-	clone.Scheme = resource.Scheme
-	clone.DB = clone.DB.NewScope(resource.Value).DB()
-	return clone
 }
 
 func (context *Context) WithResource(res *Resource, value interface{}) func() {

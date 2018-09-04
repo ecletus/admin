@@ -1,17 +1,17 @@
 {{if .Result}}
-<ul class="qor-menu {{.MenuClass?}}" style="background-color: #dbe2f3">
-  <li qor-icon-name="">
-    <a href="javascript:void(0);">{{t "qor_admin.menus.Resources" "Resources"}}</a>
-    {{render "shared/menu" .Result}}
-  </li>
-</ul>
+  <ul class="qor-menu {{.MenuClass?}}" style="background-color: #dbe2f3">
+    <li qor-icon-name="">
+      <a href="javascript:void(0);">{{t "github_com:aghape:admin.menus.Resources"}}</a>
+      {{render "shared/menu" .Result}}
+    </li>
+  </ul>
 {{end}}
 
 {{$resourceActions := get_resource_menu_actions}}
-{{if $resourceActions}}
-<ul class="qor-menu resource-actions" style="background-color: #ece9d6">
-<li  qor-icon-name=""><a href="javascript:void(0);">{{t "qor_admin.menus.Actions" "Actions"}}</a>
-{{render_with "shared/menu_actions" (dict "Result" $resourceActions "MenuClass" "resource-actions-menu")}}
-</li>
-</ul>
+{{if and $resourceActions $resourceActions.Actions}}
+  <ul class="qor-menu resource-actions" style="background-color: #ece9d6">
+    <li  qor-icon-name=""><a href="javascript:void(0);">{{t "github_com:aghape:admin.menus.Actions"}}</a>
+    {{render_with "shared/menu_actions" (dict "Result" $resourceActions "MenuClass" "resource-actions-menu")}}
+    </li>
+  </ul>
 {{end}}

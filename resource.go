@@ -11,7 +11,6 @@ import (
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
-	"github.com/aghape/helpers"
 	"github.com/aghape/roles"
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena-go/aorm"
@@ -21,8 +20,6 @@ import (
 	"strconv"
 
 	"github.com/aghape/db/inheritance"
-	"github.com/aghape/fragment"
-	"github.com/moisespsena/go-error-wrap"
 	"github.com/moisespsena/template/html/template"
 )
 
@@ -126,7 +123,6 @@ type Resource struct {
 	Inherits           map[string]*Child
 	Fragments          *Fragments
 	Fragment           *Fragment
-	DefaultMenu        *Menu
 	registered         bool
 	afterRegister      []func()
 }
@@ -759,32 +755,26 @@ func (res *Resource) GetMeta(name string, notUpdate ...bool) *Meta {
 			parts := strings.Split(name, ".")
 			if len(parts) > 1 {
 				r := res
+				var pth []interface{}
 				for _, p := range parts[0 : len(parts)-1] {
 					if r.Fragments != nil && r.Fragments.Get(p) != nil {
 						r = r.Fragments.Get(p).Resource
-						meta := r.GetMeta(parts[len(parts)-1])
-						if meta != nil {
-							meta = NewMetaFieldProxy(meta.Name, parts, meta)
-							res.MetasByName[meta.Name] = meta
-							res.MetasByFieldName[meta.Name] = meta
-							res.Metas = append(res.Metas, meta)
-							meta.updateMeta()
-						}
-						return meta
-					} else {
-						return nil
+						pth = append(pth, ProxyVirtualFieldPath{r.Fragment.ID, r.Value})
+					} else if meta := r.GetMeta(p); meta != nil {
+						pth = append(pth, ProxyMetaPath{meta})
 					}
 				}
 
-				meta := r.GetMeta(parts[len(parts)-1])
-				if meta != nil {
-					meta = NewMetaFieldProxy(name, parts, meta)
-					res.MetasByName[name] = meta
-					res.MetasByFieldName[name] = meta
+				if pth != nil {
+					to := r.GetMeta(parts[len(parts)-1])
+					meta := NewMetaFieldProxy(to.Name, pth, res.Value, to)
+					res.MetasByName[meta.Name] = meta
 					res.Metas = append(res.Metas, meta)
 					meta.updateMeta()
 					return meta
 				}
+
+				return nil
 			}
 		}
 	}
@@ -884,10 +874,10 @@ func (res *Resource) MetasFromLayoutContext(layout string, context *Context, val
 }
 
 func (res *Resource) BasicValue(ctx *core.Context, recorde interface{}) resource.BasicValue {
-	metaId, metaLabel, metaIcon := res.MetasByName[BASIC_META_ID], res.MetasByName[BASIC_META_LABEL], res.MetasByName[BASIC_META_ICON]
-	id, label, icon := metaId.OutputFormattedValue(ctx, recorde).(string),
-		metaLabel.OutputFormattedValue(ctx, recorde).(string),
-		metaIcon.OutputFormattedValue(ctx, recorde).(string)
+	metaLabel, metaIcon := res.MetasByName[BASIC_META_LABEL], res.MetasByName[BASIC_META_ICON]
+	id, label, icon := res.GetKey(recorde),
+		metaLabel.FormattedValue(ctx, recorde).(string),
+		metaIcon.FormattedValue(ctx, recorde).(string)
 	return &resource.Basic{id, label, icon}
 }
 
@@ -1064,13 +1054,6 @@ func (res *Resource) CreateMenu(plural bool) *Menu {
 	return menu
 }
 
-func (res *Resource) GetDefaultMenu() *Menu {
-	if res.DefaultMenu == nil {
-		res.DefaultMenu = res.CreateMenu(!res.Config.Singleton)
-	}
-	return res.DefaultMenu
-}
-
 func (res *Resource) GetIndexLink(context *core.Context, args ...interface{}) string {
 	return res.GetLink(nil, context, args...)
 }
@@ -1107,6 +1090,10 @@ func (res *Resource) configure() {
 
 	if injector, ok := res.Value.(resource.ConfigureResourceInterface); ok {
 		injector.ConfigureQorResource(res)
+	}
+
+	if res.Config.Singleton {
+		return
 	}
 
 	typ := reflect.TypeOf(res.Value)
@@ -1260,9 +1247,9 @@ func (res *Resource) SetParentResource(parent *Resource, fieldName string) {
 	res.ParentResource = parent
 }
 
-func (res *Resource) RegisterScheme(name string, setup ...func(s *Scheme)) *Scheme {
+func (res *Resource) RegisterScheme(name string, cfg ...*SchemeConfig) *Scheme {
 	f := func() *Scheme {
-		return res.Scheme.AddChild(name, setup...)
+		return res.Scheme.AddChild(name, cfg...)
 	}
 	if res.registered {
 		return f()
@@ -1286,310 +1273,6 @@ func (res *Resource) DefaultFilter(fns ...func(context *core.Context, db *aorm.D
 	res.Scheme.DefaultFilter(fns...)
 }
 
-func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cfg *FragmentConfig) *Resource {
-	if _, ok := res.Value.(fragment.FragmentedModelInterface); !ok {
-		panic(NotFragmentableError)
-	}
-
-	if cfg == nil {
-		cfg = &FragmentConfig{}
-	}
-	if cfg.Config == nil {
-		cfg.Config = &Config{}
-	}
-	if cfg.Config.Sub == nil {
-		cfg.Config.Sub = &SubConfig{}
-	}
-
-	cfg.Config.Singleton = true
-	cfg.Config.Sub.Parent = res
-	cfg.Config.DisableFormID = true
-	cfg.Config.Sub.ParentFieldName = "ID"
-
-	_, isForm := value.(fragment.FormFragmentModelInterface)
-
-	setup := cfg.Config.Setup
-
-	cfg.Config.Setup = func(fragRes *Resource) {
-		fragRes.SetMeta(&Meta{Name: "ID", Enabled: func(recorde interface{}, context *Context, meta *Meta) bool {
-			return false
-		}}, true)
-		if isForm {
-			meta := &Meta{
-				Name: "FragmentEnabled",
-			}
-			if cfg.Is {
-				meta.SkipDefaultLabel = true
-				if cfg.IsLabel != "" {
-					meta.Label = cfg.IsLabel
-				} else {
-					meta.Label = fragRes.SingularLabelKey()
-				}
-				if meta.Label[0] == '.' {
-					meta.Label = fragRes.I18nPrefix + meta.Label
-				}
-				meta.Enabled = func(recorde interface{}, context *Context, meta *Meta) bool {
-					if context.Type == SHOW {
-						return false
-					}
-					return true
-				}
-			} else {
-				meta.SkipDefaultLabel = true
-				meta.Label = fragRes.SingularLabelKey()
-			}
-			fragRes.SetMeta(meta, true)
-			res.Fragments.AddForm(fragRes, cfg)
-		} else {
-			res.Fragments.Add(fragRes, cfg)
-		}
-
-		fragRes.Fragment.Build()
-
-		if setup != nil {
-			setup(fragRes)
-		}
-	}
-
-	if !isForm {
-		cfg.Config.Invisible = true
-	} else {
-		if cfg.Is || cfg.NotInline {
-			cfg.Config.MenuEnabled = func(menu *Menu, ctx *Context) bool {
-				if r, ok := ctx.Result.(fragment.FragmentedModelInterface); ok {
-					if f := r.GetFormFragment(menu.Resource.Fragment.ID); f != nil {
-						return f.Enabled() && (menu.Resource.Fragment.Config.Is || menu.Resource.Fragment.Config.NotInline)
-					}
-				}
-				return false
-			}
-		}
-	}
-
-	fragRes := res.AddResourceConfig(value, cfg.Config)
-
-	if len(res.Fragments.Fragments) == 1 {
-		res.GetAdmin().OnDone(func(e *AdminEvent) {
-			res.Fragments.Build()
-		})
-		res.Filter(&Filter{
-			Name: "Only",
-			Available: func(context *core.Context) (ok bool) {
-				for _, f := range res.Fragments.Fragments {
-					if f.Config.Is {
-						return true
-					}
-				}
-				return false
-			},
-			//Label: I18NGROUP + ".actions.fragment_is_filter",
-			Handler: func(db *aorm.DB, argument *FilterArgument) *aorm.DB {
-				if v := argument.Value.Get("Value").Value; v != nil {
-					if vs, ok := v.([]string); ok && len(vs) > 0 {
-						id := vs[0]
-						if f := argument.Resource.Fragments.Get(id); f != nil {
-							return f.Filter(db)
-						}
-					}
-				}
-				return db
-			},
-			Config: &SelectOneConfig{
-				Collection: func(context *Context) (results [][]string) {
-					for id, f := range res.Fragments.Fragments {
-						if f.Config.Is {
-							results = append(results, []string{id, context.Ts(f.Resource.PluralLabelKey(), f.Resource.PluralName)})
-						}
-					}
-					return
-				},
-			},
-		})
-		res.OnDBActionE(func(e *resource.DBEvent) (err error) {
-			context := e.Context
-			if v := context.Data().Get("skip.fragments"); v == nil {
-				r := e.Result().(fragment.FragmentedModelInterface)
-				for id, fr := range r.GetFragments() {
-					fragRes := res.Fragments.Get(id).Resource
-					if fr.GetID() == "" {
-						fr.SetID(r.GetID())
-					}
-					if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
-						return errwrap.Wrap(err, "Fragment "+id)
-					}
-				}
-				for id, fr := range r.GetFormFragments() {
-					fragRes := res.Fragments.Get(id).Resource
-					if fr.GetID() == "" {
-						fr.SetID(r.GetID())
-					}
-					if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
-						return errwrap.Wrap(err, "Fragment "+id)
-					}
-				}
-			}
-			return nil
-		}, resource.E_DB_ACTION_SAVE.After())
-
-		res.Scheme.OnDBActionE(func(e *resource.DBEvent) (err error) {
-			context := e.Context
-			if v := context.Data().Get("skip.fragments"); v == nil {
-				DB := context.DB
-				fields, query := res.Fragments.Fields(), res.Fragments.Query()
-				DB = DB.ExtraSelectFieldsSetter(
-					PKG+".fragments",
-					func(result interface{}, values []interface{}, set func(result interface{}, low, hight int) interface{}) {
-						res.Fragments.ExtraFieldsScan(result.(fragment.FragmentedModelInterface), values, set)
-					}, fields, query)
-				DB = res.Fragments.JoinLeft(DB)
-				context.SetDB(DB)
-			}
-			return nil
-		}, resource.BEFORE|resource.E_DB_ACTION_FIND_MANY|resource.E_DB_ACTION_FIND_ONE)
-
-		/*res.OnDBActionE(func(e *resource.DBEvent) (err error) {
-			context := e.Context
-			if v := context.Data().Get("skip.fragments"); v == nil {
-				DB := context.DB
-				fields, query := res.Fragments.Fields(), res.Fragments.Query()
-				DB = DB.ExtraSelectFieldsSetter(
-					PKG+".fragments",
-					func(result interface{}, values []interface{}, set func(result interface{}, low, hight int) interface{}) {
-						res.Fragments.ExtraFieldsScan(result.(fragment.FragmentedModelInterface), values, set)
-					}, fields, query)
-				DB = res.Fragments.JoinLeft(DB)
-				context.SetDB(DB)
-			}
-			return nil
-		}, resource.BEFORE|resource.E_DB_ACTION_FIND_MANY|resource.E_DB_ACTION_FIND_ONE)*/
-
-		res.FakeScope.GetModelStruct().BeforeRelatedCallback(func(fromScope *aorm.Scope, toScope *aorm.Scope, DB *aorm.DB, fromField *aorm.Field) *aorm.DB {
-			fields, query := res.Fragments.Fields(), res.Fragments.Query()
-			DB = DB.ExtraSelectFieldsSetter(
-				PKG+".fragments",
-				func(result interface{}, values []interface{}, set func(result interface{}, low, hight int) interface{}) {
-					res.Fragments.ExtraFieldsScan(result.(fragment.FragmentedModelInterface), values, set)
-				}, fields, query)
-			DB = res.Fragments.JoinLeft(DB)
-			return DB
-		})
-	}
-
-	metaName := fragRes.Fragment.ID
-
-	if !isForm {
-		fieldsNames := fragRes.Fragment.FieldsNames()
-		for _, field := range fieldsNames {
-			meta := NewMetaProxy(field, fragRes.Meta(&Meta{Name: field}), func(meta *Meta, recorde interface{}) interface{} {
-				fragmentedRecorde := recorde.(fragment.FragmentedModelInterface)
-				frag := meta.Fragment
-				return fragmentedRecorde.GetFragment(frag.ID)
-			})
-			meta.Fragment = fragRes.Fragment
-			meta.Resource = res
-			meta.NewValuer(func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{} {
-				fragmentedRecorde := recorde.(fragment.FragmentedModelInterface)
-				frag := meta.Fragment
-				value := frag.GetOrNew(fragmentedRecorde, context)
-				return meta.ProxyTo.GetValuer()(value, context)
-			})
-			meta.NewSetter(func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-				fragmentedRecorde := recorde.(fragment.FragmentedModelInterface)
-				frag := meta.Fragment
-				value := frag.GetOrNew(fragmentedRecorde, context)
-				return meta.ProxyTo.GetSetter()(value, metaValue, context)
-			})
-			meta = res.Meta(meta)
-		}
-
-		fieldsNamesInterface := helpers.StringsToInterfaces(fieldsNames)
-		res.EditAttrs(append([]interface{}{res.EditAttrs()}, fieldsNamesInterface...)...)
-		res.ShowAttrs(append([]interface{}{res.ShowAttrs()}, fieldsNamesInterface...)...)
-	} else {
-		res.Meta(&Meta{
-			Name: metaName,
-			Type: "fragment",
-			Enabled: func(recorde interface{}, context *Context, meta *Meta) bool {
-				if recorde != nil {
-					return fragRes.Fragment.Enabled(recorde.(fragment.FragmentedModelInterface), context.Context)
-				}
-				return false
-			},
-			ContextMetas: func(record interface{}, ctx *Context) []*Meta {
-				return fragRes.ConvertSectionToMetas(fragRes.ContextSections(ctx, record))
-			},
-			Setter: func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-				if _, ok := res.Fragments.Fragments[metaValue.Name]; !ok {
-					return nil
-				}
-				value := fragRes.Fragment.FormGetOrNew(recorde.(fragment.FragmentedModelInterface), context)
-				err := resource.DecodeToResource(fragRes, value, metaValue.MetaValues, context).Start()
-				return err
-			},
-			Valuer: func(recorde interface{}, context *core.Context) interface{} {
-				r := recorde.(fragment.FragmentedModelInterface)
-				value := r.GetFormFragment(fragRes.Fragment.ID)
-				isNil := value == nil
-				if isNil {
-					value = fragRes.NewStruct(context.Site).(fragment.FormFragmentModelInterface)
-				}
-				return &FormFragmentRecordState{
-					fragRes.Fragment,
-					fragRes.Fragment.Enabled(r, context),
-					value,
-					isNil,
-				}
-			},
-		})
-
-		var hasEditMeta bool
-		if len(res.editSections) > 0 {
-		root:
-			for _, sec := range res.editSections {
-				for _, row := range sec.Rows {
-					for _, col := range row {
-						if col == metaName {
-							hasEditMeta = true
-							break root
-						}
-					}
-				}
-			}
-		}
-
-		if !hasEditMeta {
-			res.EditAttrs(res.EditAttrs(), metaName)
-		}
-
-		if len(res.showSections) == 0 {
-			res.ShowAttrs(res.EditAttrs(), metaName)
-		} else {
-			var hasShowMeta bool
-		root2:
-			for _, sec := range res.showSections {
-				for _, row := range sec.Rows {
-					for _, col := range row {
-						if col == metaName {
-							hasShowMeta = true
-							break root2
-						}
-					}
-				}
-			}
-
-			if !hasShowMeta {
-				res.ShowAttrs(res.ShowAttrs(), metaName)
-			}
-		}
-	}
-
-	return fragRes
-}
-
 func (res *Resource) GetAdminLayout(name string, defaul ...string) *Layout {
 	return res.GetLayout(name, defaul...).(*Layout)
-}
-
-func (res *Resource) AddFragment(value fragment.FragmentModelInterface) *Resource {
-	return res.AddFragmentConfig(value, &FragmentConfig{})
 }

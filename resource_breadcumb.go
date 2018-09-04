@@ -2,6 +2,7 @@ package admin
 
 import (
 	"github.com/aghape/core"
+	"github.com/moisespsena-go/aorm"
 )
 
 type ResourceCrumber struct {
@@ -26,10 +27,12 @@ func (r *ResourceCrumber) NewCrumb(ctx *core.Context, recorde bool) core.Breadcr
 	}
 	if recorde {
 		crumb.ID = r.ID
-		uri = uri + "/" + r.ID
 		model, err := r.Resource.CrudDB(ctx.DB).FindOneBasic(r.ID)
 
 		if err != nil {
+			if aorm.IsRecordNotFoundError(err) {
+				return nil
+			}
 			panic(err)
 		}
 
@@ -46,7 +49,9 @@ func (r *ResourceCrumber) NewCrumb(ctx *core.Context, recorde bool) core.Breadcr
 func (r *ResourceCrumber) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
 	crumbs = append(crumbs, r.NewCrumb(ctx, false))
 	if r.ID != "" && !r.Resource.Config.Singleton {
-		crumbs = append(crumbs, r.NewCrumb(ctx, true))
+		if crumb := r.NewCrumb(ctx, true); crumb != nil {
+			crumbs = append(crumbs, crumb)
+		}
 	}
 	return
 }

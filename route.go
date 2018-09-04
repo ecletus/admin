@@ -113,10 +113,6 @@ func (admin *Admin) routeInterseptor(chain *route.ChainHandler) {
 
 func (admin *Admin) handlerInterseptor(chain *route.ChainHandler) {
 	context := ContextFromChain(chain)
-	if context.Resource != nil {
-		context = context.Admin.NewContextForResource(context, context.Resource)
-		SetContexToChain(chain, context)
-	}
 	context.RouteContext = chain.Context
 
 	if h, ok := chain.Endpoint.(*RouteHandler); ok {

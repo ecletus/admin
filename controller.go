@@ -145,6 +145,9 @@ func (ac *Controller) LoadShowData(context *Context) (result interface{}, render
 		return
 	}
 	context.AddError(err)
+	if err != nil && aorm.IsRecordNotFoundError(err) {
+		context.NotFound = true
+	}
 	return
 }
 
@@ -155,6 +158,10 @@ func (ac *Controller) Show(context *Context) {
 	responder.With("html", func() {
 		if context.LoadDisplayOrError() {
 			result, rendered := ac.LoadShowData(context)
+			if context.NotFound {
+				http.NotFound(context.Writer, context.Request)
+				return
+			}
 			if !rendered {
 				context.Execute("", result)
 			}
@@ -162,6 +169,10 @@ func (ac *Controller) Show(context *Context) {
 	}).With([]string{"json", "xml"}, func() {
 		if context.ValidateLayoutOrError() {
 			result, _ := ac.LoadShowData(context)
+			if context.NotFound {
+				http.NotFound(context.Writer, context.Request)
+				return
+			}
 			context.Encode(result)
 		}
 	}).Respond(context.Request)
@@ -174,6 +185,10 @@ func (ac *Controller) Edit(context *Context) {
 	responder.With("html", func() {
 		if context.LoadDisplayOrError() {
 			result, rendered := ac.LoadShowData(context)
+			if context.NotFound {
+				http.NotFound(context.Writer, context.Request)
+				return
+			}
 			if !rendered {
 				context.Execute("", result)
 			}
@@ -181,6 +196,10 @@ func (ac *Controller) Edit(context *Context) {
 	}).With([]string{"json", "xml"}, func() {
 		if context.ValidateLayoutOrError() {
 			result, _ := ac.LoadShowData(context)
+			if context.NotFound {
+				http.NotFound(context.Writer, context.Request)
+				return
+			}
 			context.Encode(result)
 		}
 	}).Respond(context.Request)

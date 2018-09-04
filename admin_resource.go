@@ -244,13 +244,16 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 		res.ParentResource.Resources[res.ID] = res
 		res.ParentResource.ResourcesByParam[res.Param] = res
 		if !res.Config.Invisible {
-			res.ParentResource.AddMenu(res.GetDefaultMenu())
+			menu := res.ParentResource.AddMenu(res.DefaultMenu())
+			menu.Enabled = func(menu *Menu, context *Context) bool {
+				return !context.NotFound && res.GetKey(context.Result) != ""
+			}
 		}
 	} else {
 		admin.Resources[res.ID] = res
 		admin.ResourcesByParam[res.Param] = res
 		if !res.Config.Invisible {
-			admin.AddMenu(res.GetDefaultMenu())
+			admin.AddMenu(res.DefaultMenu())
 		}
 	}
 

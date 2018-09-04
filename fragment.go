@@ -134,18 +134,21 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 		res.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
 			return db.AutoInlinePreload(res.Value)
 		})
-		super.Scheme.AddChild(fr.ID, func(s *Scheme) {
-			s.Categories = []string{"fragment"}
-			s.SetI18nKey(res.PluralLabelKey())
-			s.SchemeParam = utils.ToParamString(res.PluralName)
-			s.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
-				db = db.InlinePreload(res.Name, aorm.IPO_INNER_JOIN)
-				return fr.Filter(db)
-			})
-			fr.scheme = s
-			if fr.Config.SchemeSetup != nil {
-				fr.Config.SchemeSetup(s)
-			}
+		super.Scheme.AddChild(fr.ID, &SchemeConfig{
+			Visible: true,
+			Setup: func(s *Scheme) {
+				s.Categories = []string{"fragment"}
+				s.SetI18nKey(res.PluralLabelKey())
+				s.SchemeParam = utils.ToParamString(res.PluralName)
+				s.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
+					db = db.InlinePreload(res.Name, aorm.IPO_INNER_JOIN)
+					return fr.Filter(db)
+				})
+				fr.scheme = s
+				if fr.Config.SchemeSetup != nil {
+					fr.Config.SchemeSetup(s)
+				}
+			},
 		})
 	}
 

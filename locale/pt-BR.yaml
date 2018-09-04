@@ -32,7 +32,6 @@ search_center:
   all: Tudo
 account:
   logout: Sair
-  logout: Sair
 pagination:
   next: Pŕoxima
   page_num: Página

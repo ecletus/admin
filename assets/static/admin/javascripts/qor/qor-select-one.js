@@ -38,7 +38,7 @@
 
   function firstTextKey(obj) {
     var keys = Object.keys(obj);
-    if (keys.length > 1 && keys[0] == "ID") {
+    if (keys.length > 1 && keys[0] === "ID") {
       return keys[1];
     }
     return keys[0];

@@ -7,7 +7,7 @@ window.Mustache && (window.Mustache.tags = ['[[', ']]']);
 
 // clear close alert after ajax complete
 $(document).ajaxComplete(function(event, xhr, settings) {
-    if (settings.type == "POST" || settings.type == "PUT") {
+    if (settings.type === "POST" || settings.type === "PUT") {
         if ($.fn.qorSlideoutBeforeHide) {
             $.fn.qorSlideoutBeforeHide = null;
             window.onbeforeunload = null;
@@ -25,7 +25,7 @@ $(function () {
 // select2 ajax common options
 $.fn.select2 = $.fn.select2 || function(){};
 $.fn.select2.ajaxCommonOptions = function(select2Data) {
-    let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey
+    let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey,
         remoteDataDisplayKey = select2Data.remoteDataDisplayKey;
 
     return {

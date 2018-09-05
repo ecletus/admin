@@ -50,6 +50,8 @@
     constructor: QorSelectOne,
 
     init: function() {
+      this.$selectOneSelectedTemplate = this.$element.find('[name="select-one-selected-template"]');
+      this.$selectOneSelectedIconTemplate = this.$element.find('[name="select-one-selected-icon"]');
       this.bind();
     },
 
@@ -82,40 +84,50 @@
 
     changeSelect: function() {
       var $target = $(this),
-        $parent = $target.closest(CLASS_PARENT);
+          $parent = $target.closest(CLASS_PARENT);
 
       $parent.find(CLASS_SELECT_TRIGGER).trigger('click');
     },
 
-    openBottomSheets: function(e) {
+    openBottomSheets: function (e) {
       if (lock.lock) {
-          e.preventDefault();
-          return false;
+        e.preventDefault();
+        return false;
       }
 
       lock.lock = true;
       setTimeout(function () {lock.lock = false}, 1000*3);
-      var $this = $(e.target),
-        data = $this.data();
+      var $this = $(e.target);
+      this.currentData = $this.data();
 
       this.BottomSheets = $body.data('qor.bottomsheets');
       this.$parent = $this.closest(CLASS_PARENT);
 
-      data.url = data.selectoneUrl;
+      this.currentData.url = this.currentData.selectoneUrl;
+      this.primaryField = this.currentData.remoteDataPrimaryKey;
+      this.displayField = this.currentData.remoteDataDisplayKey;
 
-      this.SELECT_ONE_SELECTED_ICON = $('[name="select-one-selected-icon"]').html();
-      this.BottomSheets.open(data, this.handleSelectOne.bind(this));
+      this.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
+      this.BottomSheets.open(this.currentData, this.handleSelectOne.bind(this));
     },
 
     initItem: function() {
-      var $selectFeild = this.$parent.find(CLASS_SELECT_FIELD),
-        selectedID;
+      var $selectField = this.$parent.find(CLASS_SELECT_FIELD),
+          recordeUrl = this.currentData.remoteRecordeUrl,
+          selectedID;
 
-      if (!$selectFeild.length) {
+      if (recordeUrl) {
+        this.$bottomsheets.find('tr[data-primary-key]').each(function () {
+          var $this = $(this), data = $this.data();
+          data.url = recordeUrl.replace("{ID}", data.primaryKey)
+        })
+      }
+
+      if (!$selectField.length) {
         return;
       }
 
-      selectedID = $selectFeild.data().primaryKey;
+      selectedID = $selectField.data().primaryKey;
 
       if (selectedID) {
         this.$bottomsheets
@@ -131,7 +143,7 @@
     },
 
     renderSelectOne: function(data) {
-      return Mustache.render($('[name="select-one-selected-template"]').html(), data);
+      return Mustache.render(this.$selectOneSelectedTemplate.html(), data);
     },
 
     handleSelectOne: function($bottomsheets) {
@@ -155,12 +167,13 @@
 
     handleResults: function(data) {
       var template,
-        $parent = this.$parent,
-        $select = $parent.find('select'),
-        $selectFeild = $parent.find(CLASS_SELECT_FIELD);
+          $parent = this.$parent,
+          $select = $parent.find('select'),
+          $selectFeild = $parent.find(CLASS_SELECT_FIELD);
 
-      data.displayName = data.Text || data.Name || data.Title || data.Code || firstTextKey(data);
-      data.selectoneValue = data.primaryKey || data.ID;
+      data.displayName = this.displayField ? data[this.displayField] :
+          (data.Text || data.Name || data.Title || data.Code || firstTextKey(data));
+      data.selectoneValue = this.primaryField ? data[this.primaryField] : (data.primaryKey || data.ID);
 
       if (!$select.length) {
         return;

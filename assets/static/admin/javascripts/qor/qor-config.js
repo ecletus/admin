@@ -25,7 +25,8 @@ $(function () {
 // select2 ajax common options
 $.fn.select2 = $.fn.select2 || function(){};
 $.fn.select2.ajaxCommonOptions = function(select2Data) {
-    let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey;
+    let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey
+        remoteDataDisplayKey = select2Data.remoteDataDisplayKey;
 
     return {
         dataType: 'json',
@@ -47,6 +48,9 @@ $.fn.select2.ajaxCommonOptions = function(select2Data) {
 
             var processedData = $.map(data, function(obj) {
                 obj.id = obj[remoteDataPrimaryKey] || obj.primaryKey || obj.Id || obj.ID;
+                if (remoteDataDisplayKey) {
+                    obj.text = obj[remoteDataDisplayKey];
+                }
                 return obj;
             });
 

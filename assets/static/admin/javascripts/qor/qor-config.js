@@ -17,7 +17,7 @@ $(document).ajaxComplete(function(event, xhr, settings) {
 
 $(function () {
     let $header = $('.qor-page__header');
-    if ($header.css('position') == 'fixed') {
+    if ($header.css('position') === 'fixed') {
         $('.qor-page__body').css({marginTop:$header.height(), paddingTop:0});
     }
 });

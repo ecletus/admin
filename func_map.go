@@ -122,9 +122,9 @@ func (context *Context) URLFor(value interface{}, resources ...*Resource) string
 	if admin, ok := value.(*Admin); ok {
 		return context.GenURL(admin.Router.Prefix())
 	} else if urler, ok := value.(interface {
-		ToURLString(*Context) string
+		URL(*Context) string
 	}); ok {
-		return urler.ToURLString(context)
+		return urler.URL(context)
 	} else if res, ok := value.(*Resource); ok {
 		return res.GetContextIndexURI(context.Context)
 	} else {
@@ -500,6 +500,16 @@ func (context *Context) getResource(resources ...*Resource) *Resource {
 
 func (context *Context) indexSections(resources ...*Resource) []*Section {
 	res := context.getResource(resources...)
+	if context.Layout != "" {
+		layout := res.GetAdminLayout(context.Layout)
+		attrs := layout.Metas
+		if layout.NotIndexRenderID && !context.Api {
+			attrs = append(attrs, "-" + layout.MetaID)
+		}
+		sections := res.SectionsList(attrs)
+		sections = res.allowedSections(nil, sections, context, roles.Read)
+		return sections
+	}
 	scheme := context.Scheme
 	if scheme == nil {
 		scheme = res.Scheme

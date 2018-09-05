@@ -9,33 +9,24 @@
 
   <div class="qor-field__show">{{.Value}}</div>
 
-  {{if .Meta.Config.Select2ResultTemplate}}
-    <script name="select2-result-template" type="x-tmpl-mustache"{{if .Meta.Config.Select2ResultTemplate.Raw}} data-raw="true"{{end}}>
-      {{.Meta.Config.Select2ResultTemplate.Data}}
-    </script>
-  {{end}}
-
-  {{if .Meta.Config.Select2SelectionTemplate}}
-    <script name="select2-selection-template" type="x-tmpl-mustache" {{if .Meta.Config.Select2SelectionTemplate.Raw}} data-raw="true"{{end}}>
-      {{.Meta.Config.Select2SelectionTemplate.Data}}
-    </script>
-  {{end}}
-
-  {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
-    <script name="select-one-selected-template" type="x-tmpl-mustache">
-      <p class="qor-field__selected" data-primary-key="[[ primaryKey ]]">
-        <span class="qor-selected__change">[[ &displayName ]]</span>
-        <a href="#" class="qor-selected__remove"><i class="material-icons">remove_circle_outline</i></a>
-      </p>
-    </script>
-
-    <script name="select-one-selected-icon" type="x-tmpl-mustache">
-      <span class="qor-select__select-icon"><i class="material-icons">check_circle</i></span>
-    </script>
-  {{end}}
-
   <div class="qor-field__block qor-field__edit  qor-field__selectone" {{if (eq .Meta.Config.SelectMode "bottom_sheet")}} data-toggle="qor.selectone"{{end}}>
-    {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
+      {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
+        <script name="select-one-selected-template" type="x-tmpl-mustache">
+          <p class="qor-field__selected" data-primary-key="[[ primaryKey ]]">
+            <span class="qor-selected__change">
+            {{if .Meta.Config.BottomSheetSelectedTemplate -}}
+                {{.Meta.Config.BottomSheetSelectedTemplate}}
+            {{- else -}}
+                [[ &{{if .Meta.Config.DisplayField}}{{.Meta.Config.DisplayField}}{{else}}displayText{{end}} ]]
+            {{- end}}</span>
+            <a href="#" class="qor-selected__remove"><i class="material-icons">remove_circle_outline</i></a>
+          </p>
+        </script>
+
+          <script name="select-one-selected-icon" type="x-tmpl-mustache">
+          <span class="qor-select__select-icon"><i class="material-icons">check_circle</i></span>
+        </script>
+
       {{if $is_existing_record}}
         <p class="qor-field__selected" data-primary-key="{{primary_key_of $current_value}}">
           <span class="qor-selected__change">{{.Value}}</span>
@@ -46,10 +37,13 @@
       <a href="javascript://" {{if $is_existing_record}}style="display:none"{{end}}
         class="mdl-button mdl-button--colored qor-field__selectone-trigger"
         data-select-modal="one" {{if .InputId}}data-select-id="#{{.InputId}}"{{end}}
-        data-selectone-url="{{url_for .Meta.Config}}" data-select-listing-url="{{url_for .Meta.Config}}"
+        data-selectone-url="{{url_for .Meta.Config}}"
+        data-select-listing-url="{{url_for .Meta.Config}}"
+        {{if .Meta.Config.RemoteDataResource.RecordeUrl}}data-remote-recorde-url="{{url_for .Meta.Config.RemoteDataResource.RecordeUrl}}"{{end}}
         data-select-creating-url="{{new_resource_path .Meta.Config.RemoteDataResource.Resource}}"
         data-select-default-creating="{{.Meta.Config.DefaultCreating}}"
-        {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}>
+        {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
+        {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}>
         {{meta_placeholder .Meta .Context "Click to Select"}}
       </a>
 
@@ -59,6 +53,17 @@
         {{end}}
       </select>
     {{else}}
+      {{if .Meta.Config.Select2ResultTemplate}}
+          <script name="select2-result-template" type="x-tmpl-mustache"{{if .Meta.Config.Select2ResultTemplate.Raw}} data-raw="true"{{end}}>
+          {{.Meta.Config.Select2ResultTemplate.Data}}
+        </script>
+      {{end}}
+
+      {{if .Meta.Config.Select2SelectionTemplate}}
+          <script name="select2-selection-template" type="x-tmpl-mustache" {{if .Meta.Config.Select2SelectionTemplate.Raw}} data-raw="true"{{end}}>
+          {{.Meta.Config.Select2SelectionTemplate.Data}}
+        </script>
+      {{end}}
       <select id="{{.InputId}}" class="qor-field__input hidden"
         {{if .Meta.Config.RemoteDataResource}}{{if $is_existing_record}}chooser-selected="true"{{end}}{{end}}
         data-toggle="qor.chooser"
@@ -69,7 +74,7 @@
         {{if .Meta.Config.IsRemote}}
           data-remote-data="true" data-ajax--url="{{url_for .Meta.Config}}"
           {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
-          {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
+          {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
         {{end}}>
         {{if .Meta.Config.RemoteDataResource}}
           {{if $is_existing_record}}

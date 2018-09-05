@@ -38,66 +38,89 @@ func configureDefaultLayouts(res *Resource) {
 }
 
 func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
-	res.SetMeta(&Meta{Name: BASIC_META_ID, Valuer: func(r interface{}, context *core.Context) interface{} {
-		return res.GetKey(r)
-	}})
+	res.SetMeta(&Meta{
+		Name:  BASIC_META_ID,
+		Label: I18NGROUP + ".basic_metas.ID",
+		Valuer: func(r interface{}, context *core.Context) interface{} {
+			return res.GetKey(r)
+		}})
 
-	res.SetMeta(&Meta{Name: BASIC_META_LABEL, Valuer: func(r interface{}, context *core.Context) interface{} {
-		if b, ok := r.(resource.BasicValue); ok {
-			return b.BasicLabel()
-		}
-		return utils.Stringify(r)
-	}})
+	res.SetMeta(&Meta{
+		Name:  BASIC_META_LABEL,
+		Label: I18NGROUP + ".basic_metas.Label",
+		Valuer: func(r interface{}, context *core.Context) interface{} {
+			if b, ok := r.(resource.BasicValue); ok {
+				return b.BasicLabel()
+			}
+			return utils.StringifyContext(r, context)
+		}})
 
-	res.SetMeta(&Meta{Name: BASIC_META_ICON, Valuer: func(r interface{}, context *core.Context) interface{} {
-		switch rt := r.(type) {
-		case resource.IconGetter:
-			return rt.GetIcon()
-		case resource.IconContextGetter:
-			return rt.GetIcon(context)
-		case resource.BasicValue:
-			return rt.BasicIcon()
-		default:
-			return ""
-		}
-	}})
+	res.SetMeta(&Meta{
+		Name:  BASIC_META_ICON,
+		Label: I18NGROUP + ".basic_metas.Icon",
+		Valuer: func(r interface{}, context *core.Context) interface{} {
+			switch rt := r.(type) {
+			case resource.IconGetter:
+				return rt.GetIcon()
+			case resource.IconContextGetter:
+				return rt.GetIcon(context)
+			case resource.BasicValue:
+				return rt.BasicIcon()
+			default:
+				return ""
+			}
+		}})
 
-	res.SetMeta(&Meta{Name: BASIC_META_HTML, Valuer: func(r interface{}, context *core.Context) interface{} {
-		html := context.Htmlify(r)
-		return html
-	}})
+	res.SetMeta(&Meta{
+		Name:  BASIC_META_HTML,
+		Label: I18NGROUP + ".basic_metas.Label",
+		Valuer: func(r interface{}, ctx *core.Context) interface{} {
+			html := utils.HtmlifyContext(r, ctx)
+			if html == "" {
+				value := res.GetMeta(BASIC_META_LABEL).Value(ctx, r)
+				html = utils.HtmlifyContext(value, ctx)
+			}
+			return html
+		}})
 
 	res.MetaAliases[BASIC_META_ID] = &resource.MetaName{Name: "ID"}
-	res.MetaAliases[BASIC_META_LABEL] = &resource.MetaName{Name: "Title"}
-	res.MetaAliases[BASIC_META_HTML] = &resource.MetaName{Name: "Title"}
+	res.MetaAliases[BASIC_META_LABEL] = &resource.MetaName{Name: "Value"}
+	res.MetaAliases[BASIC_META_HTML] = &resource.MetaName{Name: "Value"}
 	res.MetaAliases[BASIC_META_ICON] = &resource.MetaName{Name: "Icon"}
 
 	var (
 		metaNames             = []string{BASIC_META_ID, BASIC_META_LABEL}
-		metaNamesWithIcon     = append(metaNames, BASIC_META_ICON)
+		metaNamesWithIcon     = append([]string{BASIC_META_ICON}, metaNames...)
 		metaHTMLNames         = []string{BASIC_META_ID, BASIC_META_HTML}
-		metaHTMLNamesWithIcon = append(metaHTMLNames, BASIC_META_ICON)
+		metaHTMLNamesWithIcon = append([]string{BASIC_META_ICON}, metaHTMLNames...)
 	)
 
 	basicLayout := resource.NewBasicLayout()
 
 	res.Layout(BASIC_LAYOUT, &Layout{
-		Layout: basicLayout,
-		Metas:  metaNames,
+		Layout:           basicLayout,
+		Metas:            metaNames,
+		NotIndexRenderID: true,
 	})
 
 	res.Layout(BASIC_LAYOUT_WITH_ICON, &Layout{
-		Layout: basicLayout,
-		Metas:  metaNamesWithIcon,
+		Layout:           basicLayout,
+		Metas:            metaNamesWithIcon,
+		NotIndexRenderID: true,
+		MetaID:           BASIC_META_ID,
 	})
 
 	res.Layout(BASIC_LAYOUT_HTML, &Layout{
-		Layout: basicLayout,
-		Metas:  metaHTMLNames,
+		Layout:           basicLayout,
+		Metas:            metaHTMLNames,
+		NotIndexRenderID: true,
+		MetaID:           BASIC_META_ID,
 	})
 
 	res.Layout(BASIC_LAYOUT_HTML_WITH_ICON, &Layout{
-		Layout: basicLayout,
-		Metas:  metaHTMLNamesWithIcon,
+		Layout:           basicLayout,
+		Metas:            metaHTMLNamesWithIcon,
+		NotIndexRenderID: true,
+		MetaID:           BASIC_META_ID,
 	})
 }

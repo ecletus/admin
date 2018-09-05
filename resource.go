@@ -751,6 +751,19 @@ func (res *Resource) GetMeta(name string, notUpdate ...bool) *Meta {
 			res.MetasByFieldName[name] = meta
 			res.Metas = append(res.Metas, meta)
 			return meta
+		} else if name == "String" {
+			meta := &Meta{
+				Name:         name,
+				Label:        res.SingularLabelKey(),
+				baseResource: res,
+				Resource:     res,
+				Type:         "string",
+				Valuer: func(recorde interface{}, context *core.Context) interface{} {
+					return utils.StringifyContext(recorde, context)
+				},
+			}
+			res.MetasByName[name] = meta
+			return meta
 		} else {
 			parts := strings.Split(name, ".")
 			if len(parts) > 1 {

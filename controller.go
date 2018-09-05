@@ -53,6 +53,7 @@ func (ac *Controller) Index(context *Context) {
 	}).With([]string{"json", "xml"}, func() {
 		if context.ValidateLayoutOrError() {
 			result := ac.LoadIndexData(context)
+			context.Api = true
 			context.Encode(result)
 		}
 	}).Respond(context.Request)
@@ -105,6 +106,7 @@ func (ac *Controller) Create(context *Context) {
 			context.Writer.WriteHeader(HTTPUnprocessableEntity)
 			context.Execute("", result)
 		}).With([]string{"json", "xml"}, func() {
+			context.Api = true
 			context.Writer.WriteHeader(HTTPUnprocessableEntity)
 			context.Encode(map[string]interface{}{"errors": context.GetErrors()})
 		}).Respond(context.Request)
@@ -115,6 +117,7 @@ func (ac *Controller) Create(context *Context) {
 			context.Flash(string(context.t(I18NGROUP+".form.successfully_created", "{{.}} was successfully created", res)), "success")
 			http.Redirect(context.Writer, context.Request, context.URLFor(result, res), http.StatusFound)
 		}).With([]string{"json", "xml"}, func() {
+			context.Api = true
 			context.Encode(result)
 		}).Respond(context.Request)
 	}

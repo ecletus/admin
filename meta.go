@@ -578,10 +578,10 @@ func (meta *Meta) updateMeta() {
 				}
 			} else if meta.Config == nil && meta.Resource.mounted {
 				switch meta.Type {
-				case "select_one":
-					meta.Config = &SelectOneConfig{RemoteDataResource: &DataResource{Layout: BASIC_LAYOUT}}
-				case "select_many":
-					meta.Config = &SelectManyConfig{RemoteDataResource: &DataResource{Layout: BASIC_LAYOUT}}
+				case "select_one", "select_many":
+					cfg := &SelectOneConfig{RemoteDataResource: &DataResource{}}
+					cfg.Layout = BASIC_LAYOUT
+					meta.Config = cfg
 				}
 			}
 

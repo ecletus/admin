@@ -9,13 +9,15 @@ import (
 
 type Layout struct {
 	*resource.Layout
-	Resource      *Resource
-	Parent        *Layout
-	Metas         []string
-	MetaNames     []*resource.MetaName
-	MetasFunc     func(res *Resource, context *Context, recorde interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName)
-	MetaNamesFunc func(res *Resource, context *Context, recorde interface{}, roles ...roles.PermissionMode) []string
-	MetaAliases   map[string]*resource.MetaName
+	Resource         *Resource
+	Parent           *Layout
+	Metas            []string
+	MetaNames        []*resource.MetaName
+	MetasFunc        func(res *Resource, context *Context, recorde interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName)
+	MetaNamesFunc    func(res *Resource, context *Context, recorde interface{}, roles ...roles.PermissionMode) []string
+	MetaAliases      map[string]*resource.MetaName
+	NotIndexRenderID bool
+	MetaID           string
 }
 
 func (l *Layout) MetaNameDiscovery(key string) *resource.MetaName {

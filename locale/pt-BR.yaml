@@ -1,5 +1,4 @@
 menus:
-  Financeiro: Financeiro
   Dashboard: Painel
   Site Management: Configuração do Site
   Actions: Ações
@@ -45,3 +44,7 @@ showpage:
     button:
       save@: common.actions.save
       cancel_edit@: common.actions.cancel_edit
+basic_metas:
+  Label: Etiqueta
+  Icon: Ícone
+  ID: ID

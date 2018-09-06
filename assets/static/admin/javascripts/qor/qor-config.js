@@ -26,11 +26,12 @@ $(function () {
 $.fn.select2 = $.fn.select2 || function(){};
 $.fn.select2.ajaxCommonOptions = function(select2Data) {
     let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey,
-        remoteDataDisplayKey = select2Data.remoteDataDisplayKey;
+        remoteDataDisplayKey = select2Data.remoteDataDisplayKey,
+        remoteDataCache = !(select2Data.remoteDataCache === 'false');
 
     return {
         dataType: 'json',
-        cache: true,
+        cache: remoteDataCache,
         delay: 250,
         data: function(params) {
             return {

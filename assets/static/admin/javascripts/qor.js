@@ -7,7 +7,7 @@ window.Mustache && (window.Mustache.tags = ['[[', ']]']);
 
 // clear close alert after ajax complete
 $(document).ajaxComplete(function(event, xhr, settings) {
-    if (settings.type == "POST" || settings.type == "PUT") {
+    if (settings.type === "POST" || settings.type === "PUT") {
         if ($.fn.qorSlideoutBeforeHide) {
             $.fn.qorSlideoutBeforeHide = null;
             window.onbeforeunload = null;
@@ -17,19 +17,21 @@ $(document).ajaxComplete(function(event, xhr, settings) {
 
 $(function () {
     let $header = $('.qor-page__header');
-    if ($header.css('position') == 'fixed') {
+    if ($header.css('position') === 'fixed') {
         $('.qor-page__body').css({marginTop:$header.height(), paddingTop:0});
     }
 });
 
 // select2 ajax common options
-// $.fn.select2 = $.fn.select2 || function(){};
+$.fn.select2 = $.fn.select2 || function(){};
 $.fn.select2.ajaxCommonOptions = function(select2Data) {
-    let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey;
+    let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey,
+        remoteDataDisplayKey = select2Data.remoteDataDisplayKey,
+        remoteDataCache = !(select2Data.remoteDataCache === 'false');
 
     return {
         dataType: 'json',
-        cache: true,
+        cache: remoteDataCache,
         delay: 250,
         data: function(params) {
             return {
@@ -47,6 +49,9 @@ $.fn.select2.ajaxCommonOptions = function(select2Data) {
 
             var processedData = $.map(data, function(obj) {
                 obj.id = obj[remoteDataPrimaryKey] || obj.primaryKey || obj.Id || obj.ID;
+                if (remoteDataDisplayKey) {
+                    obj.text = obj[remoteDataDisplayKey];
+                }
                 return obj;
             });
 
@@ -5063,7 +5068,7 @@ $(function() {
                 $form = $btn.closest('form'),
                 $hiddenInput = $parent.closest('.qor-fieldset').find('input.qor-hidden__primary_key[type="hidden"]'),
                 $input = $parent.find('input[name*="QorResource"],textarea[name*="QorResource"],select[name*="QorResource"]'),
-                $method = $form.find('input[name="_method]"'),
+                $method = $form.find('input[name=_method]'),
                 names = $input.length && $input.prop('name').match(/\.\w+/g),
                 inputData = $input.serialize();
 
@@ -6802,6 +6807,8 @@ $(function() {
         this.init();
     }
 
+    var lock = {lock: false};
+
     QorSelectMany.prototype = {
         constructor: QorSelectMany,
 
@@ -6845,6 +6852,14 @@ $(function() {
         },
 
         openBottomSheets: function(e) {
+            if (lock.lock) {
+                e.preventDefault();
+                return false;
+            }
+
+            lock.lock = true;
+            setTimeout(function () {lock.lock = false}, 1000*3);
+
             let $this = $(e.target),
                 data = $this.data();
 
@@ -7133,16 +7148,20 @@ $(function() {
 
   function firstTextKey(obj) {
     var keys = Object.keys(obj);
-    if (keys.length > 1 && keys[0] == "ID") {
+    if (keys.length > 1 && keys[0] === "ID") {
       return keys[1];
     }
     return keys[0];
   }
 
+  var lock = {lock: false};
+
   QorSelectOne.prototype = {
     constructor: QorSelectOne,
 
     init: function() {
+      this.$selectOneSelectedTemplate = this.$element.find('[name="select-one-selected-template"]');
+      this.$selectOneSelectedIconTemplate = this.$element.find('[name="select-one-selected-icon"]');
       this.bind();
     },
 
@@ -7175,33 +7194,50 @@ $(function() {
 
     changeSelect: function() {
       var $target = $(this),
-        $parent = $target.closest(CLASS_PARENT);
+          $parent = $target.closest(CLASS_PARENT);
 
       $parent.find(CLASS_SELECT_TRIGGER).trigger('click');
     },
 
-    openBottomSheets: function(e) {
-      var $this = $(e.target),
-        data = $this.data();
+    openBottomSheets: function (e) {
+      if (lock.lock) {
+        e.preventDefault();
+        return false;
+      }
+
+      lock.lock = true;
+      setTimeout(function () {lock.lock = false}, 1000*3);
+      var $this = $(e.target);
+      this.currentData = $this.data();
 
       this.BottomSheets = $body.data('qor.bottomsheets');
       this.$parent = $this.closest(CLASS_PARENT);
 
-      data.url = data.selectoneUrl;
+      this.currentData.url = this.currentData.selectoneUrl;
+      this.primaryField = this.currentData.remoteDataPrimaryKey;
+      this.displayField = this.currentData.remoteDataDisplayKey;
 
-      this.SELECT_ONE_SELECTED_ICON = $('[name="select-one-selected-icon"]').html();
-      this.BottomSheets.open(data, this.handleSelectOne.bind(this));
+      this.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
+      this.BottomSheets.open(this.currentData, this.handleSelectOne.bind(this));
     },
 
     initItem: function() {
-      var $selectFeild = this.$parent.find(CLASS_SELECT_FIELD),
-        selectedID;
+      var $selectField = this.$parent.find(CLASS_SELECT_FIELD),
+          recordeUrl = this.currentData.remoteRecordeUrl,
+          selectedID;
 
-      if (!$selectFeild.length) {
+      if (recordeUrl) {
+        this.$bottomsheets.find('tr[data-primary-key]').each(function () {
+          var $this = $(this), data = $this.data();
+          data.url = recordeUrl.replace("{ID}", data.primaryKey)
+        })
+      }
+
+      if (!$selectField.length) {
         return;
       }
 
-      selectedID = $selectFeild.data().primaryKey;
+      selectedID = $selectField.data().primaryKey;
 
       if (selectedID) {
         this.$bottomsheets
@@ -7217,7 +7253,7 @@ $(function() {
     },
 
     renderSelectOne: function(data) {
-      return Mustache.render($('[name="select-one-selected-template"]').html(), data);
+      return Mustache.render(this.$selectOneSelectedTemplate.html(), data);
     },
 
     handleSelectOne: function($bottomsheets) {
@@ -7241,12 +7277,13 @@ $(function() {
 
     handleResults: function(data) {
       var template,
-        $parent = this.$parent,
-        $select = $parent.find('select'),
-        $selectFeild = $parent.find(CLASS_SELECT_FIELD);
+          $parent = this.$parent,
+          $select = $parent.find('select'),
+          $selectFeild = $parent.find(CLASS_SELECT_FIELD);
 
-      data.displayName = data.Text || data.Name || data.Title || data.Code || firstTextKey(data);
-      data.selectoneValue = data.primaryKey || data.ID;
+      data.displayName = this.displayField ? data[this.displayField] :
+          (data.Text || data.Name || data.Title || data.Code || firstTextKey(data));
+      data.selectoneValue = this.primaryField ? data[this.primaryField] : (data.primaryKey || data.ID);
 
       if (!$select.length) {
         return;

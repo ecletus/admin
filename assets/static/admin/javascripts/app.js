@@ -1,1 +1,310 @@
-$(function(){"use strict";$(document).on("click.qor.alert",'[data-dismiss="alert"]',function(){$(this).closest(".qor-alert").remove()}),setTimeout(function(){$('.qor-alert[data-dismissible="true"]').remove()},5e3)}),$(function(){"use strict";var e=$(".qor-page__body > .qor-form-container > form");$(".qor-error > li > label").each(function(){var t=$(this),a=t.attr("for");a&&e.find("#"+a).closest(".qor-field").addClass("is-error").append(t.clone().addClass("qor-field__error"))})}),$(function(){"use strict";$(document).on("click",".qor-dialog--global-search",function(e){e.stopPropagation(),$(e.target).parents(".qor-dialog-content").length||$(e.target).is(".qor-dialog-content")||$(".qor-dialog--global-search").remove()}),$(document).on("click",".qor-global-search--show",function(e){e.preventDefault();var t=$(this).data(),a=window.Mustache.render('<div class="qor-dialog qor-dialog--global-search" tabindex="-1" role="dialog" aria-hidden="true"><div class="qor-dialog-content"><form action=[[actionUrl]]><div class="mdl-textfield mdl-js-textfield" id="global-search-textfield"><input class="mdl-textfield__input ignore-dirtyform" name="keyword" id="globalSearch" value="" type="text" placeholder="" /><label class="mdl-textfield__label" for="globalSearch">[[placeholder]]</label></div></form></div></div>',t);$("body").append(a),window.componentHandler.upgradeElement(document.getElementById("global-search-textfield")),$("#globalSearch").focus()})}),$(function(){"use strict";var e=[],t=localStorage.getItem("qoradmin_menu_status");t&&t.length&&(e=t.split(",")),$(".qor-menu-container").on("click","> ul > li > a",function(){var t=$(this),a=t.parent(),o=t.next("ul"),s=a.attr("qor-icon-name");o.length&&(o.hasClass("in")?(e.push(s),a.removeClass("is-expanded"),o.one("transitionend",function(){o.removeClass("collapsing in")}).addClass("collapsing").height(0)):(e=_.without(e,s),a.addClass("is-expanded"),o.one("transitionend",function(){o.removeClass("collapsing")}).addClass("collapsing in").height(o.prop("scrollHeight"))),localStorage.setItem("qoradmin_menu_status",e))}).find("> ul > li > a").each(function(){var t=$(this),a=t.parent(),o=t.next("ul"),s=a.attr("qor-icon-name");o.length&&(o.addClass("collapse"),a.addClass("has-menu"),-1!=e.indexOf(s)?o.height(0):(a.addClass("is-expanded"),o.addClass("in").height(o.prop("scrollHeight"))))});var a=$(".qor-page > .qor-page__header"),o=$(".qor-page > .qor-page__body"),s=a.find(".qor-page-subnav__header").length?96:48;a.length&&(a.height()>s&&o.css("padding-top",a.height()),$(".qor-page").addClass("has-header"),$("header.mdl-layout__header").addClass("has-action"))}),$(function(){$(".qor-mobile--show-actions").on("click",function(){$(".qor-page__header").toggleClass("actions-show")})}),$(function(){"use strict";function e(e){$("[data-url]").removeClass(n),e&&e.length&&e.addClass(n)}function t(){var e=$(".qor-js-table tbody").find(".mdl-checkbox__input:checked"),t=[];return!!e.length&&(e.each(function(){t.push($(this).closest("tr").data("primary-key"))}),t)}var a,o,s=$("body"),n="is-selected",r=function(){return s.hasClass("qor-slideout-open")},l=function(){return s.hasClass("qor-bottomsheets-open")};s.qorBottomSheets(),s.qorSlideout(),a=s.data("qor.slideout"),o=s.data("qor.bottomsheets"),$(document).on("click.qor.openUrl","[data-url]",function(s){var i,d=$(this),c=$(s.target),h=d.hasClass("qor-button--new"),u=d.hasClass("qor-button--edit"),g=(d.is(".qor-table tr[data-url]")||d.closest(".qor-js-table").length)&&!d.closest(".qor-slideout").length,p=d.data(),m=p.openType,f=d.parents(".qor-theme-slideout").length,q=(d.hasClass("qor-action-button")||d.hasClass("qor-action--button"))&&!m;if(!(c.closest(".qor-button--actions").length||!c.data("url")&&c.is("a")||g&&l()))return q&&(i=t())&&(p=$.extend({},p,{actionData:i})),p.$target=c,p.method&&"GET"!=p.method.toUpperCase()?void 0:q||"bottomsheet"==m?q&&!i&&d.closest('[data-toggle="qor.action.bulk"]').length?(window.QOR.qorConfirm(p.errorNoItem),!1):(o.open(p),!1):g||h&&!l()||u||"slideout"==m?f||"slideout"==m?d.hasClass(n)?(a.hide(),e(),!1):(a.open(p),e(d),!1):(window.location=p.url,!1):r()||h&&l()?(o.open(p),!1):f?(a.open(p),!1):(o.open(p),!1)})}),$(function(){"use strict";var e=window.location;$(".qor-search").each(function(){var t=$(this),a=t.find(".qor-search__input"),o=t.find(".qor-search__clear"),s=!!a.val(),n=function(){"?"==e.search.replace(new RegExp(a.attr("name")+"\\=?\\w*"),"")?e.href=e.href.split("?")[0]:e.search=e.search.replace(new RegExp(a.attr("name")+"\\=?\\w*"),"")};t.closest(".qor-page__header").addClass("has-search"),$("header.mdl-layout__header").addClass("has-search"),o.on("click",function(){a.val()||s?n():t.removeClass("is-dirty")})})});
+$(function() {
+    'use strict';
+
+    $(document).on('click.qor.alert', '[data-dismiss="alert"]', function() {
+        $(this).closest('.qor-alert').remove();
+    });
+
+    setTimeout(function() {
+        $('.qor-alert[data-dismissible="true"]').remove();
+    }, 5000);
+});
+
+$(function () {
+
+  'use strict';
+
+  var $form = $('.qor-page__body > .qor-form-container > form');
+
+  $('.qor-error > li > label').each(function () {
+    var $label = $(this);
+    var id = $label.attr('for');
+
+    if (id) {
+      $form.find('#' + id).
+        closest('.qor-field').
+        addClass('is-error').
+        append($label.clone().addClass('qor-field__error'));
+    }
+  });
+
+});
+
+$(function () {
+
+  'use strict';
+
+  var modal = (
+    '<div class="qor-dialog qor-dialog--global-search" tabindex="-1" role="dialog" aria-hidden="true">' +
+      '<div class="qor-dialog-content">' +
+        '<form action=[[actionUrl]]>' +
+          '<div class="mdl-textfield mdl-js-textfield" id="global-search-textfield">' +
+            '<input class="mdl-textfield__input ignore-dirtyform" name="keyword" id="globalSearch" value="" type="text" placeholder="" />' +
+            '<label class="mdl-textfield__label" for="globalSearch">[[placeholder]]</label>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+    '</div>'
+  );
+
+  $(document).on('click', '.qor-dialog--global-search', function(e){
+    e.stopPropagation();
+    if (!$(e.target).parents('.qor-dialog-content').length && !$(e.target).is('.qor-dialog-content')){
+      $('.qor-dialog--global-search').remove();
+    }
+  });
+
+  $(document).on('click', '.qor-global-search--show', function(e){
+      e.preventDefault();
+
+      var data = $(this).data();
+      var modalHTML = window.Mustache.render(modal, data);
+
+      $('body').append(modalHTML);
+      window.componentHandler.upgradeElement(document.getElementById('global-search-textfield'));
+      $('#globalSearch').focus();
+
+  });
+});
+
+$(function() {
+  'use strict';
+
+  var menuDatas = [],
+    storageName = 'qoradmin_menu_status',
+    lastMenuStatus = localStorage.getItem(storageName);
+
+  if (lastMenuStatus && lastMenuStatus.length) {
+    menuDatas = lastMenuStatus.split(',');
+  }
+
+  $('.qor-menu-container')
+    .on('click', '> ul > li > a', function() {
+      var $this = $(this),
+        $li = $this.parent(),
+        $ul = $this.next('ul'),
+        menuName = $li.attr('qor-icon-name');
+
+      if (!$ul.length) {
+        return;
+      }
+
+      if ($ul.hasClass('in')) {
+        menuDatas.push(menuName);
+
+        $li.removeClass('is-expanded');
+        $ul
+          .one('transitionend', function() {
+            $ul.removeClass('collapsing in');
+          })
+          .addClass('collapsing')
+          .height(0);
+      } else {
+        menuDatas = _.without(menuDatas, menuName);
+
+        $li.addClass('is-expanded');
+        $ul
+          .one('transitionend', function() {
+            $ul.removeClass('collapsing');
+          })
+          .addClass('collapsing in')
+          .height($ul.prop('scrollHeight'));
+      }
+      localStorage.setItem(storageName, menuDatas);
+    })
+    .find('> ul > li > a')
+    .each(function() {
+      var $this = $(this),
+        $li = $this.parent(),
+        $ul = $this.next('ul'),
+        menuName = $li.attr('qor-icon-name');
+
+      if (!$ul.length) {
+        return;
+      }
+
+      $ul.addClass('collapse');
+      $li.addClass('has-menu');
+
+      if (menuDatas.indexOf(menuName) != -1) {
+        $ul.height(0);
+      } else {
+        $li.addClass('is-expanded');
+        $ul.addClass('in').height($ul.prop('scrollHeight'));
+      }
+    });
+
+  var $pageHeader = $('.qor-page > .qor-page__header'),
+    $pageBody = $('.qor-page > .qor-page__body'),
+    triggerHeight = $pageHeader.find('.qor-page-subnav__header').length ? 96 : 48;
+
+  if ($pageHeader.length) {
+    if ($pageHeader.height() > triggerHeight) {
+      $pageBody.css('padding-top', $pageHeader.height());
+    }
+
+    $('.qor-page').addClass('has-header');
+    $('header.mdl-layout__header').addClass('has-action');
+  }
+});
+
+$(function () {
+  $('.qor-mobile--show-actions').on('click', function () {
+    $('.qor-page__header').toggleClass('actions-show');
+  });
+});
+
+$(function() {
+    'use strict';
+
+    var $body = $('body'),
+        Slideout,
+        BottomSheets,
+        CLASS_IS_SELECTED = 'is-selected',
+        isSlideoutOpened = function() {
+            return $body.hasClass('qor-slideout-open');
+        },
+        isBottomsheetsOpened = function() {
+            return $body.hasClass('qor-bottomsheets-open');
+        };
+
+    $body.qorBottomSheets();
+    $body.qorSlideout();
+
+    Slideout = $body.data('qor.slideout');
+    BottomSheets = $body.data('qor.bottomsheets');
+
+    function toggleSelectedCss(ele) {
+        $('[data-url]').removeClass(CLASS_IS_SELECTED);
+        ele && ele.length && ele.addClass(CLASS_IS_SELECTED);
+    }
+
+    function collectSelectID() {
+        var $checked = $('.qor-js-table tbody').find('.mdl-checkbox__input:checked'),
+            IDs = [];
+
+        if (!$checked.length) {
+            return false;
+        }
+
+        $checked.each(function() {
+            IDs.push(
+                $(this)
+                    .closest('tr')
+                    .data('primary-key')
+            );
+        });
+
+        return IDs;
+    }
+
+    $(document).on('click.qor.openUrl', '[data-url]', function(e) {
+        var $this = $(this),
+            $target = $(e.target),
+            isNewButton = $this.hasClass('qor-button--new'),
+            isEditButton = $this.hasClass('qor-button--edit'),
+            isInTable = ($this.is('.qor-table tr[data-url]') || $this.closest('.qor-js-table').length) && !$this.closest('.qor-slideout').length, // if table is in slideout, will open bottom sheet
+            openData = $this.data(),
+            actionData,
+            openType = openData.openType,
+            hasSlideoutTheme = $this.parents('.qor-theme-slideout').length,
+            isActionButton = ($this.hasClass('qor-action-button') || $this.hasClass('qor-action--button')) && !openType;
+
+        // if clicking item's menu actions
+        if ($target.closest('.qor-button--actions').length || (!$target.data('url') && $target.is('a')) || (isInTable && isBottomsheetsOpened())) {
+            return;
+        }
+
+        if (isActionButton) {
+            actionData = collectSelectID();
+            if (actionData) {
+                openData = $.extend({}, openData, {
+                    actionData: actionData
+                });
+            }
+        }
+
+        openData.$target = $target;
+
+        if (!openData.method || openData.method.toUpperCase() == 'GET') {
+            // Open in BottmSheet: is action button, open type is bottom-sheet
+            if (isActionButton || openType == 'bottomsheet') {
+                // if is bulk action and no item selected
+                if (isActionButton && !actionData && $this.closest('[data-toggle="qor.action.bulk"]').length) {
+                    window.QOR.qorConfirm(openData.errorNoItem);
+                    return false;
+                }
+
+                BottomSheets.open(openData);
+                return false;
+            }
+
+            // Slideout or New Page: table items, new button, edit button
+            if (isInTable || (isNewButton && !isBottomsheetsOpened()) || isEditButton || openType == 'slideout') {
+                if (hasSlideoutTheme || openType == 'slideout') {
+                    if ($this.hasClass(CLASS_IS_SELECTED)) {
+                        Slideout.hide();
+                        toggleSelectedCss();
+                        return false;
+                    } else {
+                        Slideout.open(openData);
+                        toggleSelectedCss($this);
+                        return false;
+                    }
+                } else {
+                    window.location = openData.url;
+                    return false;
+                }
+            }
+
+            // Open in BottmSheet: slideout is opened or openType is Bottom Sheet
+            if (isSlideoutOpened() || (isNewButton && isBottomsheetsOpened())) {
+                BottomSheets.open(openData);
+                return false;
+            }
+
+            // Other clicks
+            if (hasSlideoutTheme) {
+                Slideout.open(openData);
+                return false;
+            } else {
+                BottomSheets.open(openData);
+                return false;
+            }
+        }
+    });
+});
+
+$(function () {
+
+  'use strict';
+
+  var location = window.location;
+
+  $('.qor-search').each(function () {
+    var $this = $(this);
+    var $input = $this.find('.qor-search__input');
+    var $clear = $this.find('.qor-search__clear');
+    var isSearched = !!$input.val();
+
+    var emptySearch = function () {
+      var search = location.search.replace(new RegExp($input.attr('name') + '\\=?\\w*'), '');
+      if (search == '?'){
+        location.href = location.href.split('?')[0];
+      } else {
+        location.search = location.search.replace(new RegExp($input.attr('name') + '\\=?\\w*'), '');
+      }
+    };
+
+    $this.closest('.qor-page__header').addClass('has-search');
+    $('header.mdl-layout__header').addClass('has-search');
+
+    $clear.on('click', function () {
+      if ($input.val() || isSearched) {
+        emptySearch();
+      } else {
+        $this.removeClass('is-dirty');
+      }
+    });
+  });
+});

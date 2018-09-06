@@ -1225,7 +1225,7 @@ func (res *Resource) CrudScheme(ctx *core.Context, scheme interface{}) *resource
 	s := res.Scheme
 	switch st := scheme.(type) {
 	case string:
-		s, _ = res.GetScheme(st)
+		s, _ = res.GetSchemeOk(st)
 	default:
 		if scheme != nil {
 			s = scheme.(*Scheme)
@@ -1238,7 +1238,7 @@ func (res *Resource) CrudSchemeDB(db *aorm.DB, scheme interface{}) *resource.CRU
 	s := res.Scheme
 	switch st := scheme.(type) {
 	case string:
-		s, _ = res.GetScheme(st)
+		s, _ = res.GetSchemeOk(st)
 	default:
 		if scheme != nil {
 			s = scheme.(*Scheme)
@@ -1278,7 +1278,7 @@ func (res *Resource) triggerSchemeAdded(s *Scheme) {
 }
 
 func (res *Resource) HasScheme(name string) bool {
-	_, ok := res.GetScheme(name)
+	_, ok := res.GetSchemeOk(name)
 	return ok
 }
 

@@ -43,7 +43,8 @@
         data-select-creating-url="{{new_resource_path .Meta.Config.RemoteDataResource.Resource}}"
         data-select-default-creating="{{.Meta.Config.DefaultCreating}}"
         {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
-        {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}>
+        {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
+        {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}>
         {{meta_placeholder .Meta .Context "Click to Select"}}
       </a>
 
@@ -75,6 +76,7 @@
           data-remote-data="true" data-ajax--url="{{url_for .Meta.Config}}"
           {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
           {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
+          {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}
         {{end}}>
         {{if .Meta.Config.RemoteDataResource}}
           {{if $is_existing_record}}

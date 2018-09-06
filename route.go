@@ -215,7 +215,7 @@ func (admin *Admin) NewServeMux(name ...string) *route.Mux {
 					pattern := patterns[i]
 					if !strings.HasPrefix(pattern, idPattern) {
 						schemePath := strings.Replace(pattern[1:], "/", ".", -1)
-						if scheme, ok := res.GetScheme(schemePath); ok {
+						if scheme, ok := res.GetSchemeOk(schemePath); ok {
 							crubers = append(crubers, scheme)
 							lastScheme = scheme
 							continue

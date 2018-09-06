@@ -6,8 +6,8 @@ window.QOR = {};
 window.Mustache && (window.Mustache.tags = ['[[', ']]']);
 
 // clear close alert after ajax complete
-$(document).ajaxComplete(function (event, xhr, settings) {
-    if (settings.type == "POST" || settings.type == "PUT") {
+$(document).ajaxComplete(function(event, xhr, settings) {
+    if (settings.type === "POST" || settings.type === "PUT") {
         if ($.fn.qorSlideoutBeforeHide) {
             $.fn.qorSlideoutBeforeHide = null;
             window.onbeforeunload = null;
@@ -17,36 +17,37 @@ $(document).ajaxComplete(function (event, xhr, settings) {
 
 $(function () {
     let $header = $('.qor-page__header');
-    if ($header.css('position') == 'fixed') {
+    if ($header.css('position') === 'fixed') {
         $('.qor-page__body').css({marginTop:$header.height(), paddingTop:0});
     }
 });
 
 // select2 ajax common options
-// $.fn.select2 = $.fn.select2 || function(){};
-$.fn.select2.ajaxCommonOptions = function (select2Data) {
+$.fn.select2 = $.fn.select2 || function(){};
+$.fn.select2.ajaxCommonOptions = function(select2Data) {
     let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey,
-        remoteDataDisplayKey = select2Data.remoteDataDisplayKey;
+        remoteDataDisplayKey = select2Data.remoteDataDisplayKey,
+        remoteDataCache = !(select2Data.remoteDataCache === 'false');
 
     return {
         dataType: 'json',
-        cache: true,
+        cache: remoteDataCache,
         delay: 250,
-        data: function (params) {
+        data: function(params) {
             return {
                 keyword: params.term, // search term
                 page: params.page,
                 per_page: 20
             };
         },
-        processResults: function (data, params) {
+        processResults: function(data, params) {
             // parse the results into the format expected by Select2
             // since we are using custom formatting functions we do not need to
             // alter the remote JSON data, except to indicate that infinite
             // scrolling can be used
             params.page = params.page || 1;
 
-            var processedData = $.map(data, function (obj) {
+            var processedData = $.map(data, function(obj) {
                 obj.id = obj[remoteDataPrimaryKey] || obj.primaryKey || obj.Id || obj.ID;
                 if (remoteDataDisplayKey) {
                     obj.text = obj[remoteDataDisplayKey];
@@ -67,7 +68,7 @@ $.fn.select2.ajaxCommonOptions = function (select2Data) {
 
 // select2 ajax common options
 // format ajax template data
-$.fn.select2.ajaxFormatResult = function (data, tmpl) {
+$.fn.select2.ajaxFormatResult = function(data, tmpl) {
     var result = "";
     if (tmpl.length > 0) {
         result = window.Mustache.render(tmpl.html().replace(/{{(.*?)}}/g, '[[$1]]'), data);
@@ -82,7 +83,7 @@ $.fn.select2.ajaxFormatResult = function (data, tmpl) {
     return result;
 };
 
-$(function () {
+$(function() {
     let html = `<div id="dialog" style="display: none;">
                   <div class="mdl-dialog-bg"></div>
                   <div class="mdl-dialog">
@@ -107,16 +108,16 @@ $(function () {
 
     // ************************************ Refactor window.confirm ************************************
     $(document)
-        .on('keyup.qor.confirm', function (e) {
+        .on('keyup.qor.confirm', function(e) {
             if (e.which === 27) {
                 if ($dialog.is(':visible')) {
-                    setTimeout(function () {
+                    setTimeout(function() {
                         $dialog.hide();
                     }, 100);
                 }
             }
         })
-        .on('click.qor.confirm', '.dialog-button', function () {
+        .on('click.qor.confirm', '.dialog-button', function() {
             let value = $(this).data('type'),
                 callback = QOR.qorConfirmCallback;
 
@@ -126,7 +127,7 @@ $(function () {
             return false;
         });
 
-    QOR.qorConfirm = function (data, callback) {
+    QOR.qorConfirm = function(data, callback) {
         let okBtn = $dialog.find('.dialog-ok'),
             cancelBtn = $dialog.find('.dialog-cancel');
 
@@ -154,7 +155,7 @@ $(function () {
     // *******************************************************************************
 
     // ****************Handle download file from AJAX POST****************************
-    let objectToFormData = function (obj, form) {
+    let objectToFormData = function(obj, form) {
         let formdata = form || new FormData(),
             key;
 
@@ -175,12 +176,12 @@ $(function () {
         return formdata;
     };
 
-    QOR.qorAjaxHandleFile = function (url, contentType, fileName, data) {
+    QOR.qorAjaxHandleFile = function(url, contentType, fileName, data) {
         let request = new XMLHttpRequest();
 
         request.responseType = 'arraybuffer';
         request.open('POST', url, true);
-        request.onload = function () {
+        request.onload = function() {
             if (this.status === 200) {
                 let blob = new Blob([this.response], {
                         type: contentType
@@ -210,7 +211,7 @@ $(function () {
     // linkyoutube: /https?:\/\/(?:[0-9A-Z-]+\.)?(?:youtu\.be\/|youtube\.com\S*[^\w\-\s])([\w\-]{11})(?=[^\w\-]|$)(?![?=&+%\w.\-]*(?:['"][^<>]*>|<\/a>))[?=&+%\w.-]*/ig,
     // linkvimeo: /https?:\/\/(www\.)?vimeo.com\/(\d+)($|\/)/,
 
-    let converVideoLinks = function () {
+    let converVideoLinks = function() {
         let $ele = $('.qor-linkify-object'),
             linkyoutube = /https?:\/\/(?:[0-9A-Z-]+\.)?(?:youtu\.be\/|youtube\.com\S*[^\w\-\s])([\w\-]{11})(?=[^\w\-]|$)(?![?=&+%\w.\-]*(?:['"][^<>]*>|<\/a>))[?=&+%\w.-]*/gi;
 
@@ -218,7 +219,7 @@ $(function () {
             return;
         }
 
-        $ele.each(function () {
+        $ele.each(function() {
             let url = $(this).data('video-link');
             if (url.match(linkyoutube)) {
                 $(this).html(`<iframe width="100%" height="100%" src="//www.youtube.com/embed/${url.replace(linkyoutube, '$1')}" frameborder="0" allowfullscreen></iframe>`);
@@ -357,20 +358,20 @@ $(function () {
 
         for (i = 0; i < length; i++) {
             switch (parts[i]) {
-                case 'dd':
-                case 'd':
-                    format.hasDay = true;
-                    break;
+            case 'dd':
+            case 'd':
+                format.hasDay = true;
+                break;
 
-                case 'mm':
-                case 'm':
-                    format.hasMonth = true;
-                    break;
+            case 'mm':
+            case 'm':
+                format.hasMonth = true;
+                break;
 
-                case 'yyyy':
-                case 'yy':
-                    format.hasYear = true;
-                    break;
+            case 'yyyy':
+            case 'yy':
+                format.hasYear = true;
+                break;
 
                 // No default
             }
@@ -571,46 +572,46 @@ $(function () {
 
             if (format.hasYear || format.hasMonth || format.hasDay) {
                 switch (Number(view)) {
-                    case 2:
-                    case 'years':
-                        $monthsPicker.addClass(CLASS_HIDE);
-                        $daysPicker.addClass(CLASS_HIDE);
+                case 2:
+                case 'years':
+                    $monthsPicker.addClass(CLASS_HIDE);
+                    $daysPicker.addClass(CLASS_HIDE);
 
-                        if (format.hasYear) {
-                            this.fillYears();
-                            $yearsPicker.removeClass(CLASS_HIDE);
-                        } else {
-                            this.showView(0);
-                        }
+                    if (format.hasYear) {
+                        this.fillYears();
+                        $yearsPicker.removeClass(CLASS_HIDE);
+                    } else {
+                        this.showView(0);
+                    }
 
-                        break;
+                    break;
 
-                    case 1:
-                    case 'months':
-                        $yearsPicker.addClass(CLASS_HIDE);
-                        $daysPicker.addClass(CLASS_HIDE);
+                case 1:
+                case 'months':
+                    $yearsPicker.addClass(CLASS_HIDE);
+                    $daysPicker.addClass(CLASS_HIDE);
 
-                        if (format.hasMonth) {
-                            this.fillMonths();
-                            $monthsPicker.removeClass(CLASS_HIDE);
-                        } else {
-                            this.showView(2);
-                        }
+                    if (format.hasMonth) {
+                        this.fillMonths();
+                        $monthsPicker.removeClass(CLASS_HIDE);
+                    } else {
+                        this.showView(2);
+                    }
 
-                        break;
+                    break;
 
                     // case 0:
                     // case 'days':
-                    default:
-                        $yearsPicker.addClass(CLASS_HIDE);
-                        $monthsPicker.addClass(CLASS_HIDE);
+                default:
+                    $yearsPicker.addClass(CLASS_HIDE);
+                    $monthsPicker.addClass(CLASS_HIDE);
 
-                        if (format.hasDay) {
-                            this.fillDays();
-                            $daysPicker.removeClass(CLASS_HIDE);
-                        } else {
-                            this.showView(1);
-                        }
+                    if (format.hasDay) {
+                        this.fillDays();
+                        $daysPicker.removeClass(CLASS_HIDE);
+                    } else {
+                        this.showView(1);
+                    }
                 }
             }
         },
@@ -682,7 +683,7 @@ $(function () {
                 '<' + itemTag + ' ' +
                 (defaults.disabled ? 'class="' + options.disabledClass + '"' :
                     defaults.picked ? 'class="' + options.pickedClass + '"' :
-                        defaults.muted ? 'class="' + options.mutedClass + '"' : '') +
+                    defaults.muted ? 'class="' + options.mutedClass + '"' : '') +
                 (defaults.view ? ' data-view="' + defaults.view + '"' : '') +
                 '>' +
                 defaults.text +
@@ -774,7 +775,9 @@ $(function () {
 
             this.$yearsPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$yearsNext.toggleClass(disabledClass, isNextDisabled);
-            this.$yearsCurrent.toggleClass(disabledClass, true).html((viewYear + start) + suffix + ' - ' + (viewYear + end) + suffix);
+            this.$yearsCurrent.
+            toggleClass(disabledClass, true).
+            html((viewYear + start) + suffix + ' - ' + (viewYear + end) + suffix);
             this.$years.html(list);
         },
 
@@ -828,7 +831,9 @@ $(function () {
 
             this.$yearPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$yearNext.toggleClass(disabledClass, isNextDisabled);
-            this.$yearCurrent.toggleClass(disabledClass, isPrevDisabled && isNextDisabled).html(viewYear + options.yearSuffix || '');
+            this.$yearCurrent.
+            toggleClass(disabledClass, isPrevDisabled && isNextDisabled).
+            html(viewYear + options.yearSuffix || '');
             this.$months.html(list);
         },
 
@@ -989,10 +994,12 @@ $(function () {
 
             this.$monthPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$monthNext.toggleClass(disabledClass, isNextDisabled);
-            this.$monthCurrent.toggleClass(disabledClass, isPrevDisabled && isNextDisabled).html(
+            this.$monthCurrent.
+            toggleClass(disabledClass, isPrevDisabled && isNextDisabled).
+            html(
                 options.yearFirst ?
-                    viewYear + suffix + ' ' + months[viewMonth] :
-                    months[viewMonth] + ' ' + viewYear + suffix
+                viewYear + suffix + ' ' + months[viewMonth] :
+                months[viewMonth] + ' ' + viewYear + suffix
             );
             this.$days.html(prevItems.join('') + items.join(' ') + nextItems.join(''));
         },
@@ -1020,125 +1027,125 @@ $(function () {
             view = $target.data('view');
 
             switch (view) {
-                case 'years prev':
-                case 'years next':
-                    viewYear = view === 'years prev' ? viewYear - 10 : viewYear + 10;
-                    year = $target.text();
-                    isYear = REGEXP_YEAR.test(year);
+            case 'years prev':
+            case 'years next':
+                viewYear = view === 'years prev' ? viewYear - 10 : viewYear + 10;
+                year = $target.text();
+                isYear = REGEXP_YEAR.test(year);
 
-                    if (isYear) {
-                        viewYear = parseInt(year, 10);
-                        this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                    }
-
-                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                    this.fillYears();
-
-                    if (isYear) {
-                        this.showView(1);
-                        this.pick('year');
-                    }
-
-                    break;
-
-                case 'year prev':
-                case 'year next':
-                    viewYear = view === 'year prev' ? viewYear - 1 : viewYear + 1;
-                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                    this.fillMonths();
-                    break;
-
-                case 'year current':
-
-                    if (this.format.hasYear) {
-                        this.showView(2);
-                    }
-
-                    break;
-
-                case 'year picked':
-
-                    if (this.format.hasMonth) {
-                        this.showView(1);
-                    } else {
-                        this.hideView();
-                    }
-
-                    break;
-
-                case 'year':
-                    viewYear = parseInt($target.text(), 10);
+                if (isYear) {
+                    viewYear = parseInt(year, 10);
                     this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                }
 
-                    if (this.format.hasMonth) {
-                        this.showView(1);
-                    } else {
-                        this.hideView();
-                    }
+                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                this.fillYears();
 
+                if (isYear) {
+                    this.showView(1);
                     this.pick('year');
-                    break;
+                }
 
-                case 'month prev':
-                case 'month next':
-                    viewMonth = view === 'month prev' ? viewMonth - 1 : view === 'month next' ? viewMonth + 1 : viewMonth;
-                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                    this.fillDays();
-                    break;
+                break;
 
-                case 'month current':
+            case 'year prev':
+            case 'year next':
+                viewYear = view === 'year prev' ? viewYear - 1 : viewYear + 1;
+                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                this.fillMonths();
+                break;
 
-                    if (this.format.hasMonth) {
-                        this.showView(1);
-                    }
+            case 'year current':
 
-                    break;
+                if (this.format.hasYear) {
+                    this.showView(2);
+                }
 
-                case 'month picked':
+                break;
 
-                    if (this.format.hasDay) {
-                        this.showView(0);
-                    } else {
-                        this.hideView();
-                    }
+            case 'year picked':
 
-                    break;
-
-                case 'month':
-                    viewMonth = $.inArray($target.text(), this.options.monthsShort);
-                    this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-
-                    if (this.format.hasDay) {
-                        this.showView(0);
-                    } else {
-                        this.hideView();
-                    }
-
-                    this.pick('month');
-                    break;
-
-                case 'day prev':
-                case 'day next':
-                case 'day':
-                    viewMonth = view === 'day prev' ? viewMonth - 1 : view === 'day next' ? viewMonth + 1 : viewMonth;
-                    viewDay = parseInt($target.text(), 10);
-                    this.date = new Date(viewYear, viewMonth, viewDay);
-                    this.viewDate = new Date(viewYear, viewMonth, viewDay);
-                    this.fillDays();
-
-                    if (view === 'day') {
-                        this.hideView();
-                    }
-
-                    this.pick('day');
-                    break;
-
-                case 'day picked':
+                if (this.format.hasMonth) {
+                    this.showView(1);
+                } else {
                     this.hideView();
-                    this.pick('day');
-                    break;
+                }
+
+                break;
+
+            case 'year':
+                viewYear = parseInt($target.text(), 10);
+                this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
+                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+
+                if (this.format.hasMonth) {
+                    this.showView(1);
+                } else {
+                    this.hideView();
+                }
+
+                this.pick('year');
+                break;
+
+            case 'month prev':
+            case 'month next':
+                viewMonth = view === 'month prev' ? viewMonth - 1 : view === 'month next' ? viewMonth + 1 : viewMonth;
+                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                this.fillDays();
+                break;
+
+            case 'month current':
+
+                if (this.format.hasMonth) {
+                    this.showView(1);
+                }
+
+                break;
+
+            case 'month picked':
+
+                if (this.format.hasDay) {
+                    this.showView(0);
+                } else {
+                    this.hideView();
+                }
+
+                break;
+
+            case 'month':
+                viewMonth = $.inArray($target.text(), this.options.monthsShort);
+                this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
+                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+
+                if (this.format.hasDay) {
+                    this.showView(0);
+                } else {
+                    this.hideView();
+                }
+
+                this.pick('month');
+                break;
+
+            case 'day prev':
+            case 'day next':
+            case 'day':
+                viewMonth = view === 'day prev' ? viewMonth - 1 : view === 'day next' ? viewMonth + 1 : viewMonth;
+                viewDay = parseInt($target.text(), 10);
+                this.date = new Date(viewYear, viewMonth, viewDay);
+                this.viewDate = new Date(viewYear, viewMonth, viewDay);
+                this.fillDays();
+
+                if (view === 'day') {
+                    this.hideView();
+                }
+
+                this.pick('day');
+                break;
+
+            case 'day picked':
+                this.hideView();
+                this.pick('day');
+                break;
 
                 // No default
             }
@@ -1263,9 +1270,9 @@ $(function () {
             var date = this.date;
 
             if (this.trigger(EVENT_PICK, {
-                view: _view || '',
-                date: date
-            }).isDefaultPrevented()) {
+                    view: _view || '',
+                    date: date
+                }).isDefaultPrevented()) {
                 return;
             }
 
@@ -1443,23 +1450,23 @@ $(function () {
                     val = parseInt(parts[i], 10) || 1;
 
                     switch (format.parts[i]) {
-                        case 'dd':
-                        case 'd':
-                            day = val;
-                            break;
+                    case 'dd':
+                    case 'd':
+                        day = val;
+                        break;
 
-                        case 'mm':
-                        case 'm':
-                            month = val - 1;
-                            break;
+                    case 'mm':
+                    case 'm':
+                        month = val - 1;
+                        break;
 
-                        case 'yy':
-                            year = 2000 + val;
-                            break;
+                    case 'yy':
+                        year = 2000 + val;
+                        break;
 
-                        case 'yyyy':
-                            year = val;
-                            break;
+                    case 'yyyy':
+                        year = val;
+                        break;
 
                         // No default
                     }
@@ -1683,7 +1690,7 @@ $(function () {
 
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -1694,7 +1701,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
     let Mustache = window.Mustache,
         NAMESPACE = 'qor.action',
@@ -1729,19 +1736,19 @@ $(function () {
     QorAction.prototype = {
         constructor: QorAction,
 
-        init: function () {
+        init: function() {
             this.bind();
             this.initActions();
         },
 
-        bind: function () {
+        bind: function() {
             this.$element.on(EVENT_CLICK, $.proxy(this.click, this));
             $(document)
                 .on(EVENT_CLICK, '.qor-table--bulking tr', this.click)
                 .on(EVENT_CLICK, ACTION_LINK, this.actionLink);
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_CLICK, this.click);
 
             $(document)
@@ -1749,7 +1756,7 @@ $(function () {
                 .off(EVENT_CLICK, ACTION_LINK, this.actionLink);
         },
 
-        initActions: function () {
+        initActions: function() {
             this.tables = $(QOR_TABLE).find('table').length;
 
             if (!this.tables) {
@@ -1760,14 +1767,14 @@ $(function () {
             }
         },
 
-        collectFormData: function () {
+        collectFormData: function() {
             let checkedInputs = $(QOR_TABLE_BULK).find('.mdl-checkbox__input:checked'),
                 formData = [],
                 normalFormData = [],
                 tempObj;
 
             if (checkedInputs.length) {
-                checkedInputs.each(function () {
+                checkedInputs.each(function() {
                     let id = $(this)
                         .closest('tr')
                         .data('primary-key');
@@ -1789,14 +1796,14 @@ $(function () {
             return this.ajaxForm;
         },
 
-        actionLink: function () {
+        actionLink: function() {
             // if not in index page
             if (!$(QOR_TABLE).find('table').length) {
                 return false;
             }
         },
 
-        actionSubmit: function ($action) {
+        actionSubmit: function($action) {
             let $target = $($action);
             this.$actionButton = $target;
             if ($target.data().method) {
@@ -1805,7 +1812,7 @@ $(function () {
             }
         },
 
-        click: function (e) {
+        click: function(e) {
             let $target = $(e.target),
                 $pageHeader = $('.qor-page > .qor-page__header'),
                 $pageBody = $('.qor-page > .qor-page__body'),
@@ -1896,13 +1903,13 @@ $(function () {
             }
         },
 
-        renderFlashMessage: function (data) {
+        renderFlashMessage: function(data) {
             let flashMessageTmpl = QorAction.FLASHMESSAGETMPL;
             Mustache.parse(flashMessageTmpl);
             return Mustache.render(flashMessageTmpl, data);
         },
 
-        submit: function () {
+        submit: function() {
             let _this = this,
                 $parent,
                 $element = this.$element,
@@ -1921,19 +1928,10 @@ $(function () {
             }
 
             if (properties.confirm && properties.ajaxForm && !properties.fromIndex) {
-                window.QOR.qorConfirm(properties, function (confirm) {
+                window.QOR.qorConfirm(properties, function(confirm) {
                     if (confirm) {
-                        $.ajax({
-                            url: properties.url,
-                            method: "POST",
-                            data: {_method: properties.method},
-                        }).always(function (result) {
-                            var location = result.getResponseHeader('X-Location');
-                            if (location) {
-                                window.location.href = location;
-                            } else {
-                                window.location.reload();
-                            }
+                        $.post(properties.url, {_method: properties.method}, function() {
+                            window.location.reload();
                         });
                     } else {
                         return;
@@ -1948,14 +1946,14 @@ $(function () {
                     method: properties.method,
                     data: ajaxForm.formData,
                     dataType: properties.datatype,
-                    beforeSend: function () {
+                    beforeSend: function() {
                         if (undoUrl) {
                             $actionButton.prop('disabled', true);
                         } else if (needDisableButtons) {
                             _this.switchButtons($element, 1);
                         }
                     },
-                    success: function (data, status, response) {
+                    success: function(data, status, response) {
                         let contentType = response.getResponseHeader('content-type'),
                             // handle file download from form submit
                             disposition = response.getResponseHeader('Content-Disposition');
@@ -2002,16 +2000,11 @@ $(function () {
                             isInSlideout ? ($parent = $(QOR_SLIDEOUT)) : ($parent = $(MDL_BODY));
                             $parent.find(ACTION_BODY).prepend(_this.renderFlashMessage(data));
                         } else {
-                            var location = response.getResponseHeader('Location');
-                            if (location) {
-                                window.location.href = location;
-                            } else {
-                                // properties.fromIndex || properties.fromMenu
-                                window.location.reload();
-                            }
+                            // properties.fromIndex || properties.fromMenu
+                            window.location.reload();
                         }
                     },
-                    error: function (xhr, textStatus, errorThrown) {
+                    error: function(xhr, textStatus, errorThrown) {
                         if (undoUrl) {
                             $actionButton.prop('disabled', false);
                         } else if (needDisableButtons) {
@@ -2023,24 +2016,24 @@ $(function () {
             }
         },
 
-        switchButtons: function ($element, disbale) {
+        switchButtons: function($element, disbale) {
             let needDisbale = disbale ? true : false;
             $element.find(ACTION_BUTTON).prop('disabled', needDisbale);
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.$element.removeData(NAMESPACE);
         },
 
         // Helper
-        removeTableCheckbox: function () {
-            $('.qor-page__body .mdl-data-table__select').each(function (i, e) {
+        removeTableCheckbox: function() {
+            $('.qor-page__body .mdl-data-table__select').each(function(i, e) {
                 $(e)
                     .parents('td')
                     .remove();
             });
-            $('.qor-page__body .mdl-data-table__select').each(function (i, e) {
+            $('.qor-page__body .mdl-data-table__select').each(function(i, e) {
                 $(e)
                     .parents('th')
                     .remove();
@@ -2050,14 +2043,14 @@ $(function () {
             $('.qor-page__body tr.is-selected').removeClass('is-selected');
         },
 
-        appendTableCheckbox: function () {
+        appendTableCheckbox: function() {
             // Only value change and the table isn't selectable will add checkboxes
-            $('.qor-page__body .mdl-data-table__select').each(function (i, e) {
+            $('.qor-page__body .mdl-data-table__select').each(function(i, e) {
                 $(e)
                     .parents('td')
                     .remove();
             });
-            $('.qor-page__body .mdl-data-table__select').each(function (i, e) {
+            $('.qor-page__body .mdl-data-table__select').each(function(i, e) {
                 $(e)
                     .parents('th')
                     .remove();
@@ -2077,7 +2070,7 @@ $(function () {
 
             isMediaLibrary && ($fixedHeadCheckBox = $('thead .mdl-checkbox__input'));
 
-            $fixedHeadCheckBox.on('click', function () {
+            $fixedHeadCheckBox.on('click', function() {
                 if (!isMediaLibrary) {
                     $('thead.is-fixed tr th')
                         .eq(0)
@@ -2094,7 +2087,7 @@ $(function () {
                 if (slideroutActionForm.length && hasPopoverForm) {
                     if ($(this).is(':checked')) {
                         let allPrimaryValues = $('.qor-table--bulking tbody tr');
-                        allPrimaryValues.each(function () {
+                        allPrimaryValues.each(function() {
                             let primaryValue = $(this).data('primary-key');
                             if (primaryValue) {
                                 slideroutActionForm.prepend(
@@ -2125,14 +2118,14 @@ $(function () {
 
     QorAction.DEFAULTS = {};
 
-    $.fn.qorSliderAfterShow.qorActionInit = function (url, html) {
+    $.fn.qorSliderAfterShow.qorActionInit = function(url, html) {
         let hasAction = $(html).find('[data-toggle="qor-action-slideout"]').length,
             $actionForm = $('[data-toggle="qor-action-slideout"]').find('form'),
             $checkedItem = $('.qor-page__body .mdl-checkbox__input:checked');
 
         if (hasAction && $checkedItem.length) {
             // insert checked value into sliderout form
-            $checkedItem.each(function (i, e) {
+            $checkedItem.each(function(i, e) {
                 let id = $(e)
                     .parents('tbody tr')
                     .data('primary-key');
@@ -2143,8 +2136,8 @@ $(function () {
         }
     };
 
-    QorAction.plugin = function (options) {
-        return this.each(function () {
+    QorAction.plugin = function(options) {
+        return this.each(function() {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 fn;
@@ -2159,18 +2152,18 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         let options = {},
             selector = '[data-toggle="qor.action.bulk"]';
 
         $(document)
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorAction.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorAction.plugin.call($(selector, e.target), options);
             })
-            .on(EVENT_CLICK, MENU_ACTIONS, function () {
+            .on(EVENT_CLICK, MENU_ACTIONS, function() {
                 new QorAction().actionSubmit(this);
                 return false;
             })
@@ -2181,106 +2174,109 @@ $(function () {
 });
 
 (function (factory) {
-    if (typeof define === 'function' && define.amd) {
-        // AMD. Register as anonymous module.
-        define(['jquery'], factory);
-    } else if (typeof exports === 'object') {
-        // Node / CommonJS
-        factory(require('jquery'));
-    } else {
-        // Browser globals.
-        factory(jQuery);
-    }
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as anonymous module.
+    define(['jquery'], factory);
+  } else if (typeof exports === 'object') {
+    // Node / CommonJS
+    factory(require('jquery'));
+  } else {
+    // Browser globals.
+    factory(jQuery);
+  }
 })(function ($) {
 
-    'use strict';
+  'use strict';
 
-    var NAMESPACE = 'qor.autoheight';
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
-    var EVENT_INPUT = 'input';
+  var NAMESPACE = 'qor.autoheight';
+  var EVENT_ENABLE = 'enable.' + NAMESPACE;
+  var EVENT_DISABLE = 'disable.' + NAMESPACE;
+  var EVENT_INPUT = 'input';
 
-    function QorAutoheight(element, options) {
-        this.$element = $(element);
-        this.options = $.extend({}, QorAutoheight.DEFAULTS, $.isPlainObject(options) && options);
-        this.init();
+  function QorAutoheight(element, options) {
+    this.$element = $(element);
+    this.options = $.extend({}, QorAutoheight.DEFAULTS, $.isPlainObject(options) && options);
+    this.init();
+  }
+
+  QorAutoheight.prototype = {
+    constructor: QorAutoheight,
+
+    init: function () {
+      var $this = this.$element;
+
+      this.overflow = $this.css('overflow');
+      this.paddingTop = parseInt($this.css('padding-top'), 10);
+      this.paddingBottom = parseInt($this.css('padding-bottom'), 10);
+      $this.css('overflow', 'hidden');
+      this.resize();
+      this.bind();
+    },
+
+    bind: function () {
+      this.$element.on(EVENT_INPUT, $.proxy(this.resize, this));
+    },
+
+    unbind: function () {
+      this.$element.off(EVENT_INPUT, this.resize);
+    },
+
+    resize: function () {
+      var $this = this.$element;
+
+      if ($this.is(':hidden')) {
+        return;
+      }
+
+      $this.height('auto').height($this.prop('scrollHeight') - this.paddingTop - this.paddingBottom);
+    },
+
+    destroy: function () {
+      this.unbind();
+      this.$element.css('overflow', this.overflow).removeData(NAMESPACE);
     }
+  };
 
-    QorAutoheight.prototype = {
-        constructor: QorAutoheight,
+  QorAutoheight.DEFAULTS = {};
 
-        init: function () {
-            var $this = this.$element;
+  QorAutoheight.plugin = function (options) {
+    return this.each(function () {
+      var $this = $(this);
+      var data = $this.data(NAMESPACE);
+      var fn;
 
-            this.overflow = $this.css('overflow');
-            this.paddingTop = parseInt($this.css('padding-top'), 10);
-            this.paddingBottom = parseInt($this.css('padding-bottom'), 10);
-            $this.css('overflow', 'hidden');
-            this.resize();
-            this.bind();
-        },
-
-        bind: function () {
-            this.$element.on(EVENT_INPUT, $.proxy(this.resize, this));
-        },
-
-        unbind: function () {
-            this.$element.off(EVENT_INPUT, this.resize);
-        },
-
-        resize: function () {
-            var $this = this.$element;
-
-            if ($this.is(':hidden')) {
-                return;
-            }
-
-            $this.height('auto').height($this.prop('scrollHeight') - this.paddingTop - this.paddingBottom);
-        },
-
-        destroy: function () {
-            this.unbind();
-            this.$element.css('overflow', this.overflow).removeData(NAMESPACE);
+      if (!data) {
+        if (/destroy/.test(options)) {
+          return;
         }
-    };
 
-    QorAutoheight.DEFAULTS = {};
+        $this.data(NAMESPACE, (data = new QorAutoheight(this, options)));
+      }
 
-    QorAutoheight.plugin = function (options) {
-        return this.each(function () {
-            var $this = $(this);
-            var data = $this.data(NAMESPACE);
-            var fn;
-
-            if (!data) {
-                if (/destroy/.test(options)) {
-                    return;
-                }
-
-                $this.data(NAMESPACE, (data = new QorAutoheight(this, options)));
-            }
-
-            if (typeof options === 'string' && $.isFunction(fn = data[options])) {
-                fn.apply(data);
-            }
-        });
-    };
-
-    $(function () {
-        var selector = 'textarea.qor-js-autoheight';
-
-        $(document).on(EVENT_DISABLE, function (e) {
-            QorAutoheight.plugin.call($(selector, e.target), 'destroy');
-        }).on(EVENT_ENABLE, function (e) {
-            QorAutoheight.plugin.call($(selector, e.target));
-        }).triggerHandler(EVENT_ENABLE);
+      if (typeof options === 'string' && $.isFunction(fn = data[options])) {
+        fn.apply(data);
+      }
     });
+  };
 
-    return QorAutoheight;
+  $(function () {
+    var selector = 'textarea.qor-js-autoheight';
+
+    $(document).
+      on(EVENT_DISABLE, function (e) {
+        QorAutoheight.plugin.call($(selector, e.target), 'destroy');
+      }).
+      on(EVENT_ENABLE, function (e) {
+        QorAutoheight.plugin.call($(selector, e.target));
+      }).
+      triggerHandler(EVENT_ENABLE);
+  });
+
+  return QorAutoheight;
 
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -2291,7 +2287,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     let _ = window._,
@@ -2350,7 +2346,7 @@ $(function () {
             prop = 'href';
 
         isScript && (prop = 'src');
-        $ele.each(function () {
+        $ele.each(function() {
             array.push($(this).attr(prop));
         });
         return _.uniq(array);
@@ -2373,7 +2369,7 @@ $(function () {
         for (let i = 0, len = srcs.length; i < len; i++) {
             let script = document.createElement('script');
 
-            script.onload = function () {
+            script.onload = function() {
                 scriptsLoaded++;
 
                 if (scriptsLoaded === srcs.length) {
@@ -2398,7 +2394,7 @@ $(function () {
 
         ss.type = 'text/css';
         ss.rel = 'stylesheet';
-        ss.onload = function () {
+        ss.onload = function() {
             if (srcs.length) {
                 loadStyles(srcs);
             }
@@ -2435,12 +2431,12 @@ $(function () {
     QorBottomSheets.prototype = {
         constructor: QorBottomSheets,
 
-        init: function () {
+        init: function() {
             this.build();
             this.bind();
         },
 
-        build: function () {
+        build: function() {
             let $bottomsheets;
 
             this.$bottomsheets = $bottomsheets = $(QorBottomSheets.TEMPLATE).appendTo('body');
@@ -2452,7 +2448,7 @@ $(function () {
             this.searchParams = '';
         },
 
-        bind: function () {
+        bind: function() {
             this.$bottomsheets
                 .on(EVENT_SUBMIT, 'form', this.submit.bind(this))
                 .on(EVENT_CLICK, '[data-dismiss="bottomsheets"]', this.hide.bind(this))
@@ -2463,7 +2459,7 @@ $(function () {
                 .on('filterChanged.qor.filter', this.filterChanged.bind(this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$bottomsheets
                 .off(EVENT_SUBMIT, 'form', this.submit.bind(this))
                 .off(EVENT_CLICK, '[data-dismiss="bottomsheets"]', this.hide.bind(this))
@@ -2473,14 +2469,14 @@ $(function () {
                 .off('filterChanged.qor.filter', this.filterChanged.bind(this));
         },
 
-        bindActionData: function (actiondData) {
+        bindActionData: function(actiondData) {
             var $form = this.$body.find('[data-toggle="qor-action-slideout"]').find('form');
             for (var i = actiondData.length - 1; i >= 0; i--) {
                 $form.prepend('<input type="hidden" name="primary_values[]" value="' + actiondData[i] + '" />');
             }
         },
 
-        filterChanged: function (e, search, key) {
+        filterChanged: function(e, search, key) {
             // if this event triggered:
             // search: ?locale_mode=locale, ?filters[Color].Value=2
             // key: search param name: locale_mode
@@ -2492,7 +2488,7 @@ $(function () {
             return false;
         },
 
-        selectorChanged: function (e, url, key) {
+        selectorChanged: function(e, url, key) {
             // if this event triggered:
             // url: /admin/!remote_data_searcher/products/Collections?locale=en-US
             // key: search param key: locale
@@ -2504,7 +2500,7 @@ $(function () {
             return false;
         },
 
-        keyup: function (e) {
+        keyup: function(e) {
             var searchInput = this.$bottomsheets.find(CLASS_BOTTOMSHEETS_INPUT);
 
             if (e.which === 13 && searchInput.length && searchInput.is(':focus')) {
@@ -2512,7 +2508,7 @@ $(function () {
             }
         },
 
-        search: function () {
+        search: function() {
             var $bottomsheets = this.$bottomsheets,
                 param = '?keyword=',
                 baseUrl = $bottomsheets.data().url,
@@ -2522,7 +2518,7 @@ $(function () {
             this.reload(url);
         },
 
-        pagination: function (e) {
+        pagination: function(e) {
             var $ele = $(e.target),
                 url = $ele.prop('href');
             if (url) {
@@ -2531,18 +2527,18 @@ $(function () {
             return false;
         },
 
-        reload: function (url) {
+        reload: function(url) {
             var $content = this.$bottomsheets.find(CLASS_BODY_CONTENT);
 
             this.addLoading($content);
             this.fetchPage(url);
         },
 
-        fetchPage: function (url) {
+        fetchPage: function(url) {
             var $bottomsheets = this.$bottomsheets,
                 _this = this;
 
-            $.get(url, function (response) {
+            $.get(url, function(response) {
                 var $response = $(response).find(CLASS_MAIN_CONTENT),
                     $responseHeader = $response.find(CLASS_BODY_HEAD),
                     $responseBody = $response.find(CLASS_BODY_CONTENT);
@@ -2562,12 +2558,12 @@ $(function () {
                 } else {
                     _this.reload(url);
                 }
-            }).fail(function () {
+            }).fail(function() {
                 window.alert('server error, please try again later!');
             });
         },
 
-        constructloadURL: function (url, key) {
+        constructloadURL: function(url, key) {
             var fakeURL,
                 value,
                 filterURL = this.filterURL,
@@ -2588,7 +2584,7 @@ $(function () {
             return filterURL;
         },
 
-        addHeaderClass: function () {
+        addHeaderClass: function() {
             this.$body.find(CLASS_BODY_HEAD).hide();
             if (this.$bottomsheets.find(CLASS_BODY_HEAD).children(CLASS_BOTTOMSHEETS_FILTER).length) {
                 this.$body
@@ -2598,13 +2594,13 @@ $(function () {
             }
         },
 
-        addLoading: function ($element) {
+        addLoading: function($element) {
             $element.html('');
             var $loading = $(QorBottomSheets.TEMPLATE_LOADING).appendTo($element);
             window.componentHandler.upgradeElement($loading.children()[0]);
         },
 
-        loadExtraResource: function (data) {
+        loadExtraResource: function(data) {
             let styleDiff = compareLinks(data.$links),
                 scriptDiff = compareScripts(data.$scripts);
 
@@ -2617,13 +2613,13 @@ $(function () {
             }
         },
 
-        loadMedialibraryJS: function ($response) {
+        loadMedialibraryJS: function($response) {
             var $script = $response.filter('script'),
                 theme = /theme=media_library/g,
                 src,
                 _this = this;
 
-            $script.each(function () {
+            $script.each(function() {
                 src = $(this).prop('src');
                 if (theme.test(src)) {
                     var script = document.createElement('script');
@@ -2634,7 +2630,7 @@ $(function () {
             });
         },
 
-        submit: function (e) {
+        submit: function(e) {
             let $body = this.$body,
                 form = e.target,
                 $form = $(form),
@@ -2670,10 +2666,10 @@ $(function () {
                 dataType: ajaxType ? ajaxType : 'html',
                 processData: false,
                 contentType: false,
-                beforeSend: function () {
+                beforeSend: function() {
                     $submit.prop('disabled', true);
                 },
-                success: function (data, textStatus, jqXHR) {
+                success: function(data, textStatus, jqXHR) {
                     if (resourseData.ajaxMute) {
                         $bottomsheets.remove();
                         return;
@@ -2725,7 +2721,7 @@ $(function () {
 
                     $(document).trigger(EVENT_BOTTOMSHEET_SUBMIT);
                 },
-                error: function (xhr, textStatus, errorThrown) {
+                error: function(xhr, textStatus, errorThrown) {
                     var $error;
 
                     if (xhr.status === 422) {
@@ -2737,13 +2733,13 @@ $(function () {
                         window.alert([textStatus, errorThrown].join(': '));
                     }
                 },
-                complete: function () {
+                complete: function() {
                     $submit.prop('disabled', false);
                 }
             });
         },
 
-        load: function (url, data, callback) {
+        load: function(url, data, callback) {
             var options = this.options,
                 method,
                 dataType,
@@ -2771,11 +2767,11 @@ $(function () {
             method = data.method ? data.method : 'GET';
             dataType = data.datatype ? data.datatype : 'html';
 
-            load = $.proxy(function () {
+            load = $.proxy(function() {
                 $.ajax(url, {
                     method: method,
                     dataType: dataType,
-                    success: $.proxy(function (response) {
+                    success: $.proxy(function(response) {
                         if (method === 'GET') {
                             let $response = $(response),
                                 $content,
@@ -2858,7 +2854,7 @@ $(function () {
 
                             $bottomsheets.trigger('enable');
 
-                            $bottomsheets.one(EVENT_HIDDEN, function () {
+                            $bottomsheets.one(EVENT_HIDDEN, function() {
                                 $(this).trigger('disable');
                             });
 
@@ -2881,7 +2877,7 @@ $(function () {
                         }
                     }, this),
 
-                    error: $.proxy(function () {
+                    error: $.proxy(function() {
                         this.$bottomsheets.remove();
                         if (!$('.qor-bottomsheets').is(':visible')) {
                             $('body').removeClass(CLASS_OPEN);
@@ -2889,7 +2885,7 @@ $(function () {
                         var errors;
                         if ($('.qor-error span').length > 0) {
                             errors = $('.qor-error span')
-                                .map(function () {
+                                .map(function() {
                                     return $(this).text();
                                 })
                                 .get()
@@ -2905,7 +2901,7 @@ $(function () {
             load();
         },
 
-        open: function (options, callback) {
+        open: function(options, callback) {
             if (!options.loadInline) {
                 this.init();
             }
@@ -2913,13 +2909,13 @@ $(function () {
             this.load(options.url, options, callback);
         },
 
-        show: function () {
+        show: function() {
             this.$bottomsheets.addClass(CLASS_IS_SHOWN).get(0).offsetHeight;
             this.$bottomsheets.addClass(CLASS_IS_SLIDED);
             $('body').addClass(CLASS_OPEN);
         },
 
-        hide: function (e) {
+        hide: function(e) {
             let $bottomsheets = $(e.target).closest('.qor-bottomsheets'),
                 $datePicker = $('.qor-datepicker').not('.hidden');
 
@@ -2936,16 +2932,16 @@ $(function () {
             return false;
         },
 
-        refresh: function () {
+        refresh: function() {
             this.$bottomsheets.remove();
             $('body').removeClass(CLASS_OPEN);
 
-            setTimeout(function () {
+            setTimeout(function() {
                 window.location.reload();
             }, 350);
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.$element.removeData(NAMESPACE);
         }
@@ -2973,8 +2969,8 @@ $(function () {
             <div class="qor-bottomsheets__body"></div>
         </div>`;
 
-    QorBottomSheets.plugin = function (options) {
-        return this.each(function () {
+    QorBottomSheets.plugin = function(options) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -2998,7 +2994,7 @@ $(function () {
     return QorBottomSheets;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -3009,7 +3005,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
 
     'use strict';
 
@@ -3026,7 +3022,7 @@ $(function () {
     QorChooser.prototype = {
         constructor: QorChooser,
 
-        init: function () {
+        init: function() {
             let $this = this.$element,
                 select2Data = $this.data(),
                 resetSelect2Width,
@@ -3038,7 +3034,7 @@ $(function () {
             if (select2Data.remoteData) {
                 option.ajax = $.fn.select2.ajaxCommonOptions(select2Data);
 
-                option.templateResult = function (data) {
+                option.templateResult = function(data) {
                     let tmpl = $this.parents('.qor-field').find('[name="select2-result-template"]');
                     if (tmpl.length > 0 && tmpl.data("raw")) {
                         var f = tmpl.data("func");
@@ -3051,7 +3047,7 @@ $(function () {
                     return $.fn.select2.ajaxFormatResult(data, tmpl);
                 };
 
-                option.templateSelection = function (data) {
+                option.templateSelection = function(data) {
                     if (data.loading) return data.text;
                     let tmpl = $this.parents('.qor-field').find('[name="select2-selection-template"]');
                     if (tmpl.length > 0 && tmpl.data("raw")) {
@@ -3066,9 +3062,9 @@ $(function () {
                 };
             }
 
-            $this.on('select2:select', function (evt) {
+            $this.on('select2:select', function(evt) {
                 $(evt.target).attr('chooser-selected', 'true');
-            }).on('select2:unselect', function (evt) {
+            }).on('select2:unselect', function(evt) {
                 $(evt.target).attr('chooser-selected', '');
             });
 
@@ -3084,7 +3080,7 @@ $(function () {
             }
         },
 
-        resetSelect2Width: function () {
+        resetSelect2Width: function() {
             var $container, select2 = this.$element.data().select2;
             if (select2 && select2.$container) {
                 $container = select2.$container;
@@ -3093,15 +3089,15 @@ $(function () {
 
         },
 
-        destroy: function () {
+        destroy: function() {
             this.$element.select2('destroy').removeData(NAMESPACE);
         }
     };
 
     QorChooser.DEFAULTS = {};
 
-    QorChooser.plugin = function (options) {
-        return this.each(function () {
+    QorChooser.plugin = function(options) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -3121,21 +3117,24 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         var selector = 'select[data-toggle="qor.chooser"]';
 
-        $(document).on(EVENT_DISABLE, function (e) {
+        $(document).
+        on(EVENT_DISABLE, function(e) {
             QorChooser.plugin.call($(selector, e.target), 'destroy');
-        }).on(EVENT_ENABLE, function (e) {
+        }).
+        on(EVENT_ENABLE, function(e) {
             QorChooser.plugin.call($(selector, e.target));
-        }).triggerHandler(EVENT_ENABLE);
+        }).
+        triggerHandler(EVENT_ENABLE);
     });
 
     return QorChooser;
 
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -3146,7 +3145,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     let URL = window.URL || window.webkitURL,
@@ -3212,7 +3211,7 @@ $(function () {
     function replaceText(str, data) {
         if (typeof str === 'string') {
             if (typeof data === 'object') {
-                $.each(data, function (key, val) {
+                $.each(data, function(key, val) {
                     str = str.replace('$[' + String(key).toLowerCase() + ']', val);
                 });
             }
@@ -3235,7 +3234,7 @@ $(function () {
     QorCropper.prototype = {
         constructor: QorCropper,
 
-        init: function () {
+        init: function() {
             let options = this.options,
                 $this = this.$element,
                 $parent = $this.closest(options.parent),
@@ -3256,7 +3255,7 @@ $(function () {
             fetchUrl = this.$output.data('fetchSizedata');
 
             if (fetchUrl) {
-                $.getJSON(fetchUrl, function (data) {
+                $.getJSON(fetchUrl, function(data) {
                     imageData = JSON.parse(data.MediaOption);
                     _this.$output.val(JSON.stringify(data));
                     _this.data = imageData || {};
@@ -3282,11 +3281,11 @@ $(function () {
             }
         },
 
-        resetImage: function () {
+        resetImage: function() {
             this.$parent.addClass('is-svg');
         },
 
-        build: function () {
+        build: function() {
             let textData = this.$output.data(),
                 text = {},
                 replaceTexts;
@@ -3308,12 +3307,12 @@ $(function () {
             this.$modal = $(replaceText(QorCropper.MODAL, replaceTexts)).appendTo('body');
         },
 
-        unbuild: function () {
+        unbuild: function() {
             this.$modal.remove();
             this.unwrap();
         },
 
-        wrap: function () {
+        wrap: function() {
             let $list = this.$list,
                 $img;
 
@@ -3328,30 +3327,30 @@ $(function () {
             }
         },
 
-        unwrap: function () {
+        unwrap: function() {
             let $list = this.$list;
 
             $list.find(CLASS_TOGGLE).remove();
-            $list.find(CLASS_CANVAS).each(function () {
+            $list.find(CLASS_CANVAS).each(function() {
                 let $this = $(this);
 
                 $this.before($this.html()).remove();
             });
         },
 
-        bind: function () {
+        bind: function() {
             this.$element.on(EVENT_CHANGE, $.proxy(this.read, this));
             this.$list.on(EVENT_CLICK, $.proxy(this.click, this));
             this.$modal.on(EVENT_SHOWN, $.proxy(this.start, this)).on(EVENT_HIDDEN, $.proxy(this.stop, this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_CHANGE, this.read);
             this.$list.off(EVENT_CLICK, this.click);
             this.$modal.off(EVENT_SHOWN, this.start).off(EVENT_HIDDEN, this.stop);
         },
 
-        click: function (e) {
+        click: function(e) {
             let target = e.target,
                 $target,
                 data = this.data,
@@ -3372,7 +3371,7 @@ $(function () {
                 $alert = $(QorCropper.ALERT);
                 $alert.find(CLASS_UNDO).one(
                     EVENT_CLICK,
-                    function () {
+                    function() {
                         $alert.remove();
                         this.$list.show();
                         delete data.Delete;
@@ -3389,7 +3388,7 @@ $(function () {
             }
         },
 
-        read: function (e) {
+        read: function(e) {
             let files = e.target.files,
                 file,
                 $alert = this.$parent.find('.qor-fieldset__alert');
@@ -3412,7 +3411,7 @@ $(function () {
             }
         },
 
-        load: function (url, callback) {
+        load: function(url, callback) {
             let options = this.options,
                 _this = this,
                 $list = this.$list,
@@ -3433,7 +3432,7 @@ $(function () {
             $image = $list.find('img');
             imageLength = $image.length;
             $image
-                .one('load', function () {
+                .one('load', function() {
                     if (fileType === 'image/svg+xml') {
                         $list.find(CLASS_TOGGLE).remove();
                         return false;
@@ -3518,7 +3517,7 @@ $(function () {
             $list.show();
         },
 
-        start: function () {
+        start: function() {
             let options = this.options,
                 $modal = this.$modal,
                 $target = this.$target,
@@ -3570,15 +3569,15 @@ $(function () {
                 checkImageOrigin: false,
                 autoCropArea: 1,
 
-                built: function () {
+                built: function() {
                     $modal
                         .find('.qor-cropper__options-toggle')
-                        .on(EVENT_CLICK, function () {
+                        .on(EVENT_CLICK, function() {
                             $modal.find('.qor-cropper__options-input').prop('checked', $(this).prop('checked'));
                         })
                         .prop('checked', true);
 
-                    $modal.find(CLASS_SAVE).one(EVENT_CLICK, function () {
+                    $modal.find(CLASS_SAVE).one(EVENT_CLICK, function() {
                         let cropData = $clone.cropper('getData', true),
                             croppedCanvas = $clone.cropper('getCroppedCanvas'),
                             syncData = [],
@@ -3593,7 +3592,7 @@ $(function () {
                             url = croppedCanvas.toDataURL();
                         }
 
-                        $modal.find(CLASS_OPTIONS + ' input').each(function () {
+                        $modal.find(CLASS_OPTIONS + ' input').each(function() {
                             let $this = $(this);
 
                             if ($this.prop('checked')) {
@@ -3608,7 +3607,7 @@ $(function () {
             });
         },
 
-        stop: function () {
+        stop: function() {
             this.$modal
                 .trigger('disable.qor.material')
                 .find(CLASS_WRAPPER + ' > img')
@@ -3621,13 +3620,13 @@ $(function () {
                 .remove();
         },
 
-        getList: function (aspectRatio) {
+        getList: function(aspectRatio) {
             let list = [];
 
             this.$list
                 .find('img')
                 .not(this.$target)
-                .each(function () {
+                .each(function() {
                     let data = $(this).data(),
                         resolution = data.sizeResolution,
                         name = data.sizeName,
@@ -3643,18 +3642,18 @@ $(function () {
                         if (width / height === aspectRatio) {
                             list.push(
                                 '<label>' +
-                                '<input class="qor-cropper__options-input" type="checkbox" name="' +
-                                name +
-                                '" checked> ' +
-                                '<span>' +
-                                name +
-                                '<small>(' +
-                                width +
-                                '&times;' +
-                                height +
-                                ' px)</small>' +
-                                '</span>' +
-                                '</label>'
+                                    '<input class="qor-cropper__options-input" type="checkbox" name="' +
+                                    name +
+                                    '" checked> ' +
+                                    '<span>' +
+                                    name +
+                                    '<small>(' +
+                                    width +
+                                    '&times;' +
+                                    height +
+                                    ' px)</small>' +
+                                    '</span>' +
+                                    '</label>'
                             );
                         }
                     }
@@ -3663,7 +3662,7 @@ $(function () {
             return list.length ? '<ul><li>' + list.join('</li><li>') + '</li></ul>' : '';
         },
 
-        output: function (url, data) {
+        output: function(url, data) {
             let $target = this.$target;
 
             if (url) {
@@ -3679,7 +3678,7 @@ $(function () {
             this.$output.val(JSON.stringify(this.data)).trigger(EVENT_CHANGE);
         },
 
-        preview: function ($target, emulateImageData, emulateCropData) {
+        preview: function($target, emulateImageData, emulateCropData) {
             let $canvas = $target.parent(),
                 $container = $canvas.parent(),
                 containerWidth = $container.width(),
@@ -3708,8 +3707,8 @@ $(function () {
             this.center($target);
         },
 
-        center: function ($target, reset) {
-            $target.each(function () {
+        center: function($target, reset) {
+            $target.each(function() {
                 let $this = $(this),
                     $canvas = $this.parent(),
                     $container = $canvas.parent();
@@ -3738,7 +3737,7 @@ $(function () {
             });
         },
 
-        autoCrop: function (url, data) {
+        autoCrop: function(url, data) {
             let cropData = this.cropData,
                 cropOptions = this.data[this.options.key],
                 _this = this;
@@ -3746,7 +3745,7 @@ $(function () {
             this.$list
                 .find('img')
                 .not(this.$target)
-                .each(function () {
+                .each(function() {
                     let $this = $(this),
                         sizeName = $this.data('sizeName');
 
@@ -3762,7 +3761,7 @@ $(function () {
                 });
         },
 
-        destroy: function () {
+        destroy: function() {
             if (!isSVG) {
                 this.unbind();
                 this.unbuild();
@@ -3824,8 +3823,8 @@ $(function () {
             </div>
         </div>`;
 
-    QorCropper.plugin = function (option) {
-        return this.each(function () {
+    QorCropper.plugin = function(option) {
+        return this.each(function() {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 options,
@@ -3850,7 +3849,7 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         let selector = '.qor-file__input',
             options = {
                 parent: '.qor-file',
@@ -3860,10 +3859,10 @@ $(function () {
             };
 
         $(document)
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorCropper.plugin.call($(selector, e.target), options);
             })
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorCropper.plugin.call($(selector, e.target), 'destroy');
             })
             .triggerHandler(EVENT_ENABLE);
@@ -3872,7 +3871,7 @@ $(function () {
     return QorCropper;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -3883,7 +3882,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     var NAMESPACE = 'qor.datepicker';
@@ -3899,7 +3898,7 @@ $(function () {
     function replaceText(str, data) {
         if (typeof str === 'string') {
             if (typeof data === 'object') {
-                $.each(data, function (key, val) {
+                $.each(data, function(key, val) {
                     str = str.replace('$[' + String(key).toLowerCase() + ']', val);
                 });
             }
@@ -3919,19 +3918,19 @@ $(function () {
     }
 
     QorDatepicker.prototype = {
-        init: function () {
+        init: function() {
             this.bind();
         },
 
-        bind: function () {
+        bind: function() {
             this.$element.on(EVENT_CLICK, $.proxy(this.show, this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_CLICK, this.show);
         },
 
-        build: function () {
+        build: function() {
             let $modal,
                 $ele = this.$element,
                 data = this.pickerData,
@@ -3964,7 +3963,7 @@ $(function () {
             this.built = true;
         },
 
-        unbuild: function () {
+        unbuild: function() {
             if (!this.built) {
                 return;
             }
@@ -3972,7 +3971,7 @@ $(function () {
             this.$modal.find(CLASS_EMBEDDED).off(EVENT_CHANGE, this.change).qorDatepicker('destroy').end().find(CLASS_SAVE).off(EVENT_CLICK, this.pick).end().remove();
         },
 
-        change: function (e) {
+        change: function(e) {
             var $modal = this.$modal;
             var $target = $(e.target);
             var date;
@@ -3988,7 +3987,7 @@ $(function () {
                 );
         },
 
-        show: function () {
+        show: function() {
             if (!this.built) {
                 this.build();
             }
@@ -3996,7 +3995,7 @@ $(function () {
             this.$modal.qorModal('show');
         },
 
-        pick: function () {
+        pick: function() {
             let targetInputClass = this.pickerData.targetInput,
                 $element = this.$element,
                 $parent = $element.closest(CLASS_PARENT),
@@ -4020,7 +4019,7 @@ $(function () {
             this.$modal.qorModal('hide');
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.unbuild();
             this.$element.removeData(NAMESPACE);
@@ -4054,8 +4053,8 @@ $(function () {
             </div>
         </div>`;
 
-    QorDatepicker.plugin = function (option) {
-        return this.each(function () {
+    QorDatepicker.plugin = function(option) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var options;
@@ -4080,14 +4079,14 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         var selector = '[data-toggle="qor.datepicker"]';
 
         $(document)
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorDatepicker.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorDatepicker.plugin.call($(selector, e.target));
             })
             .triggerHandler(EVENT_ENABLE);
@@ -4096,7 +4095,7 @@ $(function () {
     return QorDatepicker;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -4107,10 +4106,10 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
-    var dirtyForm = function (ele, options) {
+    var dirtyForm = function(ele, options) {
         var hasChangedObj = false;
 
         if (this instanceof jQuery) {
@@ -4120,7 +4119,7 @@ $(function () {
             ele = $(ele);
         }
 
-        ele.each(function (item, element) {
+        ele.each(function(item, element) {
             var $ele = $(element);
 
             if ($ele.is('form')) {
@@ -4188,16 +4187,16 @@ $(function () {
         dirtyForm: dirtyForm
     });
 
-    $(function () {
-        $(document).on('submit', 'form', function () {
+    $(function() {
+        $(document).on('submit', 'form', function() {
             window.onbeforeunload = null;
             $.fn.qorSlideoutBeforeHide = null;
         });
 
-        $(document).on('change', 'form', function () {
+        $(document).on('change', 'form', function() {
             if ($(this).dirtyForm()) {
                 $.fn.qorSlideoutBeforeHide = true;
-                window.onbeforeunload = function () {
+                window.onbeforeunload = function() {
                     return 'You have unsaved changes on this page. If you leave this page, you will lose all unsaved changes.';
                 };
             } else {
@@ -4208,7 +4207,7 @@ $(function () {
     });
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -4219,7 +4218,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     let location = window.location,
@@ -4246,7 +4245,7 @@ $(function () {
     QorFilterTime.prototype = {
         constructor: QorFilterTime,
 
-        init: function () {
+        init: function() {
             this.bind();
             let $element = this.$element,
                 lcoal_moment = window.moment();
@@ -4264,7 +4263,7 @@ $(function () {
             this.initActionTemplate();
         },
 
-        bind: function () {
+        bind: function() {
             var options = this.options;
 
             this.$element
@@ -4276,11 +4275,11 @@ $(function () {
             $document.on(EVENT_CLICK, this.close);
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_CLICK);
         },
 
-        initActionTemplate: function () {
+        initActionTemplate: function() {
             var scheduleStartAt = this.getUrlParameter('schedule_start_at'),
                 scheduleEndAt = this.getUrlParameter('schedule_end_at'),
                 $filterToggle = $(this.options.trigger);
@@ -4298,11 +4297,11 @@ $(function () {
             }
         },
 
-        show: function () {
+        show: function() {
             this.$element.find(CLASS_FILTER_SELECTOR).toggle();
         },
 
-        close: function (e) {
+        close: function(e) {
             var $target = $(e.target),
                 $filter = $(CLASS_FILTER_SELECTOR),
                 filterVisible = $filter.is(':visible'),
@@ -4317,7 +4316,7 @@ $(function () {
             $filter.hide();
         },
 
-        setFilterTime: function (e) {
+        setFilterTime: function(e) {
             let $target = $(e.target),
                 data = $target.data(),
                 range = data.filterRange,
@@ -4366,7 +4365,7 @@ $(function () {
             this.$searchButton.click();
         },
 
-        getTime: function (dateNow) {
+        getTime: function(dateNow) {
             var month = dateNow.getMonth() + 1,
                 date = dateNow.getDate();
 
@@ -4376,7 +4375,7 @@ $(function () {
             return dateNow.getFullYear() + '-' + month + '-' + date;
         },
 
-        clear: function () {
+        clear: function() {
             var $trigger = $(this.options.trigger),
                 $label = $trigger.find('.qor-selector-label');
 
@@ -4389,7 +4388,7 @@ $(function () {
             return false;
         },
 
-        getUrlParameter: function (name) {
+        getUrlParameter: function(name) {
             let search = location.search,
                 parameterName = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]'),
                 regex = new RegExp('[\\?&]' + parameterName + '=([^&#]*)'),
@@ -4398,7 +4397,7 @@ $(function () {
             return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
         },
 
-        updateQueryStringParameter: function (key, value, url) {
+        updateQueryStringParameter: function(key, value, url) {
             let href = url || location.href,
                 local_hash = href.match(/#\S*$/) || '',
                 escapedkey = String(key).replace(/[\\^$*+?.()|[\]{}]/g, '\\$&'),
@@ -4427,7 +4426,7 @@ $(function () {
             return href + local_hash;
         },
 
-        search: function () {
+        search: function() {
             var $searchParam = this.$searchParam,
                 href = location.href,
                 _this = this,
@@ -4437,7 +4436,7 @@ $(function () {
                 return;
             }
 
-            $searchParam.each(function () {
+            $searchParam.each(function() {
                 var $this = $(this),
                     searchParam = $this.data().searchParam,
                     val = $this.val();
@@ -4452,7 +4451,7 @@ $(function () {
             }
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.$element.removeData(NAMESPACE);
         }
@@ -4465,8 +4464,8 @@ $(function () {
         clear: false
     };
 
-    QorFilterTime.plugin = function (options) {
-        return this.each(function () {
+    QorFilterTime.plugin = function(options) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -4485,7 +4484,7 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         var selector = '[data-toggle="qor.filter.time"]';
         var options = {
             label: '.qor-filter__block-buttons button',
@@ -4495,10 +4494,10 @@ $(function () {
         };
 
         $(document)
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorFilterTime.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorFilterTime.plugin.call($(selector, e.target), options);
             })
             .triggerHandler(EVENT_ENABLE);
@@ -4507,7 +4506,7 @@ $(function () {
     return QorFilterTime;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -4518,7 +4517,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     var location = window.location;
@@ -4544,7 +4543,7 @@ $(function () {
         if ($.isArray(data)) {
             params = decodeSearch(search);
 
-            $.each(data, function (i, param) {
+            $.each(data, function(i, param) {
                 i = $.inArray(param, params);
 
                 if (i === -1) {
@@ -4572,7 +4571,7 @@ $(function () {
 
             if (search) {
                 // search = search.toLowerCase();
-                data = $.map(search.split('&'), function (n) {
+                data = $.map(search.split('&'), function(n) {
                     var param = [];
                     var value;
 
@@ -4602,22 +4601,22 @@ $(function () {
     QorFilter.prototype = {
         constructor: QorFilter,
 
-        init: function () {
+        init: function() {
             // this.parse();
             this.bind();
         },
 
-        bind: function () {
+        bind: function() {
             var options = this.options;
 
             this.$element.on(EVENT_CLICK, options.label, $.proxy(this.toggle, this)).on(EVENT_CHANGE, options.group, $.proxy(this.toggle, this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_CLICK, this.toggle).off(EVENT_CHANGE, this.toggle);
         },
 
-        toggle: function (e) {
+        toggle: function(e) {
             var $target = $(e.currentTarget);
             var data = [];
             var params;
@@ -4645,7 +4644,7 @@ $(function () {
                     data.push(param);
                 }
 
-                $target.children().each(function () {
+                $target.children().each(function() {
                     var $this = $(this);
                     var param = [name];
                     var value = $.trim($this.prop('value'));
@@ -4687,7 +4686,7 @@ $(function () {
             }
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.$element.removeData(NAMESPACE);
         }
@@ -4698,8 +4697,8 @@ $(function () {
         group: false
     };
 
-    QorFilter.plugin = function (options) {
-        return this.each(function () {
+    QorFilter.plugin = function(options) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -4718,7 +4717,7 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         var selector = '[data-toggle="qor.filter"]';
         var options = {
             label: 'a',
@@ -4726,10 +4725,10 @@ $(function () {
         };
 
         $(document)
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorFilter.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorFilter.plugin.call($(selector, e.target), options);
             })
             .triggerHandler(EVENT_ENABLE);
@@ -4738,7 +4737,7 @@ $(function () {
     return QorFilter;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -4749,7 +4748,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
 
     'use strict';
 
@@ -4775,7 +4774,7 @@ $(function () {
     QorFixer.prototype = {
         constructor: QorFixer,
 
-        init: function () {
+        init: function() {
             var options = this.options;
             var $this = this.$element;
             if (this.buildCheck()) {
@@ -4795,20 +4794,22 @@ $(function () {
             this.bind();
         },
 
-        bind: function () {
+        bind: function() {
             this.$element.on(EVENT_CLICK, $.proxy(this.check, this));
 
             this.$content.on(EVENT_SCROLL, $.proxy(this.toggle, this));
             $window.on(EVENT_RESIZE, $.proxy(this.resize, this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_CLICK, this.check);
 
-            this.$content.off(EVENT_SCROLL, this.toggle).off(EVENT_RESIZE, this.resize);
+            this.$content.
+            off(EVENT_SCROLL, this.toggle).
+            off(EVENT_RESIZE, this.resize);
         },
 
-        build: function () {
+        build: function() {
             if (!this.$content.length) {
                 return;
             }
@@ -4821,20 +4822,24 @@ $(function () {
             var pageBodyTop = this.$content.offset().top + $(CLASS_HEADER).height();
 
             if (!$clone) {
-                this.$clone = $clone = $thead.clone().prependTo($this).css({top: pageBodyTop});
+                this.$clone = $clone = $thead.clone().prependTo($this).css({ top: pageBodyTop });
             }
 
-            $clone.addClass([CLASS_IS_FIXED, CLASS_IS_HIDDEN].join(' ')).find('> tr').children().each(function (i) {
+            $clone.
+            addClass([CLASS_IS_FIXED, CLASS_IS_HIDDEN].join(' ')).
+            find('> tr').
+            children().
+            each(function(i) {
                 $(this).outerWidth($items.eq(i).outerWidth());
                 self.fixedHeaderWidth.push($(this).outerWidth());
             });
         },
 
-        unbuild: function () {
+        unbuild: function() {
             this.$clone.remove();
         },
 
-        buildCheck: function () {
+        buildCheck: function() {
             var $this = this.$element;
             // disable fixer if have multiple tables or in search page or in media library list page
             if ($('.qor-page__body .qor-js-table').length > 1 || $('.qor-global-search--container').length > 0 || $this.hasClass('qor-table--medialibrary') || $this.is(':hidden') || $this.find('tbody > tr:visible').length <= 1) {
@@ -4843,18 +4848,22 @@ $(function () {
             return false;
         },
 
-        check: function (e) {
+        check: function(e) {
             var $target = $(e.target);
             var checked;
 
             if ($target.is('.qor-js-check-all')) {
                 checked = $target.prop('checked');
 
-                $target.closest('thead').siblings('thead').find('.qor-js-check-all').prop('checked', checked).closest('.mdl-checkbox').toggleClass('is-checked', checked);
+                $target.
+                closest('thead').
+                siblings('thead').
+                find('.qor-js-check-all').prop('checked', checked).
+                closest('.mdl-checkbox').toggleClass('is-checked', checked);
             }
         },
 
-        toggle: function () {
+        toggle: function() {
             if (!this.$content.length) {
                 return;
             }
@@ -4869,30 +4878,30 @@ $(function () {
             if (!this.isEqualed) {
                 this.headerWidth = [];
                 var $items = $thead.find('> tr').children();
-                $items.each(function () {
+                $items.each(function() {
                     self.headerWidth.push($(this).outerWidth());
                 });
                 var notEqualWidth = _.difference(self.fixedHeaderWidth, self.headerWidth);
                 if (notEqualWidth.length) {
-                    $('thead.is-fixed').find('>tr').children().each(function (i) {
+                    $('thead.is-fixed').find('>tr').children().each(function(i) {
                         $(this).outerWidth(self.headerWidth[i]);
                     });
                     this.isEqualed = true;
                 }
             }
             if (scrollTop > offsetTop - headerHeight) {
-                $clone.css({'margin-left': -scrollLeft}).removeClass(CLASS_IS_HIDDEN);
+                $clone.css({ 'margin-left': -scrollLeft }).removeClass(CLASS_IS_HIDDEN);
             } else {
-                $clone.css({'margin-left': '0'}).addClass(CLASS_IS_HIDDEN);
+                $clone.css({ 'margin-left': '0' }).addClass(CLASS_IS_HIDDEN);
             }
         },
 
-        resize: function () {
+        resize: function() {
             this.build();
             this.toggle();
         },
 
-        destroy: function () {
+        destroy: function() {
             if (this.buildCheck()) {
                 return;
             }
@@ -4907,8 +4916,8 @@ $(function () {
         content: false
     };
 
-    QorFixer.plugin = function (options) {
-        return this.each(function () {
+    QorFixer.plugin = function(options) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -4923,7 +4932,7 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         var selector = '.qor-js-table';
         var options = {
             header: '.mdl-layout__header',
@@ -4932,17 +4941,20 @@ $(function () {
             paddingHeight: 2 // Fix sub header height bug
         };
 
-        $(document).on(EVENT_DISABLE, function (e) {
+        $(document).
+        on(EVENT_DISABLE, function(e) {
             QorFixer.plugin.call($(selector, e.target), 'destroy');
-        }).on(EVENT_ENABLE, function (e) {
+        }).
+        on(EVENT_ENABLE, function(e) {
             QorFixer.plugin.call($(selector, e.target), options);
-        }).triggerHandler(EVENT_ENABLE);
+        }).
+        triggerHandler(EVENT_ENABLE);
     });
 
     return QorFixer;
 
 });
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -4953,7 +4965,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     const NAMESPACE = 'qor.inlineEdit',
@@ -4994,7 +5006,7 @@ $(function () {
     QorInlineEdit.prototype = {
         constructor: QorInlineEdit,
 
-        init: function () {
+        init: function() {
             let $element = this.$element,
                 saveButton = $element.data('button-save'),
                 cancelButton = $element.data('button-cancel');
@@ -5006,7 +5018,7 @@ $(function () {
             this.bind();
         },
 
-        bind: function () {
+        bind: function() {
             this.$element
                 .on(EVENT_MOUSEENTER, CLASS_FIELD_SHOW, this.showEditButton)
                 .on(EVENT_MOUSELEAVE, CLASS_FIELD_SHOW, this.hideEditButton)
@@ -5015,7 +5027,7 @@ $(function () {
                 .on(EVENT_CLICK, CLASS_EDIT, this.showEdit.bind(this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element
                 .off(EVENT_MOUSEENTER, CLASS_FIELD_SHOW, this.showEditButton)
                 .off(EVENT_MOUSELEAVE, CLASS_FIELD_SHOW, this.hideEditButton)
@@ -5024,7 +5036,7 @@ $(function () {
                 .off(EVENT_CLICK, CLASS_EDIT, this.showEdit);
         },
 
-        showEditButton: function (e) {
+        showEditButton: function(e) {
             let $edit = $(QorInlineEdit.TEMPLATE_EDIT);
 
             if ($(e.target).closest(CLASS_FIELD).find('input:disabled, textarea:disabled,select:disabled').length) {
@@ -5034,28 +5046,29 @@ $(function () {
             $edit.appendTo($(this));
         },
 
-        hideEditButton: function () {
+        hideEditButton: function() {
             $('.qor-inlineedit__edit').remove();
         },
 
-        showEdit: function (e) {
+        showEdit: function(e) {
             let $parent = $(e.target).closest(CLASS_EDIT).hide().closest(CLASS_FIELD).addClass(CLASS_CONTAINER),
                 $save = $(this.TEMPLATE_SAVE);
 
             $save.appendTo($parent);
         },
 
-        hideEdit: function () {
+        hideEdit: function() {
             let $parent = $(this).closest(CLASS_FIELD).removeClass(CLASS_CONTAINER);
             $parent.find(CLASS_BUTTONS).remove();
         },
 
-        saveEdit: function () {
+        saveEdit: function() {
             let $btn = $(this),
                 $parent = $btn.closest(CLASS_FIELD),
                 $form = $btn.closest('form'),
                 $hiddenInput = $parent.closest('.qor-fieldset').find('input.qor-hidden__primary_key[type="hidden"]'),
                 $input = $parent.find('input[name*="QorResource"],textarea[name*="QorResource"],select[name*="QorResource"]'),
+                $method = $form.find('input[name=_method]'),
                 names = $input.length && $input.prop('name').match(/\.\w+/g),
                 inputData = $input.serialize();
 
@@ -5065,15 +5078,19 @@ $(function () {
 
             inputData += "&qorInlineEdit=true";
 
+            if ($method.length > 0) {
+                inputData += "&_method=" + $method.val();
+            }
+
             if (names.length) {
                 $.ajax($form.prop('action'), {
                     method: $form.prop('method'),
                     data: inputData,
                     dataType: 'json',
-                    beforeSend: function () {
+                    beforeSend: function() {
                         $btn.prop('disabled', true);
                     },
-                    success: function (data) {
+                    success: function(data) {
                         let newValue = getJsonData(names, data),
                             $show = $parent.removeClass(CLASS_CONTAINER).find(CLASS_FIELD_SHOW);
 
@@ -5086,7 +5103,7 @@ $(function () {
                         $parent.find(CLASS_BUTTONS).remove();
                         $btn.prop('disabled', false);
                     },
-                    error: function (xhr, textStatus, errorThrown) {
+                    error: function(xhr, textStatus, errorThrown) {
                         window.alert([textStatus, errorThrown].join(': '));
                         $btn.prop('disabled', false);
                     }
@@ -5094,7 +5111,7 @@ $(function () {
             }
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.$element.removeData(NAMESPACE);
         }
@@ -5104,8 +5121,8 @@ $(function () {
 
     QorInlineEdit.TEMPLATE_EDIT = `<button class="mdl-button mdl-js-button mdl-button--icon mdl-button--colored qor-inlineedit__edit" type="button"><i class="material-icons">mode_edit</i></button>`;
 
-    QorInlineEdit.plugin = function (options) {
-        return this.each(function () {
+    QorInlineEdit.plugin = function(options) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -5120,15 +5137,15 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         let selector = '[data-toggle="qor.inlineEdit"]',
             options = {};
 
         $(document)
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorInlineEdit.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorInlineEdit.plugin.call($(selector, e.target), options);
             })
             .triggerHandler(EVENT_ENABLE);
@@ -5137,7 +5154,7 @@ $(function () {
     return QorInlineEdit;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -5148,7 +5165,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     var componentHandler = window.componentHandler;
@@ -5182,15 +5199,15 @@ $(function () {
         }
     }
 
-    $(function () {
+    $(function() {
         $(document)
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 enable(e.target);
             })
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 disable(e.target);
             })
-            .on(EVENT_UPDATE, function (e) {
+            .on(EVENT_UPDATE, function(e) {
                 disable(e.target);
                 enable(e.target);
             });
@@ -5406,15 +5423,18 @@ $(function () {
     $(function () {
         var selector = '.qor-modal';
 
-        $(document).on(EVENT_CLICK, '[data-toggle="qor.modal"]', function () {
+        $(document).
+        on(EVENT_CLICK, '[data-toggle="qor.modal"]', function () {
             var $this = $(this);
             var data = $this.data();
             var $target = $(data.target || $this.attr('href'));
 
             QorModal.plugin.call($target, $target.data(NAMESPACE) ? 'toggle' : data);
-        }).on(EVENT_DISABLE, function (e) {
+        }).
+        on(EVENT_DISABLE, function (e) {
             QorModal.plugin.call($(selector, e.target), 'destroy');
-        }).on(EVENT_ENABLE, function (e) {
+        }).
+        on(EVENT_ENABLE, function (e) {
             QorModal.plugin.call($(selector, e.target));
         });
     });
@@ -5424,116 +5444,116 @@ $(function () {
 });
 
 (function (factory) {
-    if (typeof define === 'function' && define.amd) {
-        // AMD. Register as anonymous module.
-        define(['jquery'], factory);
-    } else if (typeof exports === 'object') {
-        // Node / CommonJS
-        factory(require('jquery'));
-    } else {
-        // Browser globals.
-        factory(jQuery);
-    }
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as anonymous module.
+    define(['jquery'], factory);
+  } else if (typeof exports === 'object') {
+    // Node / CommonJS
+    factory(require('jquery'));
+  } else {
+    // Browser globals.
+    factory(jQuery);
+  }
 })(function ($) {
 
-    'use strict';
+  'use strict';
 
-    var NAMESPACE = 'qor.tabbar.radio';
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
-    var EVENT_CLICK = 'click.' + NAMESPACE;
-    var EVENT_SWITCHED = 'switched.' + NAMESPACE;
-    var CLASS_TAB = '[data-tab-target]';
-    var CLASS_TAB_SOURCE = '[data-tab-source]';
-    var CLASS_ACTIVE = 'is-active';
+  var NAMESPACE = 'qor.tabbar.radio';
+  var EVENT_ENABLE = 'enable.' + NAMESPACE;
+  var EVENT_DISABLE = 'disable.' + NAMESPACE;
+  var EVENT_CLICK = 'click.' + NAMESPACE;
+  var EVENT_SWITCHED = 'switched.' + NAMESPACE;
+  var CLASS_TAB = '[data-tab-target]';
+  var CLASS_TAB_SOURCE = '[data-tab-source]';
+  var CLASS_ACTIVE = 'is-active';
 
-    function QorTabRadio(element, options) {
-        this.$element = $(element);
-        this.options = $.extend({}, QorTabRadio.DEFAULTS, $.isPlainObject(options) && options);
-        this.init();
+  function QorTabRadio(element, options) {
+    this.$element = $(element);
+    this.options = $.extend({}, QorTabRadio.DEFAULTS, $.isPlainObject(options) && options);
+    this.init();
+  }
+
+  QorTabRadio.prototype = {
+    constructor: QorTabRadio,
+
+    init: function () {
+      this.bind();
+    },
+
+    bind: function () {
+      this.$element.on(EVENT_CLICK, CLASS_TAB, this.switchTab.bind(this));
+    },
+
+    unbind: function () {
+      this.$element.off(EVENT_CLICK, CLASS_TAB, this.switchTab);
+    },
+
+
+    switchTab: function (e) {
+      var $target = $(e.target),
+          $element = this.$element,
+          $tabs = $element.find(CLASS_TAB),
+          $tabSources = $element.find(CLASS_TAB_SOURCE),
+          data = $target.data(),
+          tabTarget = data.tabTarget;
+
+      if ($target.hasClass(CLASS_ACTIVE)){
+        return;
+      }
+
+      $tabs.removeClass(CLASS_ACTIVE);
+      $target.addClass(CLASS_ACTIVE);
+
+      $tabSources.hide().filter('[data-tab-source="' + tabTarget + '"]').show();
+      $element.trigger(EVENT_SWITCHED, [$element, tabTarget]);
+
+    },
+
+    destroy: function () {
+      this.unbind();
     }
+  };
 
-    QorTabRadio.prototype = {
-        constructor: QorTabRadio,
+  QorTabRadio.DEFAULTS = {};
 
-        init: function () {
-            this.bind();
-        },
+  QorTabRadio.plugin = function (options) {
+    return this.each(function () {
+      var $this = $(this);
+      var data = $this.data(NAMESPACE);
+      var fn;
 
-        bind: function () {
-            this.$element.on(EVENT_CLICK, CLASS_TAB, this.switchTab.bind(this));
-        },
-
-        unbind: function () {
-            this.$element.off(EVENT_CLICK, CLASS_TAB, this.switchTab);
-        },
-
-
-        switchTab: function (e) {
-            var $target = $(e.target),
-                $element = this.$element,
-                $tabs = $element.find(CLASS_TAB),
-                $tabSources = $element.find(CLASS_TAB_SOURCE),
-                data = $target.data(),
-                tabTarget = data.tabTarget;
-
-            if ($target.hasClass(CLASS_ACTIVE)) {
-                return;
-            }
-
-            $tabs.removeClass(CLASS_ACTIVE);
-            $target.addClass(CLASS_ACTIVE);
-
-            $tabSources.hide().filter('[data-tab-source="' + tabTarget + '"]').show();
-            $element.trigger(EVENT_SWITCHED, [$element, tabTarget]);
-
-        },
-
-        destroy: function () {
-            this.unbind();
+      if (!data) {
+        if (/destroy/.test(options)) {
+          return;
         }
-    };
 
-    QorTabRadio.DEFAULTS = {};
+        $this.data(NAMESPACE, (data = new QorTabRadio(this, options)));
+      }
 
-    QorTabRadio.plugin = function (options) {
-        return this.each(function () {
-            var $this = $(this);
-            var data = $this.data(NAMESPACE);
-            var fn;
-
-            if (!data) {
-                if (/destroy/.test(options)) {
-                    return;
-                }
-
-                $this.data(NAMESPACE, (data = new QorTabRadio(this, options)));
-            }
-
-            if (typeof options === 'string' && $.isFunction(fn = data[options])) {
-                fn.apply(data);
-            }
-        });
-    };
-
-    $(function () {
-        var selector = '[data-toggle="qor.tab.radio"]';
-
-        $(document)
-            .on(EVENT_DISABLE, function (e) {
-                QorTabRadio.plugin.call($(selector, e.target), 'destroy');
-            })
-            .on(EVENT_ENABLE, function (e) {
-                QorTabRadio.plugin.call($(selector, e.target));
-            })
-            .triggerHandler(EVENT_ENABLE);
+      if (typeof options === 'string' && $.isFunction(fn = data[options])) {
+        fn.apply(data);
+      }
     });
+  };
 
-    return QorTabRadio;
+  $(function () {
+    var selector = '[data-toggle="qor.tab.radio"]';
+
+    $(document)
+      .on(EVENT_DISABLE, function (e) {
+        QorTabRadio.plugin.call($(selector, e.target), 'destroy');
+      })
+      .on(EVENT_ENABLE, function (e) {
+        QorTabRadio.plugin.call($(selector, e.target));
+      })
+      .triggerHandler(EVENT_ENABLE);
+  });
+
+  return QorTabRadio;
 
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -5544,7 +5564,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     let NAMESPACE = 'qor.redactor',
@@ -5568,7 +5588,7 @@ $(function () {
         var nums = [];
 
         if ($.isPlainObject(data)) {
-            $.each(data, function () {
+            $.each(data, function() {
                 nums.push(arguments[1]);
             });
         }
@@ -5619,7 +5639,7 @@ $(function () {
     function replaceText(str, data) {
         if (typeof str === 'string') {
             if (typeof data === 'object') {
-                $.each(data, function (key, val) {
+                $.each(data, function(key, val) {
                     str = str.replace('$[' + String(key).toLowerCase() + ']', val);
                 });
             }
@@ -5673,7 +5693,7 @@ $(function () {
     QorRedactor.prototype = {
         constructor: QorRedactor,
 
-        init: function () {
+        init: function() {
             var options = this.options;
             var $this = this.$element;
             var $parent = $this.closest(options.parent);
@@ -5688,26 +5708,26 @@ $(function () {
             this.bind();
         },
 
-        bind: function () {
+        bind: function() {
             this.$element.on(EVENT_ADD_CROP, $.proxy(this.addButton, this)).on(EVENT_REMOVE_CROP, $.proxy(this.removeButton, this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_ADD_CROP).off(EVENT_REMOVE_CROP).off(EVENT_SCROLL);
         },
 
-        addButton: function (e, image) {
+        addButton: function(e, image) {
             var $image = $(image);
 
             this.$button.css('left', $(image).width() / 2).prependTo($image.parent()).find(CLASS_CROPPER_TOGGLE).one(EVENT_CLICK, $.proxy(this.crop, this, $image));
         },
 
-        removeButton: function () {
+        removeButton: function() {
             this.$button.find(CLASS_CROPPER_TOGGLE).off(EVENT_CLICK);
             this.$button.detach();
         },
 
-        crop: function ($image) {
+        crop: function($image) {
             var options = this.options;
             var url = $image.attr('src');
             var originalUrl = url;
@@ -5720,7 +5740,7 @@ $(function () {
 
             $clone.attr('src', originalUrl);
             $modal
-                .one(EVENT_SHOWN, function () {
+                .one(EVENT_SHOWN, function() {
                     $clone.cropper({
                         data: decodeCropData($image.attr('data-crop-options')),
                         background: false,
@@ -5730,8 +5750,8 @@ $(function () {
                         rotatable: false,
                         checkImageOrigin: false,
 
-                        built: function () {
-                            $modal.find(CLASS_SAVE).one(EVENT_CLICK, function () {
+                        built: function() {
+                            $modal.find(CLASS_SAVE).one(EVENT_CLICK, function() {
                                 var cropData = $clone.cropper('getData', true);
 
                                 $.ajax(options.remote, {
@@ -5746,7 +5766,7 @@ $(function () {
                                     }),
                                     dataType: 'json',
 
-                                    success: function (response) {
+                                    success: function(response) {
                                         if ($.isPlainObject(response) && response.url) {
                                             $image.attr('src', response.url).attr('data-crop-options', encodeCropData(cropData)).removeAttr('style').removeAttr('rel');
 
@@ -5761,7 +5781,7 @@ $(function () {
                         }
                     });
                 })
-                .one(EVENT_HIDDEN, function () {
+                .one(EVENT_HIDDEN, function() {
                     $clone.cropper('destroy').remove();
                 })
                 .qorModal('show')
@@ -5769,7 +5789,7 @@ $(function () {
                 .append($clone);
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.$modal.qorModal('hide').remove();
             this.$element.removeData(NAMESPACE);
@@ -5814,8 +5834,8 @@ $(function () {
             </div>
         </div>`;
 
-    QorRedactor.plugin = function (option) {
-        return this.each(function () {
+    QorRedactor.plugin = function(option) {
+        return this.each(function() {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 config,
@@ -5843,14 +5863,14 @@ $(function () {
                     buttons: editorButtons,
 
                     callbacks: {
-                        init: function () {
+                        init: function() {
                             let button,
                                 $editor = this.core.box(),
                                 isInSlideout = $('.qor-slideout').is(':visible'),
                                 toolbarFixedTarget,
                                 toolbarFixedTopOffset = 64;
 
-                            editorButtons.forEach(function (item) {
+                            editorButtons.forEach(function(item) {
                                 button = this.button.get(item);
                                 this.button.setIcon(button, '<i class="material-icons ' + item + '"></i>');
                             }, this);
@@ -5863,7 +5883,7 @@ $(function () {
                                 toolbarFixedTopOffset = toolbarFixedTopOffset + $(toolbarFixedTarget).find('.qor-page__header').height();
                             }
 
-                            $(toolbarFixedTarget).on(EVENT_SCROLL, function () {
+                            $(toolbarFixedTarget).on(EVENT_SCROLL, function() {
                                 redactorToolbarSrcoll($editor, toolbarFixedTopOffset);
                             });
 
@@ -5878,24 +5898,24 @@ $(function () {
                                     text: $this.data('text'),
                                     parent: '.qor-field',
                                     toggle: '.qor-cropper__toggle--redactor',
-                                    replace: function (url) {
-                                        return url.replace(/\.\w+$/, function (extension) {
+                                    replace: function(url) {
+                                        return url.replace(/\.\w+$/, function(extension) {
                                             return '.original' + extension;
                                         });
                                     },
-                                    complete: $.proxy(function () {
+                                    complete: $.proxy(function() {
                                         this.code.sync();
                                     }, this)
                                 }))
                             );
                         },
 
-                        imageUpload: function (image, json) {
+                        imageUpload: function(image, json) {
                             var $image = $(image);
                             json.filelink && $image.prop('src', json.filelink);
                         },
 
-                        click: function (e) {
+                        click: function(e) {
                             var $currentTag = $(this.selection.parent());
 
                             if ($currentTag.is('.redactor-layer')) {
@@ -5912,7 +5932,7 @@ $(function () {
                             }
                         },
 
-                        modalOpened: function (name, modal) {
+                        modalOpened: function(name, modal) {
                             var _this = this;
                             if (name == 'link') {
                                 $(modal)
@@ -5920,8 +5940,8 @@ $(function () {
                                     .closest('section')
                                     .after(
                                         '<section><label>Description for Accessibility</label><input value="' +
-                                        this.link.linkDescription +
-                                        '" type="text" id="redactor-link-title" placeholder="If blank, will use Text value above" /></section>'
+                                            this.link.linkDescription +
+                                            '" type="text" id="redactor-link-title" placeholder="If blank, will use Text value above" /></section>'
                                     );
 
                                 this.link.linkUrlText = $(ID_REDACTOR_LINK_TEXT).val();
@@ -5931,23 +5951,23 @@ $(function () {
                                 $(ID_REDACTOR_LINK_TEXT).off(EVENT_KEYUP);
                                 $(ID_REDACTOR_MODAL_BUTTON_CANCEL).off(EVENT_CLICK);
 
-                                $(ID_REDACTOR_MODAL_BUTTON_CANCEL).on(EVENT_CLICK, function () {
+                                $(ID_REDACTOR_MODAL_BUTTON_CANCEL).on(EVENT_CLICK, function() {
                                     _this.link.clickCancel = true;
                                 });
 
-                                $(ID_REDACTOR_LINK_TITLE).on(EVENT_KEYUP, function () {
+                                $(ID_REDACTOR_LINK_TITLE).on(EVENT_KEYUP, function() {
                                     _this.link.valueChanged = true;
                                     _this.link.description = escapeHTML($(this).val());
                                 });
 
-                                $(ID_REDACTOR_LINK_TEXT).on(EVENT_KEYUP, function () {
+                                $(ID_REDACTOR_LINK_TEXT).on(EVENT_KEYUP, function() {
                                     _this.link.valueChanged = true;
                                     _this.link.linkUrlText = escapeHTML($(this).val());
                                 });
                             }
                         },
 
-                        modalClosed: function (name) {
+                        modalClosed: function(name) {
                             var $linkHtml = this.link.$linkHtml,
                                 description = this.link.description;
 
@@ -5966,7 +5986,7 @@ $(function () {
                             this.link.clickCancel = false;
                         },
 
-                        insertedLink: function (link) {
+                        insertedLink: function(link) {
                             var $link = $(link),
                                 description = this.link.description;
 
@@ -5976,7 +5996,7 @@ $(function () {
                             this.link.insertedTriggered = true;
                         },
 
-                        fileUpload: function (link, json) {
+                        fileUpload: function(link, json) {
                             $(link).prop('href', json.filelink).html(json.filename);
                         }
                     }
@@ -5996,14 +6016,14 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         var selector = 'textarea[data-toggle="qor.redactor"]';
 
         $(document)
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorRedactor.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorRedactor.plugin.call($(selector, e.target));
             })
             .triggerHandler(EVENT_ENABLE);
@@ -6012,7 +6032,7 @@ $(function () {
     return QorRedactor;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -6023,7 +6043,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     let _ = window._,
@@ -6049,7 +6069,7 @@ $(function () {
     QorReplicator.prototype = {
         constructor: QorReplicator,
 
-        init: function () {
+        init: function() {
             let $element = this.$element,
                 $template = $element.find('> .qor-field__block > .qor-fieldset--new'),
                 fieldsetName;
@@ -6094,7 +6114,7 @@ $(function () {
             this.resetPositionButton();
         },
 
-        resetPositionButton: function () {
+        resetPositionButton: function() {
             let sortableButton = this.$element.find('> .qor-sortable__button');
 
             if (this.isSortable) {
@@ -6106,11 +6126,11 @@ $(function () {
             }
         },
 
-        getCurrentItems: function () {
+        getCurrentItems: function() {
             return this.$element.find('> .qor-field__block > .qor-fieldset').not('.qor-fieldset--new,.is-deleted').length;
         },
 
-        toggleButton: function (isHide) {
+        toggleButton: function(isHide) {
             let $button = this.$element.find(this.options.addClass);
 
             if (isHide) {
@@ -6120,7 +6140,7 @@ $(function () {
             }
         },
 
-        resetButton: function () {
+        resetButton: function() {
             if (this.maxitems <= this.getCurrentItems()) {
                 this.toggleButton(true);
             } else {
@@ -6128,7 +6148,7 @@ $(function () {
             }
         },
 
-        parse: function () {
+        parse: function() {
             let template;
 
             if (!this.template) {
@@ -6139,7 +6159,7 @@ $(function () {
             this.index = template.index;
         },
 
-        parseMultiple: function () {
+        parseMultiple: function() {
             let template,
                 name,
                 fieldsetName = this.fieldsetName;
@@ -6154,12 +6174,12 @@ $(function () {
             this.multipleIndex = _.max(this.index);
         },
 
-        initTemplate: function (template) {
+        initTemplate: function(template) {
             let i,
                 hasInlineReplicator = this.hasInlineReplicator;
 
-            template = template.replace(/(\w+)\="(\S*\[\d+\]\S*)"/g, function (attribute, name, value) {
-                value = value.replace(/^(\S*)\[(\d+)\]([^\[\]]*)$/, function (input, prefix, index, suffix) {
+            template = template.replace(/(\w+)\="(\S*\[\d+\]\S*)"/g, function(attribute, name, value) {
+                value = value.replace(/^(\S*)\[(\d+)\]([^\[\]]*)$/, function(input, prefix, index, suffix) {
                     if (input === value) {
                         if (name === 'name' && !i) {
                             i = index;
@@ -6182,7 +6202,7 @@ $(function () {
             };
         },
 
-        bind: function () {
+        bind: function() {
             let options = this.options;
 
             this.$element.on(EVENT_CLICK, options.addClass, $.proxy(this.add, this)).on(EVENT_CLICK, options.delClass, $.proxy(this.del, this));
@@ -6193,7 +6213,7 @@ $(function () {
                 .on(EVENT_SELECTCOREBEFORESEND, this.removeData.bind(this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_CLICK);
 
             !this.isInSlideout && $(document).off(EVENT_SUBMIT, 'form');
@@ -6202,11 +6222,11 @@ $(function () {
                 .off(EVENT_SELECTCOREBEFORESEND);
         },
 
-        removeData: function () {
+        removeData: function() {
             $('.qor-fieldset--new').remove();
         },
 
-        add: function (e, data, isAutomatically) {
+        add: function(e, data, isAutomatically) {
             var options = this.options,
                 $item,
                 template;
@@ -6266,7 +6286,7 @@ $(function () {
             this.resetButton();
         },
 
-        addMultiple: function (data) {
+        addMultiple: function(data) {
             let $item;
 
             for (let i = 0, len = data.length; i < len; i++) {
@@ -6276,7 +6296,7 @@ $(function () {
             }
         },
 
-        addSingle: function () {
+        addSingle: function() {
             let $item,
                 $element = this.$element;
 
@@ -6292,7 +6312,7 @@ $(function () {
             return $item;
         },
 
-        del: function (e) {
+        del: function(e) {
             let options = this.options,
                 $item = $(e.target).closest(options.itemClass),
                 $alert;
@@ -6305,7 +6325,7 @@ $(function () {
             $alert = $(options.alertTemplate.replace('{{name}}', this.parseName($item)));
             $alert.find(options.undoClass).one(
                 EVENT_CLICK,
-                function () {
+                function() {
                     if (this.maxitems <= this.getCurrentItems()) {
                         window.QOR.qorConfirm(this.$element.data('maxItemHint'));
                         return false;
@@ -6326,7 +6346,7 @@ $(function () {
             $item.append($alert);
         },
 
-        parseNestTemplate: function (templateType) {
+        parseNestTemplate: function(templateType) {
             let $element = this.$element,
                 parentForm = $element.parents('.qor-fieldset-container'),
                 index;
@@ -6343,7 +6363,7 @@ $(function () {
             }
         },
 
-        parseName: function ($item) {
+        parseName: function($item) {
             let name = $item.find('input[name]').attr('name') || $item.find('textarea[name]').attr('name');
 
             if (name) {
@@ -6351,7 +6371,7 @@ $(function () {
             }
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.$element.removeData(NAMESPACE);
         }
@@ -6365,14 +6385,14 @@ $(function () {
         childrenClass: '.qor-field__block',
         undoClass: '.qor-fieldset__undo',
         alertTemplate:
-        '<div class="qor-fieldset__alert">' +
-        '<input type="hidden" name="{{name}}._destroy" value="1">' +
-        '<button class="mdl-button mdl-button--accent mdl-js-button mdl-js-ripple-effect qor-fieldset__undo" type="button">Undo delete</button>' +
-        '</div>'
+            '<div class="qor-fieldset__alert">' +
+            '<input type="hidden" name="{{name}}._destroy" value="1">' +
+            '<button class="mdl-button mdl-button--accent mdl-js-button mdl-js-ripple-effect qor-fieldset__undo" type="button">Undo delete</button>' +
+            '</div>'
     };
 
-    QorReplicator.plugin = function (options) {
-        return this.each(function () {
+    QorReplicator.plugin = function(options) {
+        return this.each(function() {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 fn;
@@ -6387,15 +6407,15 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         let selector = CLASS_CONTAINER;
         let options = {};
 
         $(document)
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorReplicator.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorReplicator.plugin.call($(selector, e.target), options);
             })
             .triggerHandler(EVENT_ENABLE);
@@ -6405,166 +6425,170 @@ $(function () {
 });
 
 (function (factory) {
-    if (typeof define === 'function' && define.amd) {
-        // AMD. Register as anonymous module.
-        define(['jquery'], factory);
-    } else if (typeof exports === 'object') {
-        // Node / CommonJS
-        factory(require('jquery'));
-    } else {
-        // Browser globals.
-        factory(jQuery);
-    }
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as anonymous module.
+    define(['jquery'], factory);
+  } else if (typeof exports === 'object') {
+    // Node / CommonJS
+    factory(require('jquery'));
+  } else {
+    // Browser globals.
+    factory(jQuery);
+  }
 })(function ($) {
 
-    'use strict';
-    var location = window.location;
-    var componentHandler = window.componentHandler;
-    var history = window.history;
-    var NAMESPACE = 'qor.globalSearch';
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
-    var EVENT_CLICK = 'click.' + NAMESPACE;
+  'use strict';
+  var location = window.location;
+  var componentHandler = window.componentHandler;
+  var history = window.history;
+  var NAMESPACE = 'qor.globalSearch';
+  var EVENT_ENABLE = 'enable.' + NAMESPACE;
+  var EVENT_DISABLE = 'disable.' + NAMESPACE;
+  var EVENT_CLICK = 'click.' + NAMESPACE;
 
-    var SEARCH_RESOURCE = '.qor-global-search--resource';
-    var SEARCH_RESULTS = '.qor-global-search--results';
-    var QOR_TABLE = '.qor-table';
-    var IS_ACTIVE = 'is-active';
+  var SEARCH_RESOURCE = '.qor-global-search--resource';
+  var SEARCH_RESULTS = '.qor-global-search--results';
+  var QOR_TABLE = '.qor-table';
+  var IS_ACTIVE = 'is-active';
 
-    function QorSearchCenter(element, options) {
-        this.$element = $(element);
-        this.options = $.extend({}, QorSearchCenter.DEFAULTS, $.isPlainObject(options) && options);
-        this.init();
-    }
+  function QorSearchCenter(element, options) {
+    this.$element = $(element);
+    this.options = $.extend({}, QorSearchCenter.DEFAULTS, $.isPlainObject(options) && options);
+    this.init();
+  }
 
-    QorSearchCenter.prototype = {
-        constructor: QorSearchCenter,
+  QorSearchCenter.prototype = {
+    constructor: QorSearchCenter,
 
-        init: function () {
-            this.bind();
-            this.initTab();
-        },
+    init: function () {
+      this.bind();
+      this.initTab();
+    },
 
-        bind: function () {
-            this.$element.on(EVENT_CLICK, $.proxy(this.click, this));
-        },
+    bind: function () {
+      this.$element.on(EVENT_CLICK, $.proxy(this.click, this));
+    },
 
-        unbind: function () {
-            this.$element.off(EVENT_CLICK, this.check);
-        },
+    unbind: function () {
+      this.$element.off(EVENT_CLICK, this.check);
+    },
 
-        initTab: function () {
-            var locationSearch = location.search;
-            var resourceName;
-            if (/resource_name/.test(locationSearch)) {
-                resourceName = locationSearch.match(/resource_name=\w+/g).toString().split('=')[1];
-                $(SEARCH_RESOURCE).removeClass(IS_ACTIVE);
-                $('[data-resource="' + resourceName + '"]').addClass(IS_ACTIVE);
-            }
-        },
+    initTab: function () {
+      var locationSearch = location.search;
+      var resourceName;
+      if (/resource_name/.test(locationSearch)){
+        resourceName = locationSearch.match(/resource_name=\w+/g).toString().split('=')[1];
+        $(SEARCH_RESOURCE).removeClass(IS_ACTIVE);
+        $('[data-resource="' + resourceName + '"]').addClass(IS_ACTIVE);
+      }
+    },
 
-        click: function (e) {
-            var $target = $(e.target);
-            var data = $target.data();
+    click : function (e) {
+      var $target = $(e.target);
+      var data = $target.data();
 
-            if ($target.is(SEARCH_RESOURCE)) {
-                var oldUrl = location.href.replace(/#/g, '');
-                var newUrl;
-                var newResourceName = data.resource;
-                var hasResource = /resource_name/.test(oldUrl);
-                var hasKeyword = /keyword/.test(oldUrl);
-                var resourceParam = 'resource_name=' + newResourceName;
-                var searchSymbol = hasKeyword ? '&' : '?keyword=&';
+      if ($target.is(SEARCH_RESOURCE)){
+        var oldUrl = location.href.replace(/#/g, '');
+        var newUrl;
+        var newResourceName = data.resource;
+        var hasResource = /resource_name/.test(oldUrl);
+        var hasKeyword = /keyword/.test(oldUrl);
+        var resourceParam = 'resource_name=' + newResourceName;
+        var searchSymbol = hasKeyword ? '&' : '?keyword=&';
 
-                if (newResourceName) {
-                    if (hasResource) {
-                        newUrl = oldUrl.replace(/resource_name=\w+/g, resourceParam);
-                    } else {
-                        newUrl = oldUrl + searchSymbol + resourceParam;
-                    }
-                } else {
-                    newUrl = oldUrl.replace(/&resource_name=\w+/g, '');
-                }
-
-                if (history.pushState) {
-                    this.fetchSearch(newUrl, $target);
-                } else {
-                    location.href = newUrl;
-                }
-
-            }
-        },
-
-        fetchSearch: function (url, $target) {
-            var title = document.title;
-
-            $.ajax(url, {
-                method: 'GET',
-                dataType: 'html',
-                beforeSend: function () {
-                    $('.mdl-spinner').remove();
-                    $(SEARCH_RESULTS).prepend('<div class="mdl-spinner mdl-js-spinner is-active"></div>').find('.qor-section').hide();
-                    componentHandler.upgradeElement(document.querySelector('.mdl-spinner'));
-                },
-                success: function (html) {
-                    var result = $(html).find(SEARCH_RESULTS).html();
-                    $(SEARCH_RESOURCE).removeClass(IS_ACTIVE);
-                    $target.addClass(IS_ACTIVE);
-                    // change location URL without refresh page
-                    history.pushState({Page: url, Title: title}, title, url);
-                    $('.mdl-spinner').remove();
-                    $(SEARCH_RESULTS).removeClass('loading').html(result);
-                    componentHandler.upgradeElements(document.querySelectorAll(QOR_TABLE));
-                },
-                error: function (xhr, textStatus, errorThrown) {
-                    $(SEARCH_RESULTS).find('.qor-section').show();
-                    $('.mdl-spinner').remove();
-                    window.alert([textStatus, errorThrown].join(': '));
-                }
-            });
-        },
-
-        destroy: function () {
-            this.unbind();
-            this.$element.removeData(NAMESPACE);
+        if (newResourceName){
+          if (hasResource){
+            newUrl = oldUrl.replace(/resource_name=\w+/g, resourceParam);
+          } else {
+            newUrl = oldUrl + searchSymbol + resourceParam;
+          }
+        } else {
+          newUrl = oldUrl.replace(/&resource_name=\w+/g, '');
         }
 
-    };
+        if (history.pushState){
+          this.fetchSearch(newUrl, $target);
+        } else {
+          location.href = newUrl;
+        }
 
-    QorSearchCenter.DEFAULTS = {};
+      }
+    },
 
-    QorSearchCenter.plugin = function (options) {
-        return this.each(function () {
-            var $this = $(this);
-            var data = $this.data(NAMESPACE);
-            var fn;
+    fetchSearch: function (url,$target) {
+      var title = document.title;
 
-            if (!data) {
-                $this.data(NAMESPACE, (data = new QorSearchCenter(this, options)));
-            }
+      $.ajax(url, {
+        method: 'GET',
+        dataType: 'html',
+        beforeSend: function () {
+          $('.mdl-spinner').remove();
+          $(SEARCH_RESULTS).prepend('<div class="mdl-spinner mdl-js-spinner is-active"></div>').find('.qor-section').hide();
+          componentHandler.upgradeElement(document.querySelector('.mdl-spinner'));
+        },
+        success: function (html) {
+          var result = $(html).find(SEARCH_RESULTS).html();
+          $(SEARCH_RESOURCE).removeClass(IS_ACTIVE);
+          $target.addClass(IS_ACTIVE);
+          // change location URL without refresh page
+          history.pushState({ Page: url, Title: title }, title, url);
+          $('.mdl-spinner').remove();
+          $(SEARCH_RESULTS).removeClass('loading').html(result);
+          componentHandler.upgradeElements(document.querySelectorAll(QOR_TABLE));
+        },
+        error: function (xhr, textStatus, errorThrown) {
+          $(SEARCH_RESULTS).find('.qor-section').show();
+          $('.mdl-spinner').remove();
+          window.alert([textStatus, errorThrown].join(': '));
+        }
+      });
+    },
 
-            if (typeof options === 'string' && $.isFunction(fn = data[options])) {
-                fn.call(data);
-            }
-        });
-    };
+    destroy: function () {
+      this.unbind();
+      this.$element.removeData(NAMESPACE);
+    }
 
-    $(function () {
-        var selector = '[data-toggle="qor.global.search"]';
-        var options = {};
+  };
 
-        $(document).on(EVENT_DISABLE, function (e) {
-            QorSearchCenter.plugin.call($(selector, e.target), 'destroy');
-        }).on(EVENT_ENABLE, function (e) {
-            QorSearchCenter.plugin.call($(selector, e.target), options);
-        }).triggerHandler(EVENT_ENABLE);
+  QorSearchCenter.DEFAULTS = {
+  };
+
+  QorSearchCenter.plugin = function (options) {
+    return this.each(function () {
+      var $this = $(this);
+      var data = $this.data(NAMESPACE);
+      var fn;
+
+      if (!data) {
+        $this.data(NAMESPACE, (data = new QorSearchCenter(this, options)));
+      }
+
+      if (typeof options === 'string' && $.isFunction(fn = data[options])) {
+        fn.call(data);
+      }
     });
+  };
 
-    return QorSearchCenter;
+  $(function () {
+    var selector = '[data-toggle="qor.global.search"]';
+    var options = {};
+
+    $(document).
+      on(EVENT_DISABLE, function (e) {
+        QorSearchCenter.plugin.call($(selector, e.target), 'destroy');
+      }).
+      on(EVENT_ENABLE, function (e) {
+        QorSearchCenter.plugin.call($(selector, e.target), options);
+      }).
+      triggerHandler(EVENT_ENABLE);
+  });
+
+  return QorSearchCenter;
 
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -6575,7 +6599,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     let FormData = window.FormData,
@@ -6596,19 +6620,19 @@ $(function () {
     QorSelectCore.prototype = {
         constructor: QorSelectCore,
 
-        init: function () {
+        init: function() {
             this.bind();
         },
 
-        bind: function () {
+        bind: function() {
             this.$element.on(EVENT_CLICK, CLASS_CLICK_TABLE, this.processingData.bind(this)).on(EVENT_SUBMIT, 'form', this.submit.bind(this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$element.off(EVENT_CLICK, '.qor-table tbody tr').off(EVENT_SUBMIT, 'form');
         },
 
-        processingData: function (e) {
+        processingData: function(e) {
             let $this = $(e.target).closest('tr'),
                 data = {},
                 url,
@@ -6621,7 +6645,7 @@ $(function () {
             url = data.mediaLibraryUrl || data.url;
 
             if (url) {
-                $.getJSON(url, function (json) {
+                $.getJSON(url, function(json) {
                     json.MediaOption && (json.MediaOption = JSON.parse(json.MediaOption));
                     data = $.extend({}, json, data);
                     if (onSelect && $.isFunction(onSelect)) {
@@ -6638,7 +6662,7 @@ $(function () {
             return false;
         },
 
-        submit: function (e) {
+        submit: function(e) {
             let form = e.target,
                 $form = $(form),
                 _this = this,
@@ -6657,14 +6681,14 @@ $(function () {
                     dataType: 'json',
                     processData: false,
                     contentType: false,
-                    beforeSend: function () {
+                    beforeSend: function() {
                         $form
                             .parent()
                             .find('.qor-error')
                             .remove();
                         $submit.prop('disabled', true);
                     },
-                    success: function (json) {
+                    success: function(json) {
                         data = json;
                         data.primaryKey = data.ID;
 
@@ -6677,7 +6701,7 @@ $(function () {
                             _this.refresh();
                         }
                     },
-                    error: function (xhr, textStatus, errorThrown) {
+                    error: function(xhr, textStatus, errorThrown) {
                         let error;
 
                         if (xhr.responseJSON) {
@@ -6701,26 +6725,26 @@ $(function () {
                             window.alert([textStatus, errorThrown].join(': '));
                         }
                     },
-                    complete: function () {
+                    complete: function() {
                         $submit.prop('disabled', false);
                     }
                 });
             }
         },
 
-        refresh: function () {
-            setTimeout(function () {
+        refresh: function() {
+            setTimeout(function() {
                 window.location.reload();
             }, 350);
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
         }
     };
 
-    QorSelectCore.plugin = function (options) {
-        return this.each(function () {
+    QorSelectCore.plugin = function(options) {
+        return this.each(function() {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 fn;
@@ -6743,7 +6767,7 @@ $(function () {
     return QorSelectCore;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -6754,7 +6778,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     let $body = $('body'),
@@ -6783,16 +6807,16 @@ $(function () {
         this.init();
     }
 
-    var lock = {lock:false};
+    var lock = {lock: false};
 
     QorSelectMany.prototype = {
         constructor: QorSelectMany,
 
-        init: function () {
+        init: function() {
             this.bind();
         },
 
-        bind: function () {
+        bind: function() {
             $document
                 .on(EVENT_CLICK, '[data-select-modal="many"]', this.openBottomSheets.bind(this))
                 .on(EVENT_RELOAD, `.${CLASS_MANY}`, this.reloadData.bind(this));
@@ -6802,12 +6826,12 @@ $(function () {
                 .on(EVENT_CLICK, CLASS_UNDO_DELETE, this.undoDelete.bind(this));
         },
 
-        unbind: function () {
+        unbind: function() {
             $document.off(EVENT_CLICK, '[data-select-modal="many"]').off(EVENT_RELOAD, `.${CLASS_MANY}`);
             this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, CLASS_UNDO_DELETE);
         },
 
-        clearSelect: function (e) {
+        clearSelect: function(e) {
             var $target = $(e.target),
                 $selectFeild = $target.closest(CLASS_PARENT);
 
@@ -6817,7 +6841,7 @@ $(function () {
             return false;
         },
 
-        undoDelete: function (e) {
+        undoDelete: function(e) {
             var $target = $(e.target),
                 $selectFeild = $target.closest(CLASS_PARENT);
 
@@ -6827,7 +6851,7 @@ $(function () {
             return false;
         },
 
-        openBottomSheets: function (e) {
+        openBottomSheets: function(e) {
             if (lock.lock) {
                 e.preventDefault();
                 return false;
@@ -6860,19 +6884,19 @@ $(function () {
             this.BottomSheets.open(data, this.handleSelectMany.bind(this));
         },
 
-        reloadData: function () {
+        reloadData: function() {
             this.initItems();
         },
 
-        renderSelectMany: function (data) {
+        renderSelectMany: function(data) {
             return Mustache.render(this.SELECT_MANY_TEMPLATE, data);
         },
 
-        renderHint: function (data) {
+        renderHint: function(data) {
             return Mustache.render(this.SELECT_MANY_HINT, data);
         },
 
-        initItems: function () {
+        initItems: function() {
             var $tr = this.$bottomsheets.find('tbody tr'),
                 selectedIconTmpl = this.SELECT_MANY_SELECTED_ICON,
                 unSelectedIconTmpl = this.SELECT_MANY_UNSELECTED_ICON,
@@ -6880,11 +6904,11 @@ $(function () {
                 primaryKey,
                 $selectedItems = this.$selectFeild.find('[data-primary-key]').not('.' + CLASS_DELETED_ITEM);
 
-            $selectedItems.each(function () {
+            $selectedItems.each(function() {
                 selectedIDs.push($(this).data().primaryKey);
             });
 
-            $tr.each(function () {
+            $tr.each(function() {
                 var $this = $(this),
                     $td = $this.find('td:first');
 
@@ -6901,14 +6925,14 @@ $(function () {
             this.updateHint(this.getSelectedItemData());
         },
 
-        getSelectedItemData: function () {
+        getSelectedItemData: function() {
             var selecedItems = this.$selectFeild.find('[data-primary-key]').not('.' + CLASS_DELETED_ITEM);
             return {
                 selectedNum: selecedItems.length
             };
         },
 
-        updateHint: function (data) {
+        updateHint: function(data) {
             var template;
 
             $.extend(data, this.bottomsheetsData);
@@ -6918,7 +6942,7 @@ $(function () {
             this.$bottomsheets.find('.qor-page__body').before(template);
         },
 
-        updateSelectInputData: function ($selectFeild) {
+        updateSelectInputData: function($selectFeild) {
             var $selectList = $selectFeild ? $selectFeild : this.$selectFeild,
                 $selectedItems = $selectList.find('[data-primary-key]').not('.' + CLASS_DELETED_ITEM),
                 $selector = $selectFeild ? $selectFeild.find(CLASS_SELECT_INPUT) : this.$selector,
@@ -6929,7 +6953,7 @@ $(function () {
 
             $options.prop('selected', false);
 
-            $selectedItems.each(function () {
+            $selectedItems.each(function() {
                 primaryKey = $(this).data().primaryKey;
                 $option = $options.filter('[value="' + primaryKey + '"]');
 
@@ -6946,19 +6970,19 @@ $(function () {
             });
         },
 
-        changeIcon: function ($ele, template) {
+        changeIcon: function($ele, template) {
             $ele.find(CLASS_SELECT_ICON).remove();
             $ele.find('td:first').prepend(template);
         },
 
-        removeItem: function (data) {
+        removeItem: function(data) {
             var primaryKey = data.primaryKey;
 
             this.$selectFeild.find('[data-primary-key="' + primaryKey + '"]').find(CLASS_CLEAR_SELECT).click();
             this.changeIcon(data.$clickElement, this.SELECT_MANY_UNSELECTED_ICON);
         },
 
-        addItem: function (data, isNewData) {
+        addItem: function(data, isNewData) {
             var template = this.renderSelectMany(data),
                 $option,
                 $list = this.$selectFeild.find('[data-primary-key="' + data.primaryKey + '"]');
@@ -6990,7 +7014,7 @@ $(function () {
             this.changeIcon(data.$clickElement, this.SELECT_MANY_SELECTED_ICON);
         },
 
-        handleSelectMany: function ($bottomsheets) {
+        handleSelectMany: function($bottomsheets) {
             let options = {
                 onSelect: this.onSelectResults.bind(this), // render selected item after click item lists
                 onSubmit: this.onSubmitResults.bind(this) // render new items after new item form submitted
@@ -7001,16 +7025,16 @@ $(function () {
             this.initItems();
         },
 
-        onSelectResults: function (data) {
+        onSelectResults: function(data) {
             this.handleResults(data);
         },
 
-        onSubmitResults: function (data) {
+        onSubmitResults: function(data) {
             this.handleResults(data, true);
         },
 
-        handleResults: function (data, isNewData) {
-            var firstKey = function () {
+        handleResults: function(data, isNewData) {
+            var firstKey = function() {
                 var keys = Object.keys(data);
                 if (keys.length > 1 && keys[0] == "ID") {
                     return keys[1];
@@ -7041,7 +7065,7 @@ $(function () {
             this.updateSelectInputData();
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.$element.removeData(NAMESPACE);
         }
@@ -7049,8 +7073,8 @@ $(function () {
 
     QorSelectMany.SELECT_MANY_OPTION_TEMPLATE = '<option value="[[ primaryKey ]]" >[[ displayName ]]</option>';
 
-    QorSelectMany.plugin = function (options) {
-        return this.each(function () {
+    QorSelectMany.plugin = function(options) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -7069,13 +7093,13 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         var selector = '[data-toggle="qor.selectmany"]';
         $(document)
-            .on(EVENT_DISABLE, function (e) {
+            .on(EVENT_DISABLE, function(e) {
                 QorSelectMany.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function (e) {
+            .on(EVENT_ENABLE, function(e) {
                 QorSelectMany.plugin.call($(selector, e.target));
             })
             .triggerHandler(EVENT_ENABLE);
@@ -7084,251 +7108,251 @@ $(function () {
     return QorSelectMany;
 });
 
-(function (factory) {
-    if (typeof define === 'function' && define.amd) {
-        // AMD. Register as anonymous module.
-        define(['jquery'], factory);
-    } else if (typeof exports === 'object') {
-        // Node / CommonJS
-        factory(require('jquery'));
-    } else {
-        // Browser globals.
-        factory(jQuery);
+(function(factory) {
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as anonymous module.
+    define(['jquery'], factory);
+  } else if (typeof exports === 'object') {
+    // Node / CommonJS
+    factory(require('jquery'));
+  } else {
+    // Browser globals.
+    factory(jQuery);
+  }
+})(function($) {
+  'use strict';
+
+  let $body = $('body'),
+    $document = $(document),
+    Mustache = window.Mustache,
+    NAMESPACE = 'qor.selectone',
+    PARENT_NAMESPACE = 'qor.bottomsheets',
+    EVENT_CLICK = 'click.' + NAMESPACE,
+    EVENT_ENABLE = 'enable.' + NAMESPACE,
+    EVENT_DISABLE = 'disable.' + NAMESPACE,
+    EVENT_RELOAD = 'reload.' + PARENT_NAMESPACE,
+    CLASS_CLEAR_SELECT = '.qor-selected__remove',
+    CLASS_CHANGE_SELECT = '.qor-selected__change',
+    CLASS_SELECT_FIELD = '.qor-field__selected',
+    CLASS_SELECT_INPUT = '.qor-field__selectone-input',
+    CLASS_SELECT_TRIGGER = '.qor-field__selectone-trigger',
+    CLASS_PARENT = '.qor-field__selectone',
+    CLASS_SELECTED = 'is_selected',
+    CLASS_ONE = 'qor-bottomsheets__select-one';
+
+  function QorSelectOne(element, options) {
+    this.$element = $(element);
+    this.options = $.extend({}, QorSelectOne.DEFAULTS, $.isPlainObject(options) && options);
+    this.init();
+  }
+
+  function firstTextKey(obj) {
+    var keys = Object.keys(obj);
+    if (keys.length > 1 && keys[0] === "ID") {
+      return keys[1];
     }
-})(function ($) {
-    'use strict';
+    return keys[0];
+  }
 
-    let $body = $('body'),
-        $document = $(document),
-        Mustache = window.Mustache,
-        NAMESPACE = 'qor.selectone',
-        PARENT_NAMESPACE = 'qor.bottomsheets',
-        EVENT_CLICK = 'click.' + NAMESPACE,
-        EVENT_ENABLE = 'enable.' + NAMESPACE,
-        EVENT_DISABLE = 'disable.' + NAMESPACE,
-        EVENT_RELOAD = 'reload.' + PARENT_NAMESPACE,
-        CLASS_CLEAR_SELECT = '.qor-selected__remove',
-        CLASS_CHANGE_SELECT = '.qor-selected__change',
-        CLASS_SELECT_FIELD = '.qor-field__selected',
-        CLASS_SELECT_INPUT = '.qor-field__selectone-input',
-        CLASS_SELECT_TRIGGER = '.qor-field__selectone-trigger',
-        CLASS_PARENT = '.qor-field__selectone',
-        CLASS_SELECTED = 'is_selected',
-        CLASS_ONE = 'qor-bottomsheets__select-one';
+  var lock = {lock: false};
 
-    function QorSelectOne(element, options) {
-        this.$element = $(element);
-        this.options = $.extend({}, QorSelectOne.DEFAULTS, $.isPlainObject(options) && options);
-        this.init();
+  QorSelectOne.prototype = {
+    constructor: QorSelectOne,
+
+    init: function() {
+      this.$selectOneSelectedTemplate = this.$element.find('[name="select-one-selected-template"]');
+      this.$selectOneSelectedIconTemplate = this.$element.find('[name="select-one-selected-icon"]');
+      this.bind();
+    },
+
+    bind: function() {
+      $document
+        .on(EVENT_CLICK, '[data-selectone-url]', this.openBottomSheets.bind(this))
+        .on(EVENT_RELOAD, `.${CLASS_ONE}`, this.reloadData.bind(this));
+      this.$element
+        .on(EVENT_CLICK, CLASS_CLEAR_SELECT, this.clearSelect.bind(this))
+        .on(EVENT_CLICK, CLASS_CHANGE_SELECT, this.changeSelect);
+    },
+
+    unbind: function() {
+      $document.off(EVENT_CLICK, '[data-selectone-url]').off(EVENT_RELOAD, `.${CLASS_ONE}`);
+      this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, CLASS_CHANGE_SELECT);
+    },
+
+    clearSelect: function(e) {
+      var $target = $(e.target),
+        $parent = $target.closest(CLASS_PARENT);
+
+      $parent.find(CLASS_SELECT_FIELD).remove();
+      $parent.find(CLASS_SELECT_INPUT).html('');
+      $parent.find(CLASS_SELECT_INPUT)[0].value = '';
+      $parent.find(CLASS_SELECT_TRIGGER).show();
+
+      $parent.trigger('qor.selectone.unselected');
+      return false;
+    },
+
+    changeSelect: function() {
+      var $target = $(this),
+          $parent = $target.closest(CLASS_PARENT);
+
+      $parent.find(CLASS_SELECT_TRIGGER).trigger('click');
+    },
+
+    openBottomSheets: function (e) {
+      if (lock.lock) {
+        e.preventDefault();
+        return false;
+      }
+
+      lock.lock = true;
+      setTimeout(function () {lock.lock = false}, 1000*3);
+      var $this = $(e.target);
+      this.currentData = $this.data();
+
+      this.BottomSheets = $body.data('qor.bottomsheets');
+      this.$parent = $this.closest(CLASS_PARENT);
+
+      this.currentData.url = this.currentData.selectoneUrl;
+      this.primaryField = this.currentData.remoteDataPrimaryKey;
+      this.displayField = this.currentData.remoteDataDisplayKey;
+
+      this.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
+      this.BottomSheets.open(this.currentData, this.handleSelectOne.bind(this));
+    },
+
+    initItem: function() {
+      var $selectField = this.$parent.find(CLASS_SELECT_FIELD),
+          recordeUrl = this.currentData.remoteRecordeUrl,
+          selectedID;
+
+      if (recordeUrl) {
+        this.$bottomsheets.find('tr[data-primary-key]').each(function () {
+          var $this = $(this), data = $this.data();
+          data.url = recordeUrl.replace("{ID}", data.primaryKey)
+        })
+      }
+
+      if (!$selectField.length) {
+        return;
+      }
+
+      selectedID = $selectField.data().primaryKey;
+
+      if (selectedID) {
+        this.$bottomsheets
+          .find('tr[data-primary-key="' + selectedID + '"]')
+          .addClass(CLASS_SELECTED)
+          .find('td:first')
+          .append(this.SELECT_ONE_SELECTED_ICON);
+      }
+    },
+
+    reloadData: function() {
+      this.initItem();
+    },
+
+    renderSelectOne: function(data) {
+      return Mustache.render(this.$selectOneSelectedTemplate.html(), data);
+    },
+
+    handleSelectOne: function($bottomsheets) {
+      var options = {
+        onSelect: this.onSelectResults.bind(this), //render selected item after click item lists
+        onSubmit: this.onSubmitResults.bind(this) //render new items after new item form submitted
+      };
+
+      $bottomsheets.qorSelectCore(options).addClass(CLASS_ONE);
+      this.$bottomsheets = $bottomsheets;
+      this.initItem();
+    },
+
+    onSelectResults: function(data) {
+      this.handleResults(data);
+    },
+
+    onSubmitResults: function(data) {
+      this.handleResults(data, true);
+    },
+
+    handleResults: function(data) {
+      var template,
+          $parent = this.$parent,
+          $select = $parent.find('select'),
+          $selectFeild = $parent.find(CLASS_SELECT_FIELD);
+
+      data.displayName = this.displayField ? data[this.displayField] :
+          (data.Text || data.Name || data.Title || data.Code || firstTextKey(data));
+      data.selectoneValue = this.primaryField ? data[this.primaryField] : (data.primaryKey || data.ID);
+
+      if (!$select.length) {
+        return;
+      }
+
+      template = this.renderSelectOne(data);
+
+      if ($selectFeild.length) {
+        $selectFeild.remove();
+      }
+
+      $parent.prepend(template);
+      $parent.find(CLASS_SELECT_TRIGGER).hide();
+
+      $select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
+      $select[0].value = data.primaryKey || data.ID;
+
+      $parent.trigger('qor.selectone.selected', [data]);
+
+      this.$bottomsheets.qorSelectCore('destroy').remove();
+      if (!$('.qor-bottomsheets').is(':visible')) {
+        $('body').removeClass('qor-bottomsheets-open');
+      }
+    },
+
+    destroy: function() {
+      this.unbind();
+      this.$element.removeData(NAMESPACE);
     }
+  };
 
-    function firstTextKey(obj) {
-        var keys = Object.keys(obj);
-        if (keys.length > 1 && keys[0] == "ID") {
-            return keys[1];
+  QorSelectOne.SELECT_ONE_OPTION_TEMPLATE = '<option value="[[ selectoneValue ]]" selected>[[ displayName ]]</option>';
+
+  QorSelectOne.plugin = function(options) {
+    return this.each(function() {
+      var $this = $(this);
+      var data = $this.data(NAMESPACE);
+      var fn;
+
+      if (!data) {
+        if (/destroy/.test(options)) {
+          return;
         }
-        return keys[0];
-    }
 
-    var lock = {lock: false};
+        $this.data(NAMESPACE, (data = new QorSelectOne(this, options)));
+      }
 
-    QorSelectOne.prototype = {
-        constructor: QorSelectOne,
-
-        init: function () {
-            this.$selectOneSelectedTemplate = this.$element.find('[name="select-one-selected-template"]');
-            this.$selectOneSelectedIconTemplate = this.$element.find('[name="select-one-selected-icon"]');
-            this.bind();
-        },
-
-        bind: function () {
-            $document
-                .on(EVENT_CLICK, '[data-selectone-url]', this.openBottomSheets.bind(this))
-                .on(EVENT_RELOAD, `.${CLASS_ONE}`, this.reloadData.bind(this));
-            this.$element
-                .on(EVENT_CLICK, CLASS_CLEAR_SELECT, this.clearSelect.bind(this))
-                .on(EVENT_CLICK, CLASS_CHANGE_SELECT, this.changeSelect);
-        },
-
-        unbind: function () {
-            $document.off(EVENT_CLICK, '[data-selectone-url]').off(EVENT_RELOAD, `.${CLASS_ONE}`);
-            this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, CLASS_CHANGE_SELECT);
-        },
-
-        clearSelect: function (e) {
-            var $target = $(e.target),
-                $parent = $target.closest(CLASS_PARENT);
-
-            $parent.find(CLASS_SELECT_FIELD).remove();
-            $parent.find(CLASS_SELECT_INPUT).html('');
-            $parent.find(CLASS_SELECT_INPUT)[0].value = '';
-            $parent.find(CLASS_SELECT_TRIGGER).show();
-
-            $parent.trigger('qor.selectone.unselected');
-            return false;
-        },
-
-        changeSelect: function () {
-            var $target = $(this),
-                $parent = $target.closest(CLASS_PARENT);
-
-            $parent.find(CLASS_SELECT_TRIGGER).trigger('click');
-        },
-
-        openBottomSheets: function (e) {
-            if (lock.lock) {
-                e.preventDefault();
-                return false;
-            }
-
-            lock.lock = true;
-            setTimeout(function () {lock.lock = false}, 1000*3);
-            var $this = $(e.target);
-            this.currentData = $this.data();
-
-            this.BottomSheets = $body.data('qor.bottomsheets');
-            this.$parent = $this.closest(CLASS_PARENT);
-
-            this.currentData.url = this.currentData.selectoneUrl;
-            this.primaryField = this.currentData.remoteDataPrimaryKey;
-            this.displayField = this.currentData.remoteDataDisplayKey;
-
-            this.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
-            this.BottomSheets.open(this.currentData, this.handleSelectOne.bind(this));
-        },
-
-        initItem: function () {
-            var $selectField = this.$parent.find(CLASS_SELECT_FIELD),
-                selectedID;
-
-            var recordeUrl = this.currentData.remoteRecordeUrl;
-            if (recordeUrl) {
-                this.$bottomsheets.find('tr[data-primary-key]').each(function () {
-                    var $this = $(this), data = $this.data();
-                    data.url = recordeUrl.replace("{ID}", data.primaryKey)
-                })
-            }
-
-            if (!$selectField.length) {
-                return;
-            }
-
-            selectedID = $selectField.data().primaryKey;
-
-            if (selectedID) {
-                this.$bottomsheets
-                    .find('tr[data-primary-key="' + selectedID + '"]')
-                    .addClass(CLASS_SELECTED)
-                    .find('td:first')
-                    .append(this.SELECT_ONE_SELECTED_ICON);
-            }
-        },
-
-        reloadData: function () {
-            this.initItem();
-        },
-
-        renderSelectOne: function (data) {
-            return Mustache.render(this.$selectOneSelectedTemplate.html(), data);
-        },
-
-        handleSelectOne: function ($bottomsheets) {
-            var options = {
-                onSelect: this.onSelectResults.bind(this), //render selected item after click item lists
-                onSubmit: this.onSubmitResults.bind(this) //render new items after new item form submitted
-            };
-
-            $bottomsheets.qorSelectCore(options).addClass(CLASS_ONE);
-            this.$bottomsheets = $bottomsheets;
-            this.initItem();
-        },
-
-        onSelectResults: function (data) {
-            this.handleResults(data);
-        },
-
-        onSubmitResults: function (data) {
-            this.handleResults(data, true);
-        },
-
-        handleResults: function (data) {
-            var template,
-                $parent = this.$parent,
-                $select = $parent.find('select'),
-                $selectFeild = $parent.find(CLASS_SELECT_FIELD);
-
-            data.displayName = this.displayField ? data[this.displayField] :
-                (data.Text || data.Name || data.Title || data.Code || firstTextKey(data));
-            data.selectoneValue = this.primaryField ? data[this.primaryField] : (data.primaryKey || data.ID);
-
-            if (!$select.length) {
-                return;
-            }
-
-            template = this.renderSelectOne(data);
-
-            if ($selectFeild.length) {
-                $selectFeild.remove();
-            }
-
-            $parent.prepend(template);
-            $parent.find(CLASS_SELECT_TRIGGER).hide();
-
-            $select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
-            $select[0].value = data.primaryKey || data.ID;
-
-            $parent.trigger('qor.selectone.selected', [data]);
-
-            this.$bottomsheets.qorSelectCore('destroy').remove();
-            if (!$('.qor-bottomsheets').is(':visible')) {
-                $('body').removeClass('qor-bottomsheets-open');
-            }
-        },
-
-        destroy: function () {
-            this.unbind();
-            this.$element.removeData(NAMESPACE);
-        }
-    };
-
-    QorSelectOne.SELECT_ONE_OPTION_TEMPLATE = '<option value="[[ selectoneValue ]]" selected>[[ displayName ]]</option>';
-
-    QorSelectOne.plugin = function (options) {
-        return this.each(function () {
-            var $this = $(this);
-            var data = $this.data(NAMESPACE);
-            var fn;
-
-            if (!data) {
-                if (/destroy/.test(options)) {
-                    return;
-                }
-
-                $this.data(NAMESPACE, (data = new QorSelectOne(this, options)));
-            }
-
-            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
-                fn.apply(data);
-            }
-        });
-    };
-
-    $(function () {
-        var selector = '[data-toggle="qor.selectone"]';
-        $(document)
-            .on(EVENT_DISABLE, function (e) {
-                QorSelectOne.plugin.call($(selector, e.target), 'destroy');
-            })
-            .on(EVENT_ENABLE, function (e) {
-                QorSelectOne.plugin.call($(selector, e.target));
-            })
-            .triggerHandler(EVENT_ENABLE);
+      if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+        fn.apply(data);
+      }
     });
+  };
 
-    return QorSelectOne;
+  $(function() {
+    var selector = '[data-toggle="qor.selectone"]';
+    $(document)
+      .on(EVENT_DISABLE, function(e) {
+        QorSelectOne.plugin.call($(selector, e.target), 'destroy');
+      })
+      .on(EVENT_ENABLE, function(e) {
+        QorSelectOne.plugin.call($(selector, e.target));
+      })
+      .triggerHandler(EVENT_ENABLE);
+  });
+
+  return QorSelectOne;
 });
 
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -7339,7 +7363,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
 
     'use strict';
 
@@ -7371,14 +7395,14 @@ $(function () {
     QorSelector.prototype = {
         constructor: QorSelector,
 
-        init: function () {
+        init: function() {
             var $this = this.$element;
 
             this.placeholder = $this.attr('placeholder') || $this.attr('name') || 'Select';
             this.build();
         },
 
-        build: function () {
+        build: function() {
             var $this = this.$element;
             var $selector = $(QorSelector.TEMPLATE);
             var alignedClass = this.options.aligned + '-aligned';
@@ -7391,10 +7415,10 @@ $(function () {
 
             hover && $selector.addClass(CLASS_HOVER);
 
-            $selector.addClass(alignedClass).find(SELECTOR_MENU).html(function () {
+            $selector.addClass(alignedClass).find(SELECTOR_MENU).html(function() {
                 var list = [];
 
-                $this.children().each(function () {
+                $this.children().each(function() {
                     var $this = $(this);
                     var selected = $this.attr('selected');
                     var disabled = $this.attr('disabled');
@@ -7435,23 +7459,23 @@ $(function () {
             this.bind();
         },
 
-        unbuild: function () {
+        unbuild: function() {
             this.unbind();
             this.$selector.remove();
             this.$element.show();
         },
 
-        bind: function () {
+        bind: function() {
             this.$selector.on(EVENT_CLICK, $.proxy(this.click, this));
             $document.on(EVENT_CLICK, $.proxy(this.close, this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$selector.off(EVENT_CLICK, this.click);
             $document.off(EVENT_CLICK, this.close);
         },
 
-        click: function (e) {
+        click: function(e) {
             var $target = $(e.target);
 
             e.stopPropagation();
@@ -7469,15 +7493,25 @@ $(function () {
             }
         },
 
-        pick: function (data, initialized) {
+        pick: function(data, initialized) {
             var $selector = this.$selector;
             var selected = !!data.value;
             var $element = this.$element;
 
-            $selector.find(SELECTOR_TOGGLE).toggleClass(CLASS_ACTIVE, selected).toggleClass(CLASS_CLEARABLE, selected && this.options.clearable).find(SELECTOR_LABEL).text(data.label || this.placeholder);
+            $selector.
+            find(SELECTOR_TOGGLE).
+            toggleClass(CLASS_ACTIVE, selected).
+            toggleClass(CLASS_CLEARABLE, selected && this.options.clearable).
+            find(SELECTOR_LABEL).
+            text(data.label || this.placeholder);
 
             if (!initialized) {
-                $selector.find(SELECTOR_MENU).children('[data-value="' + data.value + '"]').addClass(CLASS_SELECTED).siblings(SELECTOR_SELECTED).removeClass(CLASS_SELECTED);
+                $selector.
+                find(SELECTOR_MENU).
+                children('[data-value="' + data.value + '"]').
+                addClass(CLASS_SELECTED).
+                siblings(SELECTOR_SELECTED).
+                removeClass(CLASS_SELECTED);
 
                 $element.val(data.value);
 
@@ -7491,15 +7525,25 @@ $(function () {
             }
         },
 
-        clear: function () {
+        clear: function() {
             var $element = this.$element;
 
-            this.$selector.find(SELECTOR_TOGGLE).removeClass(CLASS_ACTIVE).removeClass(CLASS_CLEARABLE).find(SELECTOR_LABEL).text(this.placeholder).end().end().find(SELECTOR_MENU).children(SELECTOR_SELECTED).removeClass(CLASS_SELECTED);
+            this.$selector.
+            find(SELECTOR_TOGGLE).
+            removeClass(CLASS_ACTIVE).
+            removeClass(CLASS_CLEARABLE).
+            find(SELECTOR_LABEL).
+            text(this.placeholder).
+            end().
+            end().
+            find(SELECTOR_MENU).
+            children(SELECTOR_SELECTED).
+            removeClass(CLASS_SELECTED);
 
             $element.val('').trigger('change');
         },
 
-        open: function () {
+        open: function() {
 
             // Close other opened dropdowns first
             $document.triggerHandler(EVENT_CLICK);
@@ -7512,14 +7556,14 @@ $(function () {
             }
         },
 
-        close: function () {
+        close: function() {
             this.$selector.removeClass(CLASS_OPEN);
             if (this.isBottom) {
                 this.$selector.removeClass('bottom');
             }
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbuild();
             this.$element.removeData(NAMESPACE);
         }
@@ -7541,8 +7585,8 @@ $(function () {
         '</div>'
     );
 
-    QorSelector.plugin = function (option) {
-        return this.each(function () {
+    QorSelector.plugin = function(option) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var options;
@@ -7563,20 +7607,23 @@ $(function () {
         });
     };
 
-    $(function () {
+    $(function() {
         var selector = '[data-toggle="qor.selector"]';
 
-        $(document).on(EVENT_DISABLE, function (e) {
+        $(document).
+        on(EVENT_DISABLE, function(e) {
             QorSelector.plugin.call($(selector, e.target), 'destroy');
-        }).on(EVENT_ENABLE, function (e) {
+        }).
+        on(EVENT_ENABLE, function(e) {
             QorSelector.plugin.call($(selector, e.target));
-        }).triggerHandler(EVENT_ENABLE);
+        }).
+        triggerHandler(EVENT_ENABLE);
     });
 
     return QorSelector;
 
 });
-(function (factory) {
+(function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -7587,7 +7634,7 @@ $(function () {
         // Browser globals.
         factory(jQuery);
     }
-})(function ($) {
+})(function($) {
     'use strict';
 
     let $document = $(document),
@@ -7628,7 +7675,7 @@ $(function () {
             prop = 'href';
 
         isScript && (prop = 'src');
-        $ele.each(function () {
+        $ele.each(function() {
             array.push($(this).attr(prop));
         });
         return _.uniq(array);
@@ -7651,7 +7698,7 @@ $(function () {
         for (let i = 0, len = srcs.length; i < len; i++) {
             let script = document.createElement('script');
 
-            script.onload = function () {
+            script.onload = function() {
                 scriptsLoaded++;
 
                 if (scriptsLoaded === srcs.length) {
@@ -7676,7 +7723,7 @@ $(function () {
 
         ss.type = 'text/css';
         ss.rel = 'stylesheet';
-        ss.onload = function () {
+        ss.onload = function() {
             if (srcs.length) {
                 loadStyles(srcs);
             }
@@ -7714,23 +7761,23 @@ $(function () {
     QorSlideout.prototype = {
         constructor: QorSlideout,
 
-        init: function () {
+        init: function() {
             this.build();
             this.bind();
         },
 
-        build: function () {
+        build: function() {
             var $slideout;
 
             this.$slideout = $slideout = $(QorSlideout.TEMPLATE).appendTo('body');
             this.$slideoutTemplate = $slideout.html();
         },
 
-        unbuild: function () {
+        unbuild: function() {
             this.$slideout.remove();
         },
 
-        bind: function () {
+        bind: function() {
             this.$slideout
                 .on(EVENT_SUBMIT, 'form', this.submit.bind(this))
                 .on(EVENT_CLICK, '.qor-slideout__fullscreen', this.toggleSlideoutMode.bind(this))
@@ -7739,13 +7786,13 @@ $(function () {
             $document.on(EVENT_KEYUP, $.proxy(this.keyup, this));
         },
 
-        unbind: function () {
+        unbind: function() {
             this.$slideout.off(EVENT_SUBMIT, this.submit).off(EVENT_CLICK);
 
             $document.off(EVENT_KEYUP, this.keyup);
         },
 
-        keyup: function (e) {
+        keyup: function(e) {
             if (e.which === 27) {
                 if ($('.qor-bottomsheets').is(':visible') || $('.qor-modal').is(':visible') || $('#redactor-modal-box').length || $('#dialog').is(':visible')) {
                     return;
@@ -7756,7 +7803,7 @@ $(function () {
             }
         },
 
-        loadExtraResource: function (data) {
+        loadExtraResource: function(data) {
             let styleDiff = compareLinks(data.$links),
                 scriptDiff = compareScripts(data.$scripts);
 
@@ -7769,24 +7816,24 @@ $(function () {
             }
         },
 
-        removeSelectedClass: function () {
+        removeSelectedClass: function() {
             this.$element.find('[data-url]').removeClass(CLASS_IS_SELECTED);
         },
 
-        addLoading: function () {
+        addLoading: function() {
             $(CLASS_BODY_LOADING).remove();
             var $loading = $(QorSlideout.TEMPLATE_LOADING);
             $loading.appendTo($('body')).trigger('enable');
         },
 
-        toggleSlideoutMode: function () {
+        toggleSlideoutMode: function() {
             this.$slideout
                 .toggleClass('qor-slideout__fullscreen')
                 .find('.qor-slideout__fullscreen i')
                 .toggle();
         },
 
-        submit: function (e) {
+        submit: function(e) {
             var $slideout = this.$slideout;
             var $body = this.$body;
             var form = e.target;
@@ -7805,11 +7852,11 @@ $(function () {
                     dataType: 'html',
                     processData: false,
                     contentType: false,
-                    beforeSend: function () {
+                    beforeSend: function() {
                         $submit.prop('disabled', true);
                         $.fn.qorSlideoutBeforeHide = null;
                     },
-                    success: function (html) {
+                    success: function(html) {
                         var returnUrl = $form.data('returnUrl');
                         var refreshUrl = $form.data('refreshUrl');
 
@@ -7832,7 +7879,7 @@ $(function () {
                             var flashStructs = [];
                             $(html)
                                 .find('.qor-alert')
-                                .each(function (i, e) {
+                                .each(function(i, e) {
                                     var message = $(e)
                                         .find('.qor-alert-message')
                                         .text()
@@ -7852,7 +7899,7 @@ $(function () {
                             _this.refresh();
                         }
                     },
-                    error: function (xhr, textStatus, errorThrown) {
+                    error: function(xhr, textStatus, errorThrown) {
                         var $error;
 
                         if (xhr.status === 422) {
@@ -7866,7 +7913,7 @@ $(function () {
                             $error = $(xhr.responseText).find('.qor-error');
                             $form.before($error);
 
-                            $error.find('> li > label').each(function () {
+                            $error.find('> li > label').each(function() {
                                 var $label = $(this);
                                 var id = $label.attr('for');
 
@@ -7884,14 +7931,14 @@ $(function () {
                             window.alert([textStatus, errorThrown].join(': '));
                         }
                     },
-                    complete: function () {
+                    complete: function() {
                         $submit.prop('disabled', false);
                     }
                 });
             }
         },
 
-        load: function (url, data) {
+        load: function(url, data) {
             var options = this.options;
             var method;
             var dataType;
@@ -7908,13 +7955,13 @@ $(function () {
             method = data.method ? data.method : 'GET';
             dataType = data.datatype ? data.datatype : 'html';
 
-            load = $.proxy(function () {
+            load = $.proxy(function() {
                 $.ajax(url, {
                     method: method,
                     dataType: dataType,
                     cache: true,
                     ifModified: true,
-                    success: $.proxy(function (response) {
+                    success: $.proxy(function(response) {
                         let $response, $content, $qorFormContainer, $scripts, $links, bodyClass;
 
                         $(CLASS_BODY_LOADING).remove();
@@ -7962,8 +8009,7 @@ $(function () {
                                     response: response
                                 };
 
-                                loadScripts($scripts, data, function () {
-                                });
+                                loadScripts($scripts, data, function() {});
                             }
 
                             if ($links.length) {
@@ -7982,10 +8028,10 @@ $(function () {
                             this.$body.find(CLASS_HEADER_LOCALE).remove();
 
                             $slideout
-                                .one(EVENT_SHOWN, function () {
+                                .one(EVENT_SHOWN, function() {
                                     $(this).trigger('enable');
                                 })
-                                .one(EVENT_HIDDEN, function () {
+                                .one(EVENT_HIDDEN, function() {
                                     $(this).trigger('disable');
                                 });
 
@@ -8015,12 +8061,12 @@ $(function () {
                         }
                     }, this),
 
-                    error: $.proxy(function () {
+                    error: $.proxy(function() {
                         var errors;
                         $(CLASS_BODY_LOADING).remove();
                         if ($('.qor-error span').length > 0) {
                             errors = $('.qor-error span')
-                                .map(function () {
+                                .map(function() {
                                     return $(this).text();
                                 })
                                 .get()
@@ -8041,17 +8087,17 @@ $(function () {
             }
         },
 
-        open: function (options) {
+        open: function(options) {
             this.addLoading();
             this.load(options.url, options.data);
         },
 
-        reload: function (url) {
+        reload: function(url) {
             this.hide(true);
             this.load(url);
         },
 
-        show: function () {
+        show: function() {
             var $slideout = this.$slideout;
             var showEvent;
 
@@ -8076,7 +8122,7 @@ $(function () {
                 .scrollTop(0);
         },
 
-        shown: function () {
+        shown: function() {
             this.slided = true;
             // Disable to scroll body element
             $('body').addClass(CLASS_OPEN);
@@ -8086,11 +8132,11 @@ $(function () {
                 .trigger('afterEnable.qor.slideout');
         },
 
-        closeSlideout: function () {
+        closeSlideout: function() {
             this.hide();
         },
 
-        hide: function (isReload) {
+        hide: function(isReload) {
             let _this = this,
                 message = {
                     confirm:
@@ -8098,7 +8144,7 @@ $(function () {
                 };
 
             if ($.fn.qorSlideoutBeforeHide) {
-                window.QOR.qorConfirm(message, function (confirm) {
+                window.QOR.qorConfirm(message, function(confirm) {
                     if (confirm) {
                         _this.hideSlideout(isReload);
                     }
@@ -8110,7 +8156,7 @@ $(function () {
             this.removeSelectedClass();
         },
 
-        hideSlideout: function (isReload) {
+        hideSlideout: function(isReload) {
             var $slideout = this.$slideout;
             var hideEvent;
             var $datePicker = $('.qor-datepicker').not('.hidden');
@@ -8138,7 +8184,7 @@ $(function () {
             !isReload && $slideout.trigger(EVENT_SLIDEOUT_CLOSED);
         },
 
-        hidden: function () {
+        hidden: function() {
             this.slided = false;
 
             // Enable to scroll body element
@@ -8147,15 +8193,15 @@ $(function () {
             this.$slideout.removeClass(CLASS_IS_SHOWN).trigger(EVENT_HIDDEN);
         },
 
-        refresh: function () {
+        refresh: function() {
             this.hide();
 
-            setTimeout(function () {
+            setTimeout(function() {
                 window.location.reload();
             }, 350);
         },
 
-        destroy: function () {
+        destroy: function() {
             this.unbind();
             this.unbuild();
             this.$element.removeData(NAMESPACE);
@@ -8188,8 +8234,8 @@ $(function () {
             <div><div class="mdl-spinner mdl-js-spinner is-active qor-layout__bottomsheet-spinner"></div></div>
         </div>`;
 
-    QorSlideout.plugin = function (options) {
-        return this.each(function () {
+    QorSlideout.plugin = function(options) {
+        return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -8214,324 +8260,324 @@ $(function () {
 });
 
 (function (factory) {
-    if (typeof define === 'function' && define.amd) {
-        // AMD. Register as anonymous module.
-        define(['jquery'], factory);
-    } else if (typeof exports === 'object') {
-        // Node / CommonJS
-        factory(require('jquery'));
-    } else {
-        // Browser globals.
-        factory(jQuery);
-    }
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as anonymous module.
+    define(['jquery'], factory);
+  } else if (typeof exports === 'object') {
+    // Node / CommonJS
+    factory(require('jquery'));
+  } else {
+    // Browser globals.
+    factory(jQuery);
+  }
 })(function ($) {
 
-    'use strict';
+  'use strict';
 
-    var location = window.location;
-    var NAMESPACE = 'qor.sorter';
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
-    var EVENT_CLICK = 'click.' + NAMESPACE;
-    var CLASS_IS_SORTABLE = 'is-sortable';
+  var location = window.location;
+  var NAMESPACE = 'qor.sorter';
+  var EVENT_ENABLE = 'enable.' + NAMESPACE;
+  var EVENT_DISABLE = 'disable.' + NAMESPACE;
+  var EVENT_CLICK = 'click.' + NAMESPACE;
+  var CLASS_IS_SORTABLE = 'is-sortable';
 
-    function QorSorter(element, options) {
-        this.$element = $(element);
-        this.options = $.extend({}, QorSorter.DEFAULTS, $.isPlainObject(options) && options);
-        this.init();
-    }
+  function QorSorter(element, options) {
+    this.$element = $(element);
+    this.options = $.extend({}, QorSorter.DEFAULTS, $.isPlainObject(options) && options);
+    this.init();
+  }
 
-    QorSorter.prototype = {
-        constructor: QorSorter,
+  QorSorter.prototype = {
+    constructor: QorSorter,
 
-        init: function () {
-            this.$element.addClass(CLASS_IS_SORTABLE);
-            this.bind();
-        },
+    init: function () {
+      this.$element.addClass(CLASS_IS_SORTABLE);
+      this.bind();
+    },
 
-        bind: function () {
-            this.$element.on(EVENT_CLICK, '> thead > tr > th', $.proxy(this.sort, this));
-        },
+    bind: function () {
+      this.$element.on(EVENT_CLICK, '> thead > tr > th', $.proxy(this.sort, this));
+    },
 
-        unbind: function () {
-            this.$element.off(EVENT_CLICK, this.sort);
-        },
+    unbind: function () {
+      this.$element.off(EVENT_CLICK, this.sort);
+    },
 
-        sort: function (e) {
-            var $target = $(e.currentTarget);
-            var orderBy = $target.data('orderBy');
-            var search = location.search;
-            var param = 'order_by=' + orderBy;
+    sort: function (e) {
+      var $target = $(e.currentTarget);
+      var orderBy = $target.data('orderBy');
+      var search = location.search;
+      var param = 'order_by=' + orderBy;
 
-            // Stop when it is not sortable
-            if (!orderBy) {
-                return;
-            }
+      // Stop when it is not sortable
+      if (!orderBy) {
+        return;
+      }
 
-            if (/order_by/.test(search)) {
-                search = search.replace(/order_by(=\w+)?/, function () {
-                    return param;
-                });
-            } else {
-                search += search.indexOf('?') > -1 ? ('&' + param) : param;
-            }
-
-            location.search = search;
-        },
-
-        destroy: function () {
-            this.unbind();
-            this.$element.removeClass(CLASS_IS_SORTABLE).removeData(NAMESPACE);
-        }
-    };
-
-    QorSorter.DEFAULTS = {};
-
-    QorSorter.plugin = function (options) {
-        return this.each(function () {
-            var $this = $(this);
-            var data = $this.data(NAMESPACE);
-            var fn;
-
-            if (!data) {
-                if (/destroy/.test(options)) {
-                    return;
-                }
-
-                $this.data(NAMESPACE, (data = new QorSorter(this, options)));
-            }
-
-            if (typeof options === 'string' && $.isFunction(fn = data[options])) {
-                fn.apply(data);
-            }
+      if (/order_by/.test(search)) {
+        search = search.replace(/order_by(=\w+)?/, function () {
+          return param;
         });
-    };
+      } else {
+        search += search.indexOf('?') > -1 ? ('&' + param) : param;
+      }
 
-    $(function () {
-        var selector = '.qor-js-table';
+      location.search = search;
+    },
 
-        $(document)
-            .on(EVENT_DISABLE, function (e) {
-                QorSorter.plugin.call($(selector, e.target), 'destroy');
-            })
-            .on(EVENT_ENABLE, function (e) {
-                QorSorter.plugin.call($(selector, e.target));
-            })
-            .triggerHandler(EVENT_ENABLE);
+    destroy: function () {
+      this.unbind();
+      this.$element.removeClass(CLASS_IS_SORTABLE).removeData(NAMESPACE);
+    }
+  };
+
+  QorSorter.DEFAULTS = {};
+
+  QorSorter.plugin = function (options) {
+    return this.each(function () {
+      var $this = $(this);
+      var data = $this.data(NAMESPACE);
+      var fn;
+
+      if (!data) {
+        if (/destroy/.test(options)) {
+          return;
+        }
+
+        $this.data(NAMESPACE, (data = new QorSorter(this, options)));
+      }
+
+      if (typeof options === 'string' && $.isFunction(fn = data[options])) {
+        fn.apply(data);
+      }
     });
+  };
 
-    return QorSorter;
+  $(function () {
+    var selector = '.qor-js-table';
+
+    $(document)
+      .on(EVENT_DISABLE, function (e) {
+        QorSorter.plugin.call($(selector, e.target), 'destroy');
+      })
+      .on(EVENT_ENABLE, function (e) {
+        QorSorter.plugin.call($(selector, e.target));
+      })
+      .triggerHandler(EVENT_ENABLE);
+  });
+
+  return QorSorter;
 
 });
 
 (function (factory) {
-    if (typeof define === 'function' && define.amd) {
-        // AMD. Register as anonymous module.
-        define(['jquery'], factory);
-    } else if (typeof exports === 'object') {
-        // Node / CommonJS
-        factory(require('jquery'));
-    } else {
-        // Browser globals.
-        factory(jQuery);
-    }
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as anonymous module.
+    define(['jquery'], factory);
+  } else if (typeof exports === 'object') {
+    // Node / CommonJS
+    factory(require('jquery'));
+  } else {
+    // Browser globals.
+    factory(jQuery);
+  }
 })(function ($) {
 
-    'use strict';
+  'use strict';
 
-    var _ = window._;
-    var $body = $('body');
-    var NAMESPACE = 'qor.tabbar';
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
-    var EVENT_CLICK = 'click.' + NAMESPACE;
-    var CLASS_TAB = '.qor-layout__tab-button';
-    var CLASS_TAB_CONTENT = '.qor-layout__tab-content';
-    var CLASS_TAB_BAR = '.mdl-layout__tab-bar-container';
-    var CLASS_TAB_BAR_RIGHT = '.qor-layout__tab-right';
-    var CLASS_TAB_BAR_LEFT = '.qor-layout__tab-left';
-    var CLASS_ACTIVE = 'is-active';
+  var _ = window._;
+  var $body = $('body');
+  var NAMESPACE = 'qor.tabbar';
+  var EVENT_ENABLE = 'enable.' + NAMESPACE;
+  var EVENT_DISABLE = 'disable.' + NAMESPACE;
+  var EVENT_CLICK = 'click.' + NAMESPACE;
+  var CLASS_TAB = '.qor-layout__tab-button';
+  var CLASS_TAB_CONTENT = '.qor-layout__tab-content';
+  var CLASS_TAB_BAR = '.mdl-layout__tab-bar-container';
+  var CLASS_TAB_BAR_RIGHT = '.qor-layout__tab-right';
+  var CLASS_TAB_BAR_LEFT = '.qor-layout__tab-left';
+  var CLASS_ACTIVE = 'is-active';
 
-    function QorTab(element, options) {
-        this.$element = $(element);
-        this.options = $.extend({}, QorTab.DEFAULTS, $.isPlainObject(options) && options);
-        this.init();
-    }
+  function QorTab(element, options) {
+    this.$element = $(element);
+    this.options = $.extend({}, QorTab.DEFAULTS, $.isPlainObject(options) && options);
+    this.init();
+  }
 
-    QorTab.prototype = {
-        constructor: QorTab,
+  QorTab.prototype = {
+    constructor: QorTab,
 
-        init: function () {
-            this.initTab();
-            this.bind();
-        },
+    init: function () {
+      this.initTab();
+      this.bind();
+    },
 
-        bind: function () {
-            this.$element.on(EVENT_CLICK, CLASS_TAB, this.switchTab.bind(this));
-            this.$element.on(EVENT_CLICK, CLASS_TAB_BAR_RIGHT, this.scrollTabRight.bind(this));
-            this.$element.on(EVENT_CLICK, CLASS_TAB_BAR_LEFT, this.scrollTabLeft.bind(this));
-        },
+    bind: function () {
+      this.$element.on(EVENT_CLICK, CLASS_TAB, this.switchTab.bind(this));
+      this.$element.on(EVENT_CLICK, CLASS_TAB_BAR_RIGHT, this.scrollTabRight.bind(this));
+      this.$element.on(EVENT_CLICK, CLASS_TAB_BAR_LEFT, this.scrollTabLeft.bind(this));
+    },
 
-        unbind: function () {
-            this.$element.off(EVENT_CLICK, CLASS_TAB, this.switchTab);
-            this.$element.off(EVENT_CLICK, CLASS_TAB_BAR_RIGHT, this.scrollTabRight);
-            this.$element.off(EVENT_CLICK, CLASS_TAB_BAR_LEFT, this.scrollTabLeft);
-        },
+    unbind: function () {
+      this.$element.off(EVENT_CLICK, CLASS_TAB, this.switchTab);
+      this.$element.off(EVENT_CLICK, CLASS_TAB_BAR_RIGHT, this.scrollTabRight);
+      this.$element.off(EVENT_CLICK, CLASS_TAB_BAR_LEFT, this.scrollTabLeft);
+    },
 
-        initTab: function () {
-            var data = this.$element.data();
+    initTab: function () {
+      var data = this.$element.data();
 
-            if (!data.scopeActive) {
-                $(CLASS_TAB).first().addClass(CLASS_ACTIVE);
-                $body.data('tabScopeActive', $(CLASS_TAB).first().data('name'));
-            } else {
-                $body.data('tabScopeActive', data.scopeActive);
-            }
+      if (!data.scopeActive) {
+        $(CLASS_TAB).first().addClass(CLASS_ACTIVE);
+        $body.data('tabScopeActive',$(CLASS_TAB).first().data('name'));
+      } else {
+        $body.data('tabScopeActive',data.scopeActive);
+      }
 
-            this.tabWidth = 0;
-            this.slideoutWidth = $(CLASS_TAB_CONTENT).outerWidth();
+      this.tabWidth = 0;
+      this.slideoutWidth = $(CLASS_TAB_CONTENT).outerWidth();
 
-            _.each($(CLASS_TAB), function (ele) {
-                this.tabWidth = this.tabWidth + $(ele).outerWidth();
-            }.bind(this));
+      _.each($(CLASS_TAB), function(ele) {
+        this.tabWidth = this.tabWidth + $(ele).outerWidth();
+      }.bind(this));
 
-            if (this.tabWidth > this.slideoutWidth) {
-                this.$element.find(CLASS_TAB_BAR).append(QorTab.ARROW_RIGHT);
-            }
+      if (this.tabWidth > this.slideoutWidth) {
+        this.$element.find(CLASS_TAB_BAR).append(QorTab.ARROW_RIGHT);
+      }
 
-        },
+    },
 
-        scrollTabLeft: function (e) {
-            e.stopPropagation();
+    scrollTabLeft: function (e) {
+      e.stopPropagation();
 
-            var $scrollBar = $(CLASS_TAB_BAR),
-                scrollLeft = $scrollBar.scrollLeft(),
-                jumpDistance = scrollLeft - this.slideoutWidth;
+      var $scrollBar = $(CLASS_TAB_BAR),
+          scrollLeft = $scrollBar.scrollLeft(),
+          jumpDistance = scrollLeft - this.slideoutWidth;
 
-            if (scrollLeft > 0) {
-                $scrollBar.animate({scrollLeft: jumpDistance}, 400, function () {
+      if (scrollLeft > 0){
+        $scrollBar.animate({scrollLeft:jumpDistance}, 400, function () {
 
-                    $(CLASS_TAB_BAR_RIGHT).show();
-                    if ($scrollBar.scrollLeft() == 0) {
-                        $(CLASS_TAB_BAR_LEFT).hide();
-                    }
+          $(CLASS_TAB_BAR_RIGHT).show();
+          if ($scrollBar.scrollLeft() == 0) {
+            $(CLASS_TAB_BAR_LEFT).hide();
+          }
 
-                });
-            }
-        },
-
-        scrollTabRight: function (e) {
-            e.stopPropagation();
-
-            var $scrollBar = $(CLASS_TAB_BAR),
-                scrollLeft = $scrollBar.scrollLeft(),
-                tabWidth = this.tabWidth,
-                slideoutWidth = this.slideoutWidth,
-                jumpDistance = scrollLeft + slideoutWidth;
-
-            if (jumpDistance < tabWidth) {
-                $scrollBar.animate({scrollLeft: jumpDistance}, 400, function () {
-
-                    $(CLASS_TAB_BAR_LEFT).show();
-                    if ($scrollBar.scrollLeft() + slideoutWidth >= tabWidth) {
-                        $(CLASS_TAB_BAR_RIGHT).hide();
-                    }
-
-                });
-
-                !$(CLASS_TAB_BAR_LEFT).length && this.$element.find(CLASS_TAB_BAR).prepend(QorTab.ARROW_LEFT);
-            }
-        },
-
-        switchTab: function (e) {
-            var $target = $(e.target),
-                $element = this.$element,
-                data = $target.data(),
-                tabScopeActive = $body.data().tabScopeActive,
-                isInSlideout = $('.qor-slideout').is(':visible');
-
-            if (!isInSlideout) {
-                return;
-            }
-
-            if ($target.hasClass(CLASS_ACTIVE)) {
-                return false;
-            }
-
-            $element.find(CLASS_TAB).removeClass(CLASS_ACTIVE);
-            $target.addClass(CLASS_ACTIVE);
-
-            $.ajax(data.tabUrl, {
-                method: 'GET',
-                dataType: 'html',
-                processData: false,
-                contentType: false,
-                beforeSend: function () {
-                    $('.qor-layout__tab-spinner').remove();
-                    var $spinner = '<div class="mdl-spinner mdl-js-spinner is-active qor-layout__tab-spinner"></div>';
-                    $(CLASS_TAB_CONTENT).hide().before($spinner);
-                    window.componentHandler.upgradeElement($('.qor-layout__tab-spinner')[0]);
-                },
-                success: function (html) {
-                    $('.qor-layout__tab-spinner').remove();
-                    $body.data('tabScopeActive', $target.data('name'));
-                    var $content = $(html).find(CLASS_TAB_CONTENT).html();
-                    $(CLASS_TAB_CONTENT).show().html($content).trigger('enable');
-
-                },
-                error: function () {
-                    $('.qor-layout__tab-spinner').remove();
-                    $body.data('tabScopeActive', tabScopeActive);
-                }
-            });
-            return false;
-        },
-
-        destroy: function () {
-            this.unbind();
-            $body.removeData('tabScopeActive');
-        }
-    };
-
-    QorTab.ARROW_RIGHT = '<a href="javascript://" class="qor-layout__tab-right"></a>';
-    QorTab.ARROW_LEFT = '<a href="javascript://" class="qor-layout__tab-left"></a>';
-
-    QorTab.DEFAULTS = {};
-
-    QorTab.plugin = function (options) {
-        return this.each(function () {
-            var $this = $(this);
-            var data = $this.data(NAMESPACE);
-            var fn;
-
-            if (!data) {
-                if (/destroy/.test(options)) {
-                    return;
-                }
-
-                $this.data(NAMESPACE, (data = new QorTab(this, options)));
-            }
-
-            if (typeof options === 'string' && $.isFunction(fn = data[options])) {
-                fn.apply(data);
-            }
         });
-    };
+      }
+    },
 
-    $(function () {
-        var selector = '[data-toggle="qor.tab"]';
+    scrollTabRight: function (e) {
+      e.stopPropagation();
 
-        $(document)
-            .on(EVENT_DISABLE, function (e) {
-                QorTab.plugin.call($(selector, e.target), 'destroy');
-            })
-            .on(EVENT_ENABLE, function (e) {
-                QorTab.plugin.call($(selector, e.target));
-            })
-            .triggerHandler(EVENT_ENABLE);
+      var $scrollBar = $(CLASS_TAB_BAR),
+          scrollLeft = $scrollBar.scrollLeft(),
+          tabWidth = this.tabWidth,
+          slideoutWidth = this.slideoutWidth,
+          jumpDistance = scrollLeft + slideoutWidth;
+
+      if (jumpDistance < tabWidth){
+        $scrollBar.animate({scrollLeft:jumpDistance}, 400, function () {
+
+          $(CLASS_TAB_BAR_LEFT).show();
+          if ($scrollBar.scrollLeft() + slideoutWidth >= tabWidth) {
+            $(CLASS_TAB_BAR_RIGHT).hide();
+          }
+
+        });
+
+        !$(CLASS_TAB_BAR_LEFT).length && this.$element.find(CLASS_TAB_BAR).prepend(QorTab.ARROW_LEFT);
+      }
+    },
+
+    switchTab: function (e) {
+      var $target = $(e.target),
+          $element = this.$element,
+          data = $target.data(),
+          tabScopeActive = $body.data().tabScopeActive,
+          isInSlideout = $('.qor-slideout').is(':visible');
+
+      if (!isInSlideout) {
+        return;
+      }
+
+      if ($target.hasClass(CLASS_ACTIVE)){
+        return false;
+      }
+
+      $element.find(CLASS_TAB).removeClass(CLASS_ACTIVE);
+      $target.addClass(CLASS_ACTIVE);
+
+      $.ajax(data.tabUrl, {
+          method: 'GET',
+          dataType: 'html',
+          processData: false,
+          contentType: false,
+          beforeSend: function () {
+            $('.qor-layout__tab-spinner').remove();
+            var $spinner = '<div class="mdl-spinner mdl-js-spinner is-active qor-layout__tab-spinner"></div>';
+            $(CLASS_TAB_CONTENT).hide().before($spinner);
+            window.componentHandler.upgradeElement($('.qor-layout__tab-spinner')[0]);
+          },
+          success: function (html) {
+            $('.qor-layout__tab-spinner').remove();
+            $body.data('tabScopeActive',$target.data('name'));
+            var $content = $(html).find(CLASS_TAB_CONTENT).html();
+            $(CLASS_TAB_CONTENT).show().html($content).trigger('enable');
+
+          },
+          error: function () {
+            $('.qor-layout__tab-spinner').remove();
+            $body.data('tabScopeActive',tabScopeActive);
+          }
+        });
+      return false;
+    },
+
+    destroy: function () {
+      this.unbind();
+      $body.removeData('tabScopeActive');
+    }
+  };
+
+  QorTab.ARROW_RIGHT = '<a href="javascript://" class="qor-layout__tab-right"></a>';
+  QorTab.ARROW_LEFT = '<a href="javascript://" class="qor-layout__tab-left"></a>';
+
+  QorTab.DEFAULTS = {};
+
+  QorTab.plugin = function (options) {
+    return this.each(function () {
+      var $this = $(this);
+      var data = $this.data(NAMESPACE);
+      var fn;
+
+      if (!data) {
+        if (/destroy/.test(options)) {
+          return;
+        }
+
+        $this.data(NAMESPACE, (data = new QorTab(this, options)));
+      }
+
+      if (typeof options === 'string' && $.isFunction(fn = data[options])) {
+        fn.apply(data);
+      }
     });
+  };
 
-    return QorTab;
+  $(function () {
+    var selector = '[data-toggle="qor.tab"]';
+
+    $(document)
+      .on(EVENT_DISABLE, function (e) {
+        QorTab.plugin.call($(selector, e.target), 'destroy');
+      })
+      .on(EVENT_ENABLE, function (e) {
+        QorTab.plugin.call($(selector, e.target));
+      })
+      .triggerHandler(EVENT_ENABLE);
+  });
+
+  return QorTab;
 
 });
 
@@ -8786,98 +8832,327 @@ $(function () {
     $(function () {
         var selector = '[data-toggle="qor.timepicker"]';
 
-        $(document).on(EVENT_DISABLE, function (e) {
+        $(document).
+        on(EVENT_DISABLE, function (e) {
             QorTimepicker.plugin.call($(selector, e.target), 'destroy');
-        }).on(EVENT_ENABLE, function (e) {
+        }).
+        on(EVENT_ENABLE, function (e) {
             QorTimepicker.plugin.call($(selector, e.target));
-        }).triggerHandler(EVENT_ENABLE);
+        }).
+        triggerHandler(EVENT_ENABLE);
     });
 
     return QorTimepicker;
 
 });
 
-$(function () {
-    "use strict";
-    $(document).on("click.qor.alert", '[data-dismiss="alert"]', function () {
-        $(this).closest(".qor-alert").remove()
-    }), setTimeout(function () {
-        $('.qor-alert[data-dismissible="true"]').remove()
-    }, 5e3)
-}), $(function () {
-    "use strict";
-    var e = $(".qor-page__body > .qor-form-container > form");
-    $(".qor-error > li > label").each(function () {
-        var t = $(this), a = t.attr("for");
-        a && e.find("#" + a).closest(".qor-field").addClass("is-error").append(t.clone().addClass("qor-field__error"))
-    })
-}), $(function () {
-    "use strict";
-    $(document).on("click", ".qor-dialog--global-search", function (e) {
-        e.stopPropagation(), $(e.target).parents(".qor-dialog-content").length || $(e.target).is(".qor-dialog-content") || $(".qor-dialog--global-search").remove()
-    }), $(document).on("click", ".qor-global-search--show", function (e) {
-        e.preventDefault();
-        var t = $(this).data(),
-            a = window.Mustache.render('<div class="qor-dialog qor-dialog--global-search" tabindex="-1" role="dialog" aria-hidden="true"><div class="qor-dialog-content"><form action=[[actionUrl]]><div class="mdl-textfield mdl-js-textfield" id="global-search-textfield"><input class="mdl-textfield__input ignore-dirtyform" name="keyword" id="globalSearch" value="" type="text" placeholder="" /><label class="mdl-textfield__label" for="globalSearch">[[placeholder]]</label></div></form></div></div>', t);
-        $("body").append(a), window.componentHandler.upgradeElement(document.getElementById("global-search-textfield")), $("#globalSearch").focus()
-    })
-}), $(function () {
-    "use strict";
-    var e = [], t = localStorage.getItem("qoradmin_menu_status");
-    t && t.length && (e = t.split(",")), $(".qor-menu-container").on("click", "> ul > li > a", function () {
-        var t = $(this), a = t.parent(), o = t.next("ul"), s = a.attr("qor-icon-name");
-        o.length && (o.hasClass("in") ? (e.push(s), a.removeClass("is-expanded"), o.one("transitionend", function () {
-            o.removeClass("collapsing in")
-        }).addClass("collapsing").height(0)) : (e = _.without(e, s), a.addClass("is-expanded"), o.one("transitionend", function () {
-            o.removeClass("collapsing")
-        }).addClass("collapsing in").height(o.prop("scrollHeight"))), localStorage.setItem("qoradmin_menu_status", e))
-    }).find("> ul > li > a").each(function () {
-        var t = $(this), a = t.parent(), o = t.next("ul"), s = a.attr("qor-icon-name");
-        o.length && (o.addClass("collapse"), a.addClass("has-menu"), -1 != e.indexOf(s) ? o.height(0) : (a.addClass("is-expanded"), o.addClass("in").height(o.prop("scrollHeight"))))
+$(function() {
+    'use strict';
+
+    $(document).on('click.qor.alert', '[data-dismiss="alert"]', function() {
+        $(this).closest('.qor-alert').remove();
     });
-    var a = $(".qor-page > .qor-page__header"), o = $(".qor-page > .qor-page__body"),
-        s = a.find(".qor-page-subnav__header").length ? 96 : 48;
-    a.length && (a.height() > s && o.css("padding-top", a.height()), $(".qor-page").addClass("has-header"), $("header.mdl-layout__header").addClass("has-action"))
-}), $(function () {
-    $(".qor-mobile--show-actions").on("click", function () {
-        $(".qor-page__header").toggleClass("actions-show")
+
+    setTimeout(function() {
+        $('.qor-alert[data-dismissible="true"]').remove();
+    }, 5000);
+});
+
+$(function () {
+
+  'use strict';
+
+  var $form = $('.qor-page__body > .qor-form-container > form');
+
+  $('.qor-error > li > label').each(function () {
+    var $label = $(this);
+    var id = $label.attr('for');
+
+    if (id) {
+      $form.find('#' + id).
+        closest('.qor-field').
+        addClass('is-error').
+        append($label.clone().addClass('qor-field__error'));
+    }
+  });
+
+});
+
+$(function () {
+
+  'use strict';
+
+  var modal = (
+    '<div class="qor-dialog qor-dialog--global-search" tabindex="-1" role="dialog" aria-hidden="true">' +
+      '<div class="qor-dialog-content">' +
+        '<form action=[[actionUrl]]>' +
+          '<div class="mdl-textfield mdl-js-textfield" id="global-search-textfield">' +
+            '<input class="mdl-textfield__input ignore-dirtyform" name="keyword" id="globalSearch" value="" type="text" placeholder="" />' +
+            '<label class="mdl-textfield__label" for="globalSearch">[[placeholder]]</label>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+    '</div>'
+  );
+
+  $(document).on('click', '.qor-dialog--global-search', function(e){
+    e.stopPropagation();
+    if (!$(e.target).parents('.qor-dialog-content').length && !$(e.target).is('.qor-dialog-content')){
+      $('.qor-dialog--global-search').remove();
+    }
+  });
+
+  $(document).on('click', '.qor-global-search--show', function(e){
+      e.preventDefault();
+
+      var data = $(this).data();
+      var modalHTML = window.Mustache.render(modal, data);
+
+      $('body').append(modalHTML);
+      window.componentHandler.upgradeElement(document.getElementById('global-search-textfield'));
+      $('#globalSearch').focus();
+
+  });
+});
+
+$(function() {
+  'use strict';
+
+  var menuDatas = [],
+    storageName = 'qoradmin_menu_status',
+    lastMenuStatus = localStorage.getItem(storageName);
+
+  if (lastMenuStatus && lastMenuStatus.length) {
+    menuDatas = lastMenuStatus.split(',');
+  }
+
+  $('.qor-menu-container')
+    .on('click', '> ul > li > a', function() {
+      var $this = $(this),
+        $li = $this.parent(),
+        $ul = $this.next('ul'),
+        menuName = $li.attr('qor-icon-name');
+
+      if (!$ul.length) {
+        return;
+      }
+
+      if ($ul.hasClass('in')) {
+        menuDatas.push(menuName);
+
+        $li.removeClass('is-expanded');
+        $ul
+          .one('transitionend', function() {
+            $ul.removeClass('collapsing in');
+          })
+          .addClass('collapsing')
+          .height(0);
+      } else {
+        menuDatas = _.without(menuDatas, menuName);
+
+        $li.addClass('is-expanded');
+        $ul
+          .one('transitionend', function() {
+            $ul.removeClass('collapsing');
+          })
+          .addClass('collapsing in')
+          .height($ul.prop('scrollHeight'));
+      }
+      localStorage.setItem(storageName, menuDatas);
     })
-}), $(function () {
-    "use strict";
+    .find('> ul > li > a')
+    .each(function() {
+      var $this = $(this),
+        $li = $this.parent(),
+        $ul = $this.next('ul'),
+        menuName = $li.attr('qor-icon-name');
 
-    function e(e) {
-        $("[data-url]").removeClass(n), e && e.length && e.addClass(n)
+      if (!$ul.length) {
+        return;
+      }
+
+      $ul.addClass('collapse');
+      $li.addClass('has-menu');
+
+      if (menuDatas.indexOf(menuName) != -1) {
+        $ul.height(0);
+      } else {
+        $li.addClass('is-expanded');
+        $ul.addClass('in').height($ul.prop('scrollHeight'));
+      }
+    });
+
+  var $pageHeader = $('.qor-page > .qor-page__header'),
+    $pageBody = $('.qor-page > .qor-page__body'),
+    triggerHeight = $pageHeader.find('.qor-page-subnav__header').length ? 96 : 48;
+
+  if ($pageHeader.length) {
+    if ($pageHeader.height() > triggerHeight) {
+      $pageBody.css('padding-top', $pageHeader.height());
     }
 
-    function t() {
-        var e = $(".qor-js-table tbody").find(".mdl-checkbox__input:checked"), t = [];
-        return !!e.length && (e.each(function () {
-            t.push($(this).closest("tr").data("primary-key"))
-        }), t)
+    $('.qor-page').addClass('has-header');
+    $('header.mdl-layout__header').addClass('has-action');
+  }
+});
+
+$(function () {
+  $('.qor-mobile--show-actions').on('click', function () {
+    $('.qor-page__header').toggleClass('actions-show');
+  });
+});
+
+$(function() {
+    'use strict';
+
+    var $body = $('body'),
+        Slideout,
+        BottomSheets,
+        CLASS_IS_SELECTED = 'is-selected',
+        isSlideoutOpened = function() {
+            return $body.hasClass('qor-slideout-open');
+        },
+        isBottomsheetsOpened = function() {
+            return $body.hasClass('qor-bottomsheets-open');
+        };
+
+    $body.qorBottomSheets();
+    $body.qorSlideout();
+
+    Slideout = $body.data('qor.slideout');
+    BottomSheets = $body.data('qor.bottomsheets');
+
+    function toggleSelectedCss(ele) {
+        $('[data-url]').removeClass(CLASS_IS_SELECTED);
+        ele && ele.length && ele.addClass(CLASS_IS_SELECTED);
     }
 
-    var a, o, s = $("body"), n = "is-selected", r = function () {
-        return s.hasClass("qor-slideout-open")
-    }, l = function () {
-        return s.hasClass("qor-bottomsheets-open")
+    function collectSelectID() {
+        var $checked = $('.qor-js-table tbody').find('.mdl-checkbox__input:checked'),
+            IDs = [];
+
+        if (!$checked.length) {
+            return false;
+        }
+
+        $checked.each(function() {
+            IDs.push(
+                $(this)
+                    .closest('tr')
+                    .data('primary-key')
+            );
+        });
+
+        return IDs;
+    }
+
+    $(document).on('click.qor.openUrl', '[data-url]', function(e) {
+        var $this = $(this),
+            $target = $(e.target),
+            isNewButton = $this.hasClass('qor-button--new'),
+            isEditButton = $this.hasClass('qor-button--edit'),
+            isInTable = ($this.is('.qor-table tr[data-url]') || $this.closest('.qor-js-table').length) && !$this.closest('.qor-slideout').length, // if table is in slideout, will open bottom sheet
+            openData = $this.data(),
+            actionData,
+            openType = openData.openType,
+            hasSlideoutTheme = $this.parents('.qor-theme-slideout').length,
+            isActionButton = ($this.hasClass('qor-action-button') || $this.hasClass('qor-action--button')) && !openType;
+
+        // if clicking item's menu actions
+        if ($target.closest('.qor-button--actions').length || (!$target.data('url') && $target.is('a')) || (isInTable && isBottomsheetsOpened())) {
+            return;
+        }
+
+        if (isActionButton) {
+            actionData = collectSelectID();
+            if (actionData) {
+                openData = $.extend({}, openData, {
+                    actionData: actionData
+                });
+            }
+        }
+
+        openData.$target = $target;
+
+        if (!openData.method || openData.method.toUpperCase() == 'GET') {
+            // Open in BottmSheet: is action button, open type is bottom-sheet
+            if (isActionButton || openType == 'bottomsheet') {
+                // if is bulk action and no item selected
+                if (isActionButton && !actionData && $this.closest('[data-toggle="qor.action.bulk"]').length) {
+                    window.QOR.qorConfirm(openData.errorNoItem);
+                    return false;
+                }
+
+                BottomSheets.open(openData);
+                return false;
+            }
+
+            // Slideout or New Page: table items, new button, edit button
+            if (isInTable || (isNewButton && !isBottomsheetsOpened()) || isEditButton || openType == 'slideout') {
+                if (hasSlideoutTheme || openType == 'slideout') {
+                    if ($this.hasClass(CLASS_IS_SELECTED)) {
+                        Slideout.hide();
+                        toggleSelectedCss();
+                        return false;
+                    } else {
+                        Slideout.open(openData);
+                        toggleSelectedCss($this);
+                        return false;
+                    }
+                } else {
+                    window.location = openData.url;
+                    return false;
+                }
+            }
+
+            // Open in BottmSheet: slideout is opened or openType is Bottom Sheet
+            if (isSlideoutOpened() || (isNewButton && isBottomsheetsOpened())) {
+                BottomSheets.open(openData);
+                return false;
+            }
+
+            // Other clicks
+            if (hasSlideoutTheme) {
+                Slideout.open(openData);
+                return false;
+            } else {
+                BottomSheets.open(openData);
+                return false;
+            }
+        }
+    });
+});
+
+$(function () {
+
+  'use strict';
+
+  var location = window.location;
+
+  $('.qor-search').each(function () {
+    var $this = $(this);
+    var $input = $this.find('.qor-search__input');
+    var $clear = $this.find('.qor-search__clear');
+    var isSearched = !!$input.val();
+
+    var emptySearch = function () {
+      var search = location.search.replace(new RegExp($input.attr('name') + '\\=?\\w*'), '');
+      if (search == '?'){
+        location.href = location.href.split('?')[0];
+      } else {
+        location.search = location.search.replace(new RegExp($input.attr('name') + '\\=?\\w*'), '');
+      }
     };
-    s.qorBottomSheets(), s.qorSlideout(), a = s.data("qor.slideout"), o = s.data("qor.bottomsheets"), $(document).on("click.qor.openUrl", "[data-url]", function (s) {
-        var i, d = $(this), c = $(s.target), h = d.hasClass("qor-button--new"), u = d.hasClass("qor-button--edit"),
-            g = (d.is(".qor-table tr[data-url]") || d.closest(".qor-js-table").length) && !d.closest(".qor-slideout").length,
-            p = d.data(), m = p.openType, f = d.parents(".qor-theme-slideout").length,
-            q = (d.hasClass("qor-action-button") || d.hasClass("qor-action--button")) && !m;
-        if (!(c.closest(".qor-button--actions").length || !c.data("url") && c.is("a") || g && l())) return q && (i = t()) && (p = $.extend({}, p, {actionData: i})), p.$target = c, p.method && "GET" != p.method.toUpperCase() ? void 0 : q || "bottomsheet" == m ? q && !i && d.closest('[data-toggle="qor.action.bulk"]').length ? (window.QOR.qorConfirm(p.errorNoItem), !1) : (o.open(p), !1) : g || h && !l() || u || "slideout" == m ? f || "slideout" == m ? d.hasClass(n) ? (a.hide(), e(), !1) : (a.open(p), e(d), !1) : (window.location = p.url, !1) : r() || h && l() ? (o.open(p), !1) : f ? (a.open(p), !1) : (o.open(p), !1)
-    })
-}), $(function () {
-    "use strict";
-    var e = window.location;
-    $(".qor-search").each(function () {
-        var t = $(this), a = t.find(".qor-search__input"), o = t.find(".qor-search__clear"), s = !!a.val(),
-            n = function () {
-                "?" == e.search.replace(new RegExp(a.attr("name") + "\\=?\\w*"), "") ? e.href = e.href.split("?")[0] : e.search = e.search.replace(new RegExp(a.attr("name") + "\\=?\\w*"), "")
-            };
-        t.closest(".qor-page__header").addClass("has-search"), $("header.mdl-layout__header").addClass("has-search"), o.on("click", function () {
-            a.val() || s ? n() : t.removeClass("is-dirty")
-        })
-    })
+
+    $this.closest('.qor-page__header').addClass('has-search');
+    $('header.mdl-layout__header').addClass('has-search');
+
+    $clear.on('click', function () {
+      if ($input.val() || isSearched) {
+        emptySearch();
+      } else {
+        $this.removeClass('is-dirty');
+      }
+    });
+  });
 });

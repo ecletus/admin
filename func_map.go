@@ -182,7 +182,9 @@ func (context *Context) valueOf(valuer func(interface{}, *core.Context) interfac
 		return nil
 	}
 
-	utils.ExitWithMsg(fmt.Sprintf("No valuer found for meta %v of resource %v", meta.Name, meta.baseResource.Name))
+	if !meta.Virtual {
+		utils.ExitWithMsg(fmt.Sprintf("No valuer found for meta %v of resource %v", meta.Name, meta.baseResource.Name))
+	}
 	return nil
 }
 
@@ -500,11 +502,11 @@ func (context *Context) getResource(resources ...*Resource) *Resource {
 
 func (context *Context) indexSections(resources ...*Resource) []*Section {
 	res := context.getResource(resources...)
-	if context.Layout != "" {
+	if context.Layout != "" && context.Layout != "index" {
 		layout := res.GetAdminLayout(context.Layout)
 		attrs := layout.Metas
 		if layout.NotIndexRenderID && !context.Api {
-			attrs = append(attrs, "-" + layout.MetaID)
+			attrs = append(attrs, "-"+layout.MetaID)
 		}
 		sections := res.SectionsList(attrs)
 		sections = res.allowedSections(nil, sections, context, roles.Read)
@@ -844,24 +846,6 @@ func (context *Context) themesClass() (result string) {
 	return strings.Join(names, " ")
 }
 
-func (context *Context) javaScriptTag(names ...string) template.HTML {
-	var results []string
-	prefix := context.GenStaticURL("javascripts")
-	for _, name := range names {
-		results = append(results, fmt.Sprintf(`<script src="%s/%s.js"></script>`, prefix, name))
-	}
-	return template.HTML(strings.Join(results, ""))
-}
-
-func (context *Context) styleSheetTag(names ...string) template.HTML {
-	var results []string
-	prefix := context.GenStaticURL("stylesheets")
-	for _, name := range names {
-		results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s/%s.css">`, prefix, name))
-	}
-	return template.HTML(strings.Join(results, ""))
-}
-
 func (context *Context) getThemeNames() (themes []string) {
 	themesMap := map[string]bool{}
 
@@ -897,9 +881,12 @@ func (context *Context) loadThemeStyleSheets() template.HTML {
 func (context *Context) loadThemeJavaScripts() template.HTML {
 	var results []string
 	for _, themeName := range context.getThemeNames() {
-		var file = path.Join("themes", themeName, "javascripts", themeName+".js")
-		if _, err := context.StaticAsset(file); err == nil {
-			results = append(results, fmt.Sprintf(`<script src="%s?theme=%s"></script>`, context.GenStaticURL(file), themeName))
+		for _, ext := range []string{".min", ""} {
+			var file = path.Join("themes", themeName, "javascripts", themeName+ext+".js")
+			if _, err := context.StaticAsset(file); err == nil {
+				results = append(results, fmt.Sprintf(`<script src="%s?theme=%s"></script>`, context.GenStaticURL(file), themeName))
+				break
+			}
 		}
 	}
 

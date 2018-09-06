@@ -132,7 +132,35 @@ func (s *Scheme) Path() string {
 	return "/" + s.SchemeParam
 }
 
-func (s *Scheme) GetScheme(param string) (child *Scheme, ok bool) {
+func (s *Scheme) GetSchemeByName(param string) (child *Scheme) {
+	parts := strings.Split(param, ".")
+
+	if parts[0] == "" {
+		parts = parts[1:]
+	}
+
+	child = s
+
+	for _, p := range parts {
+		if child.Children == nil {
+			return nil
+		}
+		for _, c := range child.Children {
+			if c.SchemeName == p {
+				child = c
+				break
+			}
+		}
+	}
+	return
+}
+
+func (s *Scheme) GetScheme(param string) (child *Scheme) {
+	child, _ = s.GetSchemeOk(param)
+	return
+}
+
+func (s *Scheme) GetSchemeOk(param string) (child *Scheme, ok bool) {
 	if param == "" {
 		return s, true
 	}

@@ -1,13 +1,15 @@
 package admin
 
 import (
-	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-edis"
-	"github.com/moisespsena/go-route"
-	"github.com/moisespsena/template/html/template"
 	"github.com/aghape/assets"
 	qorconfig "github.com/aghape/core/config"
+	"github.com/aghape/core/helpers"
 	"github.com/aghape/session"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena/go-edis"
+	"github.com/moisespsena/go-options"
+	"github.com/moisespsena/go-route"
+	"github.com/moisespsena/template/html/template"
 )
 
 type AdminConfig struct {
@@ -16,7 +18,7 @@ type AdminConfig struct {
 	AssetFS    assetfs.Interface
 	TemplateFS assetfs.Interface
 	StaticFS   assetfs.Interface
-	Data       qorconfig.OtherConfig
+	Data       options.Options
 }
 
 func NewConfig(config *qorconfig.Config) *AdminConfig {
@@ -48,7 +50,8 @@ type Admin struct {
 	metaConfigorMaps    map[string]func(*Meta)
 	NewContextCallbacks []func(context *Context) *Context
 	ViewPaths           map[string]bool
-	Data                qorconfig.OtherConfig
+	Data                options.Options
+	Cache               helpers.SyncMap
 }
 
 // ResourceNamer is an interface for models that defined method `ResourceName`
@@ -89,8 +92,11 @@ func New(config *AdminConfig) *Admin {
 	}
 
 	if config.Data == nil {
-		config.Data = qorconfig.NewOtherConfig()
+		admin.Data = make(options.Options)
 	}
+
+	cache := make(options.Options)
+	admin.Data.Set("cache", &cache)
 
 	admin.registerCompositePrimaryKeyCallback()
 	return admin

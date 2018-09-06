@@ -39,13 +39,23 @@ type RemoteDataResourceConfig struct {
 
 type DataResource struct {
 	ResourceURL
-	recordeUrl *ResourceURL
-	Dependency []interface{}
+	recordeUrl   *ResourceURL
+	Dependencies []interface{}
 }
 
 func NewDataResource(res *Resource) *DataResource {
 	d := &DataResource{}
 	d.Resource = res
+	return d
+}
+
+func (d *DataResource) Dependency(dep ...interface{}) *DataResource {
+	d.Dependencies = append(d.Dependencies, dep...)
+	return d
+}
+
+func (d *DataResource) With(f func(d *DataResource)) *DataResource {
+	f(d)
 	return d
 }
 
@@ -82,6 +92,7 @@ type SelectOneConfig struct {
 	BottomSheetSelectedTemplate string
 	RemoteDataResource          *DataResource
 	Remote                      bool
+	RemoteNoCache               bool
 	RemoteURL                   string
 	MakeRemoteURL               func(*Context) string
 	metaConfig
@@ -161,8 +172,8 @@ func (cfg *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor) {
 			if cfg.RemoteDataResource.Display == "" {
 				cfg.RemoteDataResource.Display = cfg.Display
 			}
-			if len(cfg.RemoteDataResource.Dependency) == 0 {
-				cfg.RemoteDataResource.Dependency = meta.Dependency
+			if len(cfg.RemoteDataResource.Dependencies) == 0 {
+				cfg.RemoteDataResource.Dependencies = meta.Dependency
 			}
 
 			if cfg.Basic {

@@ -1,0 +1,4 @@
+// +build !bindata
+
+package admin
+

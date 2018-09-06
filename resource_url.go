@@ -10,9 +10,21 @@ type ResourceURL struct {
 	Layout         string
 	Display        string
 	Query          map[string]interface{}
-	Dependency     []interface{}
+	Dependencies   []interface{}
 	recorde        bool
 	FormatURI      func(data *ResourceURL, context *Context, uri string) string
+	Scheme         string
+	Suffix         string
+}
+
+func (url *ResourceURL) Dependency(dep ...interface{}) *ResourceURL {
+	url.Dependencies = append(url.Dependencies, dep...)
+	return url
+}
+
+func (url *ResourceURL) With(f func(r *ResourceURL)) *ResourceURL {
+	f(url)
+	return url
 }
 
 func (url *ResourceURL) Basic() *ResourceURL {
@@ -25,8 +37,8 @@ func (url *ResourceURL) URL(context *Context) string {
 	var parents []string
 	var query []string
 
-	if len(url.Dependency) > 0 {
-		for _, dep := range url.Dependency {
+	if len(url.Dependencies) > 0 {
+		for _, dep := range url.Dependencies {
 			switch dp := dep.(type) {
 			case *DependencyParent:
 				if len(parents) == 0 {
@@ -55,6 +67,13 @@ func (url *ResourceURL) URL(context *Context) string {
 	} else {
 		uri = url.Resource.GetContextIndexURI(context.Context, parents...)
 	}
+
+	if url.Scheme != "" {
+		s := url.Resource.GetSchemeByName(url.Scheme)
+		uri += s.Path()
+	}
+
+	uri += url.Suffix
 
 	if url.FormatURI != nil {
 		uri = url.FormatURI(url, context, uri)

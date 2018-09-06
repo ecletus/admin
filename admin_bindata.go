@@ -1,0 +1,3 @@
+// +build bindata
+
+package admin

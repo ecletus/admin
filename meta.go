@@ -98,6 +98,7 @@ type Meta struct {
 	OutputFormattedValuer MetaOutputValuer
 	DefaultValueFunc      MetaValuer
 	proxyPath             []ProxyPath
+	Virtual               bool
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -371,12 +372,18 @@ func (meta *Meta) GetFormattedValuer() func(interface{}, *core.Context) interfac
 
 // FormattedValue get formatted valuer from meta
 func (meta *Meta) Value(ctx *core.Context, recorde interface{}) interface{} {
-	return meta.GetValuer()(recorde, ctx)
+	if valuer := meta.GetValuer(); valuer != nil {
+		return valuer(recorde, ctx)
+	}
+	return nil
 }
 
 // FormattedValue get formatted valuer from meta
 func (meta *Meta) FormattedValue(ctx *core.Context, recorde interface{}) interface{} {
-	return meta.GetFormattedValuer()(recorde, ctx)
+	if formattedValuer := meta.GetFormattedValuer(); formattedValuer != nil {
+		return formattedValuer(recorde, ctx)
+	}
+	return ""
 }
 
 // FormattedValue get formatted valuer from meta
@@ -441,6 +448,19 @@ func (meta *Meta) updateMeta() {
 	if meta.FieldStruct != nil {
 		if injector, ok := reflect.New(meta.FieldStruct.Struct.Type).Interface().(resource.ConfigureMetaBeforeInitializeInterface); ok {
 			injector.ConfigureQorMetaBeforeInitialize(meta)
+		}
+	}
+
+	if meta.Virtual {
+		if meta.Valuer == nil {
+			meta.Valuer = func(i interface{}, context *core.Context) interface{} {
+				return nil
+			}
+		}
+		if meta.Setter == nil {
+			meta.Setter = func(interface{}, *resource.MetaValue, *core.Context) error {
+				return nil
+			}
 		}
 	}
 

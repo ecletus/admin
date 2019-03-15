@@ -13,10 +13,10 @@ import (
 
 	"github.com/moisespsena-go/field-access"
 
-	"github.com/aghape/roles"
+	"github.com/ecletus/roles"
 
-	"github.com/aghape/core"
-	"github.com/aghape/responder"
+	"github.com/ecletus/core"
+	"github.com/ecletus/responder"
 	"github.com/moisespsena-go/valuesmap"
 )
 

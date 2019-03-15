@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"testing"
 
-	. "github.com/aghape/admin/tests/dummy"
+	. "github.com/ecletus/admin/tests/dummy"
 )
 
 func TestUpdateRecord(t *testing.T) {

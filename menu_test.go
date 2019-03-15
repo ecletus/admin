@@ -3,7 +3,7 @@ package admin
 import (
 	"testing"
 
-	"github.com/aghape/core"
+	"github.com/ecletus/core"
 )
 
 func generateResourceMenu(resource *Resource) *Menu {

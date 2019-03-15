@@ -1,6 +1,6 @@
 package admin_helpers
 
-import "github.com/aghape/admin"
+import "github.com/ecletus/admin"
 
 func FieldRichEditor(r *admin.Resource, field ...string) {
 	for _, fieldName := range field {

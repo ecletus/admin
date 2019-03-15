@@ -4,8 +4,8 @@ import (
 	"net/http/httptest"
 
 	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/admin"
-	. "github.com/aghape/admin/tests/dummy"
+	"github.com/ecletus/admin"
+	. "github.com/ecletus/admin/tests/dummy"
 )
 
 var (

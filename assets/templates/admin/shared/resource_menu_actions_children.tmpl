@@ -37,7 +37,7 @@
                     {{- else if not $action.Resource -}}
                         data-ajax-form="true"
                         data-from-menu="true"
-                        data-confirm="{{t "github_com:aghape:admin.form.are_you_sure"}}"
+                        data-confirm="{{t "github_com:ecletus:admin.form.are_you_sure"}}"
                         data-method="{{$action.Method}}"
                         {{if $action.ReturnURL}}data-return-url="{{call $action.ReturnURL $result $ctx}}"{{end}}
                         {{if $action.RefreshURL}}data-refresh-url="{{call $action.RefreshURL $result $ctx}}"{{end}}

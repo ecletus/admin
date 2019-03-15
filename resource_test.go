@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/aghape/core"
+	"github.com/ecletus/core"
 )
 
 type Product struct {

@@ -5,17 +5,17 @@
         <!-- {{if has_filter}}
         <span class="qor-notifications__unread"><i class="material-icons" style="font-size: 1.05em">edit</i></span>
     {{end}} -->
-    {{t "github_com:aghape:admin.filter.advanced_filter"}}
+    {{t "github_com:ecletus:admin.filter.advanced_filter"}}
     </button>
 
     <div class="qor-advanced-filter__dropdown clearfix" style="display: none;" advanced-search-toggle>
         <button class="mdl-button mdl-button--icon qor-advanced-filter__close">
             <i class="material-icons">close</i>
         </button>
-        <h3 class="mdl-layout-title">{{t "github_com:aghape:admin.filter.advanced_filter"}}</h3>
+        <h3 class="mdl-layout-title">{{t "github_com:ecletus:admin.filter.advanced_filter"}}</h3>
     <!-- {{if len saved_filters}}
         <div class="qor-advanced-filter__savedfilter">
-            <button class="mdl-button qor-advanced-filter__toggle">{{t "github_com:aghape:admin.filter.saved_filters"}}</button>
+            <button class="mdl-button qor-advanced-filter__toggle">{{t "github_com:ecletus:admin.filter.saved_filters"}}</button>
             <ul style="display:none;" advanced-search-toggle>
             {{range $filter := saved_filters}}
                 <li>
@@ -33,9 +33,9 @@
         {{range $filter := $filters}}
           {{render_filter $filter}}
         {{end}}
-            <button type="submit" class="mdl-button mdl-button--colored mdl-button--raised">{{t "github_com:aghape:admin.filter.apply"}}</button>
+            <button type="submit" class="mdl-button mdl-button--colored mdl-button--raised">{{t "github_com:ecletus:admin.filter.apply"}}</button>
             <!--
-            <button type="button" class="mdl-button mdl-button--colored qor-advanced-filter__save">{{t "github_com:aghape:admin.filter.save_this_filter"}}</button>
+            <button type="button" class="mdl-button mdl-button--colored qor-advanced-filter__save">{{t "github_com:ecletus:admin.filter.save_this_filter"}}</button>
             -->
         </form>
     </div>

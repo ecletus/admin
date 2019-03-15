@@ -5,10 +5,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/aghape/core/utils"
+	"github.com/ecletus/core/utils"
 
-	"github.com/aghape/admin"
-	"github.com/aghape/core"
+	"github.com/ecletus/admin"
+	"github.com/ecletus/core"
 )
 
 const (

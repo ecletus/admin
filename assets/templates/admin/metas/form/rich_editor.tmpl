@@ -20,7 +20,7 @@
                   {{$asset_router := url_for $asset_manager.ToParam}}
                   data-upload-url="{{$asset_router}}/upload"
                   data-crop-url="{{$asset_router}}/crop"
-                  data-text="{&quot;title&quot;: &quot;{{t "github_com:aghape:admin.form.crop_image"}}&quot;, &quot;ok&quot;: &quot;{{t "github_com:aghape:admin.form.ok"}}&quot;, &quot;cancel&quot;: &quot;{{t "github_com:aghape:admin.form.cancel"}}&quot;}"
+                  data-text="{&quot;title&quot;: &quot;{{t "github_com:ecletus:admin.form.crop_image"}}&quot;, &quot;ok&quot;: &quot;{{t "github_com:ecletus:admin.form.ok"}}&quot;, &quot;cancel&quot;: &quot;{{t "github_com:ecletus:admin.form.cancel"}}&quot;}"
                 {{end}}
                 {{if not (has_update_permission .Meta)}}disabled{{end}}>
             {{.Value}}

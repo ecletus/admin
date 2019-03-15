@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/aghape/auth"
-	"github.com/aghape/core"
-	"github.com/aghape/roles"
+	"github.com/ecletus/auth"
+	"github.com/ecletus/core"
+	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/xroute"
 )
 

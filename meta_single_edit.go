@@ -3,7 +3,7 @@ package admin
 import (
 	"errors"
 	"github.com/moisespsena/go-assetfs"
-	"github.com/aghape/core/resource"
+	"github.com/ecletus/core/resource"
 )
 
 // SingleEditConfig meta configuration used for single edit

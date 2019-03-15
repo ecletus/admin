@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/aghape/core/utils"
+	"github.com/ecletus/core/utils"
 
 	"github.com/moisespsena-go/xroute"
 )

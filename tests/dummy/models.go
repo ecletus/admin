@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/moisespsena-go/aorm"
-	"github.com/aghape/media/oss"
+	"github.com/ecletus/media/oss"
 )
 
 type CreditCard struct {

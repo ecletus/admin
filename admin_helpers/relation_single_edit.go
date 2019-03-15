@@ -3,8 +3,8 @@ package admin_helpers
 import (
 	"reflect"
 
-	"github.com/aghape/admin"
-	"github.com/aghape/core/utils"
+	"github.com/ecletus/admin"
+	"github.com/ecletus/core/utils"
 )
 
 func SingleEdit(r *admin.Resource, field ...string) {

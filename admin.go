@@ -1,12 +1,12 @@
 package admin
 
 import (
-	"github.com/aghape/assets"
-	"github.com/aghape/core"
-	qorconfig "github.com/aghape/core/config"
-	"github.com/aghape/core/helpers"
-	"github.com/aghape/db"
-	"github.com/aghape/session"
+	"github.com/ecletus/assets"
+	"github.com/ecletus/core"
+	qorconfig "github.com/ecletus/core/config"
+	"github.com/ecletus/core/helpers"
+	"github.com/ecletus/db"
+	"github.com/ecletus/session"
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/xroute"
 	"github.com/moisespsena/go-assetfs"

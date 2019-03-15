@@ -3,16 +3,16 @@ package admin
 import (
 	"sort"
 
-	"github.com/aghape/core/resource"
+	"github.com/ecletus/core/resource"
 
 	"strings"
 
 	"database/sql"
 
-	"github.com/aghape/core"
-	"github.com/aghape/core/utils"
-	"github.com/aghape/fragment"
-	"github.com/aghape/roles"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/utils"
+	"github.com/ecletus/fragment"
+	"github.com/ecletus/roles"
 	"github.com/go-errors/errors"
 	"github.com/moisespsena-go/aorm"
 )

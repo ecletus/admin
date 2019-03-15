@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aghape/admin"
-	. "github.com/aghape/admin/tests/dummy"
-	"github.com/aghape/core"
+	"github.com/ecletus/admin"
+	. "github.com/ecletus/admin/tests/dummy"
+	"github.com/ecletus/core"
 )
 
 // Template helpers test

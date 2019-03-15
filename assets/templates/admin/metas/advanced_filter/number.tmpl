@@ -5,9 +5,9 @@
     {{if not .Filter.NotChooseOperation}}
       {{ $opt := .Context.Request.URL.Query.Get (print .InputNamePrefix ".Operation") }}
       <select name="{{.InputNamePrefix}}.Operation" data-toggle="qor.selector" placeholder="{{t (printf "%v.filter.%v" .Resource.ToParam .Filter.Label) .Filter.Label}}">
-        <option value="eq" {{if (or (eq $opt "eq") (eq $opt ""))}}selected{{end}}>{{t "github_com:aghape:admin.filter.number.eq"}}</option>
-        <option value="gt" {{if (eq $opt "gt")}}selected{{end}}>{{t "github_com:aghape:admin.filter.number.gt"}}</option>
-        <option value="lt" {{if (eq $opt "lt")}}selected{{end}}>{{t "github_com:aghape:admin.filter.number.lt"}}</option>
+        <option value="eq" {{if (or (eq $opt "eq") (eq $opt ""))}}selected{{end}}>{{t "github_com:ecletus:admin.filter.number.eq"}}</option>
+        <option value="gt" {{if (eq $opt "gt")}}selected{{end}}>{{t "github_com:ecletus:admin.filter.number.gt"}}</option>
+        <option value="lt" {{if (eq $opt "lt")}}selected{{end}}>{{t "github_com:ecletus:admin.filter.number.lt"}}</option>
       </select>
     {{end}}
 

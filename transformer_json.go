@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/aghape/roles"
+	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/valuesmap"
 )
 

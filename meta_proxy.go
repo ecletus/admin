@@ -6,8 +6,8 @@ import (
 
 	"github.com/moisespsena-go/aorm"
 
-	"github.com/aghape/core"
-	"github.com/aghape/core/resource"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
 	"github.com/jinzhu/copier"
 )
 

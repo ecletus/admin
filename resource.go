@@ -9,18 +9,18 @@ import (
 
 	"github.com/moisespsena/go-edis"
 
-	"github.com/aghape/core"
-	"github.com/aghape/core/resource"
-	"github.com/aghape/core/utils"
-	"github.com/aghape/roles"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
+	"github.com/ecletus/core/utils"
+	"github.com/ecletus/roles"
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/xroute"
 
-	//"github.com/aghape/responder"
+	//"github.com/ecletus/responder"
 	"strconv"
 
-	"github.com/aghape/db/inheritance"
+	"github.com/ecletus/db/inheritance"
 	"github.com/moisespsena/template/html/template"
 )
 

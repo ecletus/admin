@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"github.com/moisespsena/go-topsort"
-	"github.com/aghape/admin"
+	"github.com/ecletus/admin"
 )
 
 const DUPLICATION_OVERRIDE = 0

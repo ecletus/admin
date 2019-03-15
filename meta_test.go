@@ -4,11 +4,11 @@ import (
 	"reflect"
 	"testing"
 
-	. "github.com/aghape/admin/tests/dummy"
+	. "github.com/ecletus/admin/tests/dummy"
 
-	"github.com/aghape/admin"
-	"github.com/aghape/core"
-	"github.com/aghape/core/resource"
+	"github.com/ecletus/admin"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
 )
 
 func TestTextInput(t *testing.T) {

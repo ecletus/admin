@@ -3,7 +3,7 @@ package admin
 import (
 	"fmt"
 
-	"github.com/aghape/roles"
+	"github.com/ecletus/roles"
 )
 
 // View Actions (VA)

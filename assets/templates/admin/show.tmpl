@@ -4,8 +4,8 @@
   {{$actions}}
 </div>
 <div class="qor-page__body qor-page__show" data-toggle="qor.inlineEdit"
-      data-button-save="{{t "github_com:aghape:admin.showpage.inlineedit.button.save" "save"}}"
-      data-button-cancel="{{t "github_com:aghape:admin.showpage.inlineedit.button.cancel_edit" "cancel edit"}}">
+      data-button-save="{{t "github_com:ecletus:admin.showpage.inlineedit.button.save" "save"}}"
+      data-button-cancel="{{t "github_com:ecletus:admin.showpage.inlineedit.button.cancel_edit" "cancel edit"}}">
   {{render "shared/flashes"}}
   {{render "shared/errors"}}
   {{if not (qor_context).NotFound}}
@@ -23,8 +23,8 @@
 
         {{if has_update_permission .Resource}}
           <div class="qor-form__actions qor-field__edit">
-            <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{t "github_com:aghape:admin.form.save_changes"}}</button>
-            <a class="mdl-button mdl-button--primary mdl-js-button mdl-js-ripple-effect qor-button--cancel" href="javascript:history.back();">{{t "github_com:aghape:admin.form.cancel_edit"}}</a>
+            <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{t "github_com:ecletus:admin.form.save_changes"}}</button>
+            <a class="mdl-button mdl-button--primary mdl-js-button mdl-js-ripple-effect qor-button--cancel" href="javascript:history.back();">{{t "github_com:ecletus:admin.form.cancel_edit"}}</a>
           </div>
         {{end}}
       </form>

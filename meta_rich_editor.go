@@ -1,9 +1,9 @@
 package admin
 
 import (
-	"github.com/aghape/core"
-	"github.com/aghape/core/resource"
-	"github.com/aghape/core/utils"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
+	"github.com/ecletus/core/utils"
 )
 
 type RichEditorConfig struct {

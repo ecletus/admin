@@ -3,10 +3,10 @@ package dummy
 import (
 	"fmt"
 
-	"github.com/aghape/admin"
-	"github.com/aghape/media"
-	"github.com/aghape/core"
-	"github.com/aghape/core/test/utils"
+	"github.com/ecletus/admin"
+	"github.com/ecletus/media"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/test/utils"
 )
 
 // NewDummyAdmin generate admin for dummy app

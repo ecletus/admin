@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"github.com/aghape/common"
-	"github.com/aghape/auth"
+	"github.com/ecletus/common"
+	"github.com/ecletus/auth"
 )
 
 // Auth is an auth interface that used to qor admin

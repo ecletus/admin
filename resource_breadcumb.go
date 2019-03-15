@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/aghape/core"
+	"github.com/ecletus/core"
 	"github.com/moisespsena-go/aorm"
 )
 

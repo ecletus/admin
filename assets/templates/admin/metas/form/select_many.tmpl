@@ -34,8 +34,8 @@
 
     <script name="select-many-hint" type="x-tmpl-mustache">
       <div class="qor-selectmany__hint clearfix">
-        <span>[[ selectedNum ]] {{marshal (t "github_com:aghape:admin.form.select_many_hint")}}</span>
-        <a href="#" data-dismiss="bottomsheets">{{t "github_com:aghape:admin.form.select_many_hint_button"}}</a>
+        <span>[[ selectedNum ]] {{marshal (t "github_com:ecletus:admin.form.select_many_hint")}}</span>
+        <a href="#" data-dismiss="bottomsheets">{{t "github_com:ecletus:admin.form.select_many_hint_button"}}</a>
       </div>
     </script>
 
@@ -43,7 +43,7 @@
       <li data-primary-key="[[ primaryKey ]]">
         <span>[[ &displayName ]]</span>
         <a href="javascripr://" class="qor-selected-many__undo">
-          {{marshal (t "github_com:aghape:admin.form.undo")}}
+          {{marshal (t "github_com:ecletus:admin.form.undo")}}
         </a>
         <a href="#" class="qor-selected-many__remove"><i class="material-icons">clear</i></a>
       </li>
@@ -68,7 +68,7 @@
           data-select-creating-url="{{new_resource_path .Meta.Config.RemoteDataResource.Resource}}"
           data-select-default-creating="{{.Meta.Config.DefaultCreating}}"
           {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}>
-        {{t "github_com:aghape:admin.form.add_items"}}
+        {{t "github_com:ecletus:admin.form.add_items"}}
       </a>
 
       <select class="qor-field__input qor-field__selectmany-input hidden" id="{{.InputId}}" name="{{.InputName}}" multiple {{if not (has_update_permission .Meta)}}disabled{{end}}>
@@ -79,7 +79,7 @@
     {{else}}
       <select class="qor-field__input hidden" id="{{.InputId}}"
         {{if not (eq .Meta.Config.SelectMode "bottom_sheet")}} data-toggle="qor.chooser" {{end}}
-        data-placeholder="{{meta_placeholder .Meta .Context (t "github_com:aghape:admin.form.select_some_options")}}"
+        data-placeholder="{{meta_placeholder .Meta .Context (t "github_com:ecletus:admin.form.select_some_options")}}"
         name="{{.InputName}}"
         multiple
         {{if not (has_update_permission .Meta)}}disabled{{end}}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aghape/core/utils"
+	"github.com/ecletus/core/utils"
 )
 
 // Section is used to structure forms, it could group your fields into sections, to make your form clean & tidy

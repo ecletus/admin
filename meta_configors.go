@@ -3,8 +3,8 @@ package admin
 import (
 	"time"
 
-	"github.com/aghape/core"
-	"github.com/aghape/core/utils"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/utils"
 )
 
 var metaConfigorMaps = map[string]func(*Meta){

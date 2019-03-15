@@ -1,6 +1,6 @@
 package admin
 
-import "github.com/aghape/core"
+import "github.com/ecletus/core"
 
 func (res *Resource) GetIndexLink(context *core.Context, args ...interface{}) string {
 	return res.GetLink(nil, context, args...)

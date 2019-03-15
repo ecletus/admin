@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aghape/admin"
+	"github.com/ecletus/admin"
 )
 
 func TestXMLTransformerEncode(t *testing.T) {

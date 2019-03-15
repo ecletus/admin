@@ -1,6 +1,6 @@
 package resource_callback
 
-import "github.com/aghape/admin"
+import "github.com/ecletus/admin"
 
 // Chain returns a Callbacks type from a slice of middleware handlers.
 func Chain(callbacks ...*Callback) Callbacks {

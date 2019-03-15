@@ -3,7 +3,7 @@ package admin
 import (
 	"strings"
 
-	"github.com/aghape/core"
+	"github.com/ecletus/core"
 )
 
 func (admin *Admin) LoadCrumbs(rh *RouteHandler, ctx *Context, patterns ...string) {

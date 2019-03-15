@@ -1,10 +1,10 @@
 package admin
 
 import (
-	"github.com/aghape/core"
-	"github.com/aghape/core/resource"
-	"github.com/aghape/fragment"
-	"github.com/aghape/helpers"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
+	"github.com/ecletus/fragment"
+	"github.com/ecletus/helpers"
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-error-wrap"
 )

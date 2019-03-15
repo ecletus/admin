@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"github.com/aghape/core"
-	"github.com/aghape/roles"
+	"github.com/ecletus/core"
+	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/aorm"
 )
 

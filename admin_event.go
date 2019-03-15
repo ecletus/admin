@@ -1,9 +1,9 @@
 package admin
 
 import (
-	"github.com/aghape/core"
-	"github.com/aghape/core/utils"
-	"github.com/aghape/plug"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/utils"
+	"github.com/ecletus/plug"
 	"github.com/moisespsena/go-edis"
 )
 

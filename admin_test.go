@@ -3,8 +3,8 @@ package admin
 import (
 	"testing"
 
-	"github.com/aghape/core"
-	"github.com/aghape/core/test/utils"
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/test/utils"
 )
 
 type User struct {

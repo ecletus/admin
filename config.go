@@ -1,9 +1,9 @@
 package admin
 
 import (
-	"github.com/moisespsena-go/aorm"
 	"github.com/aghape/core"
 	"github.com/aghape/roles"
+	"github.com/moisespsena-go/aorm"
 )
 
 type SubConfig struct {
@@ -35,4 +35,6 @@ type Config struct {
 	NotMount      bool
 	Setup         func(res *Resource)
 	MenuEnabled   func(menu *Menu, ctx *Context) bool
+	Controller    interface{}
+	LabelKey      string
 }

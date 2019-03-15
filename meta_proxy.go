@@ -23,13 +23,13 @@ func indirectValuePtr(v reflect.Value) *reflect.Value {
 }
 
 type ProxyPath interface {
-	GetType()       reflect.Type
+	GetType() reflect.Type
 	Get(ctx *core.Context, recorde *reflect.Value) (value *reflect.Value)
 }
 
 type proxyPathField struct {
 	Index []int
-	Type reflect.Type
+	Type  reflect.Type
 }
 
 func (p proxyPathField) Get(ctx *core.Context, recorde *reflect.Value) (value *reflect.Value) {
@@ -40,6 +40,7 @@ func (p proxyPathField) Get(ctx *core.Context, recorde *reflect.Value) (value *r
 func (p proxyPathField) GetType() reflect.Type {
 	return p.Type
 }
+
 type proxyPathVirtualField struct {
 	Name string
 	Type reflect.Type
@@ -78,7 +79,7 @@ func (p proxyPathMeta) Get(ctx *core.Context, recorde *reflect.Value) (value *re
 
 type proxyPathGetter struct {
 	Getter func(ctx *core.Context, recorde interface{}) (value interface{})
-	Type reflect.Type
+	Type   reflect.Type
 }
 
 func (p proxyPathGetter) GetType() reflect.Type {
@@ -96,7 +97,7 @@ func (p proxyPathGetter) Get(ctx *core.Context, recorde *reflect.Value) (value *
 
 type ProxyVirtualFieldPath struct {
 	FieldName string
-	Value    interface{}
+	Value     interface{}
 }
 
 type ProxyMetaPath struct {
@@ -104,8 +105,8 @@ type ProxyMetaPath struct {
 }
 
 type ProxyPathGetter struct {
-	Get func(ctx *core.Context, recorde interface{}) interface{}
-	Value    interface{}
+	Get   func(ctx *core.Context, recorde interface{}) interface{}
+	Value interface{}
 }
 
 func NewMetaFieldProxy(name string, parts []interface{}, src interface{}, to *Meta) *Meta {
@@ -155,6 +156,11 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 				}
 			}
 			if value.Kind() == reflect.Struct {
+				if !value.CanAddr() {
+					v2 := reflect.New(value.Type())
+					v2.Elem().Set(*value)
+					return v2.Interface()
+				}
 				return value.Addr().Interface()
 			}
 			return value.Interface()
@@ -163,16 +169,14 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 	}
 
 	meta.Name = name
-	if to.Valuer != nil {
-		meta.Valuer = func(i interface{}, context *core.Context) interface{} {
-			return to.Valuer(record(context, i), context)
-		}
-	}
-	if to.FormattedValuer != nil {
-		meta.FormattedValuer = func(i interface{}, context *core.Context) interface{} {
-			return to.FormattedValuer(record(context, i), context)
-		}
-	}
+	meta.SetValuer(func(i interface{}, context *core.Context) interface{} {
+		return to.Value(context, record(context, i))
+	})
+
+	meta.SetFormattedValuer(func(i interface{}, context *core.Context) interface{} {
+		return to.FormattedValue(context, record(context, i))
+	})
+
 	if to.TypeHandler != nil {
 		meta.TypeHandler = func(i interface{}, context *Context, meta *Meta) string {
 			return to.TypeHandler(record(context.Context, i), context, meta)
@@ -198,10 +202,9 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 			return to.GetMetasFunc()
 		}
 	}
-	if to.IsZeroFunc != nil {
-		meta.IsZeroFunc = func(recorde, value interface{}) bool {
-			return to.IsZeroFunc(record(nil, recorde), value)
-		}
+
+	meta.IsZeroFunc = func(recorde, value interface{}) bool {
+		return to.IsZero(record(nil, recorde), value)
 	}
 	meta.ForceShowZero = to.ForceShowZero
 	return meta

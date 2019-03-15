@@ -5,13 +5,15 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/moisespsena-go/aorm"
+
 	"github.com/aghape/core/resource"
 	"github.com/aghape/core/utils"
 	"github.com/aghape/fragment"
 	"github.com/jinzhu/inflection"
+	"github.com/moisespsena-go/xroute"
 	"github.com/moisespsena/go-edis"
 	"github.com/moisespsena/go-error-wrap"
-	"github.com/moisespsena/go-route"
 )
 
 func (admin *Admin) newResource(value interface{}, config *Config, onUid func(uid string)) *Resource {
@@ -27,6 +29,9 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		if field, ok := reflect.TypeOf(config.Sub.Parent.Value).Elem().FieldByName(config.Sub.FieldName); ok {
 			if config.Name == "" {
 				config.Name = config.Sub.FieldName
+				if config.LabelKey == "" {
+					config.LabelKey = config.Sub.Parent.I18nPrefix + ".children." + config.Sub.FieldName
+				}
 			}
 			if config.ID == "" {
 				if config.Prefix != "" {
@@ -68,8 +73,12 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		onUid(uid)
 	}
 
+	if config.Controller == nil {
+		config.Controller = NewCrudSearchIndexController()
+	}
+
 	res := &Resource{
-		Resource:         resource.New(value, config.ID, uid),
+		Resource:         resource.New(admin.FakeDB.NewScope(value), config.ID, uid),
 		Config:           config,
 		cachedMetas:      &map[string][]*Meta{},
 		admin:            admin,
@@ -79,6 +88,17 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		MetasByName:      make(map[string]*Meta),
 		MetasByFieldName: make(map[string]*Meta),
 		Inherits:         make(map[string]*Child),
+		RouteHandlers:    make(map[string]*RouteHandler),
+		labelKey:         config.LabelKey,
+	}
+
+	res.Controller.Resource = res
+
+	_, res.softDelete = value.(aorm.SoftDeleter)
+
+	res.Controller.Controller = config.Controller
+	res.Controller.ViewController = &ResourceViewController{
+		Controller: &Controller{Admin: admin, controller: config.Controller},
 	}
 
 	res.Scheme = NewScheme(res, "Default")
@@ -102,7 +122,7 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		res.ParentResource = config.Sub.Parent
 	}
 
-	res.Router = route.NewMux(res.ID)
+	res.Router = xroute.NewMux(res.ID)
 
 	if config.Prefix != "" {
 		res.Router.SetPrefix(strings.Replace(config.Prefix, ".", "/", -1))
@@ -111,7 +131,7 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 	if res.Config.Singleton {
 		res.ObjectRouter = res.Router
 	} else {
-		res.ObjectRouter = route.NewMux(res.ID + ":ObjectRouter")
+		res.ObjectRouter = xroute.NewMux(res.ID + ":ObjectRouter")
 	}
 
 	res.Permission = config.Permission
@@ -149,7 +169,11 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 	if config.Sub != nil {
 		if config.Sub.FieldName != "" {
 			if field, ok := config.Sub.Parent.FakeScope.FieldByName(config.Sub.FieldName); ok {
-				res.SetParentResource(config.Sub.Parent, field.Relationship.ForeignFieldNames[0])
+				if field.Relationship != nil {
+					res.SetParentResource(config.Sub.Parent, field.Relationship.ForeignFieldNames[0])
+				} else {
+					res.SetParentResource(config.Sub.Parent, "")
+				}
 				//res.SetPrimaryFields(field.Relationship.ForeignFieldNames...)
 			} else {
 				panic(fmt.Sprintf("Invalid fieldName %q", config.Sub.FieldName))
@@ -209,6 +233,15 @@ func (admin *Admin) NewResourceConfig(value interface{}, cfg *Config) *Resource 
 	res := admin.newResource(value, cfg, nil)
 	res.configure()
 
+	res.AfterRegister(func() {
+		for _, layout := range res.Layouts {
+			if l, ok := layout.(*Layout); ok {
+				l.Resource = res
+				l.SetMetaNames(l.MetaNames)
+			}
+		}
+	})
+
 	if res.Config.Setup != nil {
 		res.Config.Setup(res)
 	}
@@ -246,7 +279,13 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 		if !res.Config.Invisible {
 			menu := res.ParentResource.AddMenu(res.DefaultMenu())
 			menu.Enabled = func(menu *Menu, context *Context) bool {
-				return !context.NotFound && res.GetKey(context.Result) != ""
+				if !context.NotFound && res.GetKey(context.Result) != "" {
+					if res.Config.MenuEnabled != nil {
+						return res.Config.MenuEnabled(menu, context)
+					}
+					return true
+				}
+				return false
 			}
 		}
 	} else {
@@ -260,17 +299,25 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 	if !res.Config.NotMount {
 		res.RegisterDefaultRouters()
 		res.mounted = true
+
+		for _, am := range res.afterMount {
+			am()
+		}
+
+		res.afterMount = nil
 	}
+
+	res.initializeLayouts()
 
 	if res.Config.Setup != nil {
 		res.Config.Setup(res)
 	}
-	res.initializeLayouts()
+
+	res.registered = true
 	for _, cb := range res.afterRegister {
 		cb()
 	}
 	res.afterRegister = nil
-	res.registered = true
 
 	admin.triggerResourceAdded(res)
 
@@ -313,6 +360,9 @@ func (admin *Admin) WalkResources(f func(res *Resource) bool) bool {
 
 // GetResourceByID get resource with name
 func (admin *Admin) GetResourceByID(id string) (resource *Resource) {
+	if resource, ok := admin.ResourcesByUID[id]; ok {
+		return resource
+	}
 	parts := strings.SplitN(id, ".", 2)
 	r := admin.Resources[parts[0]]
 	if r == nil || len(parts) == 1 {
@@ -343,5 +393,9 @@ func (admin *Admin) GetOrParentResourceByID(id string) *Resource {
 
 // AddSearchResource make a resource searchable from search center
 func (admin *Admin) AddSearchResource(resources ...*Resource) {
-	admin.searchResources = append(admin.searchResources, resources...)
+	for _, res := range resources {
+		if _, ok := res.Controller.Controller.(ControllerSearcher); ok {
+			admin.searchResources = append(admin.searchResources, res)
+		}
+	}
 }

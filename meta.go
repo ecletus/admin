@@ -3,12 +3,13 @@ package admin
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	errors2 "github.com/pkg/errors"
 
 	"github.com/aghape/core/helpers"
 
@@ -80,12 +81,14 @@ type Meta struct {
 	Permission        *roles.Permission
 	Config            MetaConfigInterface
 
+	Description    string
+	DescriptionKey string
+
 	Metas        []resource.Metaor
 	GetMetasFunc func() []resource.Metaor
 	Collection   interface{}
 	*resource.Meta
-	baseResource          *Resource
-	EditName              string
+	BaseResource          *Resource
 	TemplateData          map[string]interface{}
 	i18nGroup             string
 	Dependency            []interface{}
@@ -130,21 +133,21 @@ func (meta *Meta) TKey(key string) string {
 }
 
 func (meta *Meta) Namer() *resource.MetaName {
-	if name, ok := meta.baseResource.MetaAliases[meta.Name]; ok {
+	if name, ok := meta.BaseResource.MetaAliases[meta.Name]; ok {
 		return name
 	}
 	return meta.Meta.Namer()
 }
 
-func (meta *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error) *Meta {
+func (meta *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, ctx *core.Context) error) *Meta {
 	old := meta.Setter
-	meta.Setter = func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-		return f(meta, old, recorde, metaValue, context)
+	meta.Setter = func(recorde interface{}, metaValue *resource.MetaValue, ctx *core.Context) error {
+		return f(meta, old, recorde, metaValue, ctx)
 	}
 	return meta
 }
 
-func (meta *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{}) *Meta {
+func (meta *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
 	old := meta.Valuer
 	meta.Valuer = func(recorde interface{}, context *core.Context) interface{} {
 		return f(meta, old, recorde, context)
@@ -152,36 +155,36 @@ func (meta *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface
 	return meta
 }
 
-func (meta *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{}) *Meta {
+func (meta *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
 	old := meta.FormattedValuer
-	meta.FormattedValuer = func(recorde interface{}, context *core.Context) interface{} {
-		return f(meta, old, recorde, context)
+	meta.FormattedValuer = func(recorde interface{}, ctx *core.Context) interface{} {
+		return f(meta, old, recorde, ctx)
 	}
 	return meta
 }
 
-func (meta *Meta) NewOutputFormattedValuer(f func(meta *Meta, old MetaOutputValuer, context *core.Context, recorde, value interface{}) interface{}) *Meta {
+func (meta *Meta) NewOutputFormattedValuer(f func(meta *Meta, old MetaOutputValuer, ctx *core.Context, recorde, value interface{}) interface{}) *Meta {
 	old := meta.OutputFormattedValuer
-	meta.OutputFormattedValuer = func(context *core.Context, recorde, value interface{}) interface{} {
-		return f(meta, old, context, recorde, value)
+	meta.OutputFormattedValuer = func(ctx *core.Context, recorde, value interface{}) interface{} {
+		return f(meta, old, ctx, recorde, value)
 	}
 	return meta
 }
 
-func (meta *Meta) SetValuer(f func(recorde interface{}, context *core.Context) interface{}) {
+func (meta *Meta) SetValuer(f func(recorde interface{}, ctx *core.Context) interface{}) {
 	meta.Valuer = f
 	meta.Meta.SetValuer(f)
 }
 
-func (meta *Meta) SetFormattedValuer(f func(recorde interface{}, context *core.Context) interface{}) {
+func (meta *Meta) SetFormattedValuer(f func(recorde interface{}, ctx *core.Context) interface{}) {
 	meta.FormattedValuer = f
 	meta.Meta.SetFormattedValuer(f)
 }
 
-func (meta *Meta) NewEnabled(f func(old MetaEnabled, recorde interface{}, context *Context, meta *Meta) bool) *Meta {
+func (meta *Meta) NewEnabled(f func(old MetaEnabled, recorde interface{}, ctx *Context, meta *Meta) bool) *Meta {
 	old := meta.Enabled
-	meta.Enabled = func(recorde interface{}, context *Context, meta *Meta) bool {
-		return f(old, recorde, context, meta)
+	meta.Enabled = func(recorde interface{}, ctx *Context, meta *Meta) bool {
+		return f(old, recorde, ctx, meta)
 	}
 	return meta
 }
@@ -193,6 +196,26 @@ func (meta *Meta) GetType(record interface{}, context *Context) string {
 	return meta.Type
 }
 
+func (meta *Meta) GetDescriptionPair() (string, string) {
+	var (
+		key    = meta.DescriptionKey
+		defaul string
+	)
+
+	if key == "" && meta.Description != "" {
+		if meta.Description == "@" {
+			key, _ = meta.GetLabelPair()
+			key += "_description"
+		} else if strings.ContainsRune(key, '.') {
+			key = meta.Description
+		} else {
+			defaul = meta.Description
+		}
+	}
+
+	return key, defaul
+}
+
 func (meta *Meta) GetLabelPair() (string, string) {
 	name := meta.Name
 
@@ -200,15 +223,18 @@ func (meta *Meta) GetLabelPair() (string, string) {
 		name = meta.FieldName
 	}
 
-	if meta.EditName != "" {
-		return meta.baseResource.GetMeta(meta.EditName).GetLabelPair()
-	}
+	var (
+		key    = name
+		defaul = meta.DefaultLabel
+	)
 
-	key := meta.Label
-	defaul := meta.DefaultLabel
-
-	if key == "" {
-		key = fmt.Sprintf("%v.attributes.%v", meta.baseResource.I18nPrefix, name)
+	if meta.Label != "" {
+		key = meta.Label
+		if !strings.ContainsRune(key, '.') {
+			defaul = meta.Label
+		}
+	} else if !strings.ContainsRune(key, '.') {
+		key = meta.BaseResource.I18nPrefix + ".attributes." + key
 	}
 
 	if meta.SkipDefaultLabel {
@@ -305,33 +331,33 @@ func (meta *Meta) SetPermission(permission *roles.Permission) {
 }
 
 // HasPermission check has permission or not
-func (meta Meta) HasPermission(mode roles.PermissionMode, context *core.Context) bool {
-	var roles = []interface{}{}
+func (meta Meta) HasPermissionE(mode roles.PermissionMode, context *core.Context) (ok bool, err error) {
+	var roles_ = []interface{}{}
 	for _, role := range context.Roles {
-		roles = append(roles, role)
+		roles_ = append(roles_, role)
 	}
-	if meta.Permission != nil && !meta.Permission.HasPermission(mode, roles...) {
-		return false
-	}
-
-	if meta.baseResource != nil {
-		return meta.baseResource.HasPermission(mode, context)
+	if meta.Permission != nil && !roles.HasPermission(meta.Permission, mode, roles_...) {
+		return false, nil
 	}
 
-	return true
+	if meta.BaseResource != nil {
+		return core.HasPermissionDefaultE(true, meta.BaseResource, mode, context)
+	}
+
+	return true, roles.ErrDefaultPermission
 }
 
-func (meta *Meta) TriggerValueEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer, value ...interface{}) interface{} {
+func (meta *Meta) TriggerValuerEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer, value ...interface{}) interface{} {
 	var v interface{}
 	if len(value) > 0 {
 		v = value[0]
 	}
-	e := &MetaValueEvent{
+	e := &MetaValuerEvent{
 		MetaRecordeEvent{
 			MetaEvent{
 				edis.NewEvent(ename),
 				meta,
-				meta.Resource,
+				meta.BaseResource,
 				ctx,
 			},
 			recorde,
@@ -345,11 +371,46 @@ func (meta *Meta) TriggerValueEvent(ename string, recorde interface{}, ctx *core
 	return e.Value
 }
 
+func (meta *Meta) TriggerSetEvent(ename string, recorde interface{}, ctx *core.Context, setter MetaSetter, metaValue *resource.MetaValue) error {
+	e := &MetaSetEvent{
+		MetaRecordeEvent: MetaRecordeEvent{
+			MetaEvent{
+				edis.NewEvent(ename),
+				meta,
+				meta.BaseResource,
+				ctx,
+			},
+			recorde,
+		},
+		Setter:    setter,
+		MetaValue: metaValue,
+	}
+	meta.Trigger(e)
+	return setter(recorde, metaValue, ctx)
+}
+
+func (meta *Meta) TriggerValueChangedEvent(ename string, recorde interface{}, ctx *core.Context, oldValue interface{}, valuer MetaValuer) error {
+	e := &MetaValueChangedEvent{
+		MetaRecordeEvent: MetaRecordeEvent{
+			MetaEvent{
+				edis.NewEvent(ename),
+				meta,
+				meta.BaseResource,
+				ctx,
+			},
+			recorde,
+		},
+		Old:    oldValue,
+		valuer: valuer,
+	}
+	return meta.Trigger(e)
+}
+
 // GetValuer get valuer from meta
 func (meta *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
 	if valuer := meta.Meta.GetValuer(); valuer != nil {
 		return func(i interface{}, context *core.Context) interface{} {
-			return meta.TriggerValueEvent(E_META_VALUE, i, context, valuer)
+			return meta.TriggerValuerEvent(E_META_VALUE, i, context, valuer)
 		}
 	}
 	return nil
@@ -364,8 +425,8 @@ func (meta *Meta) GetFormattedValuer() func(interface{}, *core.Context) interfac
 		valuer = meta.GetValuer()
 	}
 	return func(i interface{}, context *core.Context) interface{} {
-		v := meta.TriggerValueEvent(E_META_FORMATTED_VALUE, i, context, valuer)
-		v = meta.TriggerValueEvent(E_META_POST_FORMATTED_VALUE, i, context, nil, v)
+		v := meta.TriggerValuerEvent(E_META_FORMATTED_VALUE, i, context, valuer)
+		v = meta.TriggerValuerEvent(E_META_POST_FORMATTED_VALUE, i, context, nil, v)
 		return v
 	}
 }
@@ -399,13 +460,10 @@ func (meta *Meta) GetDefaultValue(ctx *core.Context, recorde interface{}) interf
 			zero = z.Interface()
 		}
 	}
-	return meta.TriggerValueEvent(E_META_DEFAULT_VALUE, recorde, ctx, nil, zero)
+	return meta.TriggerValuerEvent(E_META_DEFAULT_VALUE, recorde, ctx, nil, zero)
 }
 
 func (meta *Meta) updateMeta() {
-	if meta.EditName == "-#" {
-		meta.EditName = strings.TrimSuffix(meta.Name, "ID")
-	}
 	if meta.Meta == nil {
 		meta.Meta = &resource.Meta{
 			MetaName:         &resource.MetaName{meta.Name, meta.EncodedName},
@@ -413,12 +471,11 @@ func (meta *Meta) updateMeta() {
 			Setter:           meta.Setter,
 			Valuer:           meta.Valuer,
 			FormattedValuer:  meta.FormattedValuer,
-			BaseResource:     meta.baseResource,
+			BaseResource:     meta.BaseResource,
 			ContextResourcer: meta.ContextResourcer,
 			Resource:         meta.Resource,
 			Permission:       meta.Permission,
 			Config:           meta.Config,
-			EditName:         meta.EditName,
 		}
 	} else {
 		meta.Meta.Alias = meta.Alias
@@ -428,11 +485,10 @@ func (meta *Meta) updateMeta() {
 		meta.Meta.Setter = meta.Setter
 		meta.Meta.Valuer = meta.Valuer
 		meta.Meta.FormattedValuer = meta.FormattedValuer
-		meta.Meta.BaseResource = meta.baseResource
+		meta.Meta.BaseResource = meta.BaseResource
 		meta.Meta.Resource = meta.Resource
 		meta.Meta.Permission = meta.Permission
 		meta.Meta.Config = meta.Config
-		meta.Meta.EditName = meta.EditName
 		meta.Meta.ContextResourcer = meta.ContextResourcer
 	}
 
@@ -445,6 +501,7 @@ func (meta *Meta) updateMeta() {
 	}
 
 	meta.PreInitialize()
+
 	if meta.FieldStruct != nil {
 		if injector, ok := reflect.New(meta.FieldStruct.Struct.Type).Interface().(resource.ConfigureMetaBeforeInitializeInterface); ok {
 			injector.ConfigureQorMetaBeforeInitialize(meta)
@@ -466,16 +523,20 @@ func (meta *Meta) updateMeta() {
 
 	meta.Initialize()
 
-	if meta.DefaultLabel == "" {
+	if meta.Label != "" && meta.DefaultLabel == "" && !strings.ContainsRune(meta.Label, '.') {
+		meta.DefaultLabel = meta.Label
+	} else if meta.DefaultLabel == "" {
 		meta.DefaultLabel = utils.HumanizeString(meta.Name)
 	}
 
 	var fieldType reflect.Type
 	var hasColumn = meta.FieldStruct != nil
+	var isPtr bool
 
 	if hasColumn {
 		fieldType = meta.FieldStruct.Struct.Type
 		for fieldType.Kind() == reflect.Ptr {
+			isPtr = true
 			fieldType = fieldType.Elem()
 		}
 	}
@@ -515,7 +576,42 @@ func (meta *Meta) updateMeta() {
 						meta.Type = "string"
 					}
 				case reflect.Bool:
-					meta.Type = "switch"
+					if isPtr {
+						meta.Type = "select_one"
+						meta.Config = &SelectOneConfig{
+							AllowBlank: true,
+							Collection: func(ctx *core.Context) [][]string {
+								p := I18NGROUP + ".form.bool."
+								return [][]string{
+									{"true", ctx.Ts(p+"true", "Yes")},
+									{"false", ctx.Ts(p+"false", "No")},
+								}
+							},
+						}
+						meta.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) interface{} {
+							value := meta.Value(ctx, recorde)
+							if value == nil {
+								return ""
+							}
+							p := I18NGROUP + ".form.bool."
+							b := value.(*bool)
+							if b == nil {
+								return ""
+							}
+							if *b {
+								return ctx.Ts(p+"true", "Yes")
+							}
+							return ctx.Ts(p+"false", "No")
+						})
+						meta.IsZeroFunc = func(recorde, value interface{}) bool {
+							if value == nil {
+								return true
+							}
+							return false
+						}
+					} else {
+						meta.Type = "switch"
+					}
 				default:
 					if regexp.MustCompile(`^(.*)?(u)?(int)(\d+)?`).MatchString(fieldType.Kind().String()) {
 						meta.Type = "number"
@@ -592,7 +688,7 @@ func (meta *Meta) updateMeta() {
 				}
 
 				if result != nil {
-					res := meta.baseResource.NewResource(&SubConfig{FieldName: meta.FieldStruct.Name}, result)
+					res := meta.BaseResource.NewResource(&SubConfig{FieldName: meta.FieldStruct.Name}, result)
 					meta.Resource = res
 					meta.Meta.Permission = meta.Meta.Permission.Concat(res.Config.Permission)
 				}
@@ -605,10 +701,9 @@ func (meta *Meta) updateMeta() {
 				}
 			}
 
-			if meta.Resource != nil {
+			if meta.Resource != nil && meta.Resource != meta.BaseResource {
 				permission := meta.Resource.Permission.Concat(meta.Meta.Permission)
 				meta.Meta.Resource = meta.Resource
-				meta.Resource.Permission = permission
 				meta.SetPermission(permission)
 			}
 		}
@@ -616,17 +711,17 @@ func (meta *Meta) updateMeta() {
 
 	meta.FieldName = meta.GetFieldName()
 
-	if meta.baseResource.SingleEditMetas == nil {
-		meta.baseResource.SingleEditMetas = make(map[string]*Meta)
+	if meta.BaseResource.SingleEditMetas == nil {
+		meta.BaseResource.SingleEditMetas = make(map[string]*Meta)
 	}
 
-	if _, ok := meta.baseResource.SingleEditMetas[meta.Name]; ok {
+	if _, ok := meta.BaseResource.SingleEditMetas[meta.Name]; ok {
 		if meta.Type != "single_edit" {
-			delete(meta.baseResource.SingleEditMetas, meta.Name)
+			delete(meta.BaseResource.SingleEditMetas, meta.Name)
 			meta.Inline = false
 		}
 	} else if meta.Type == "single_edit" {
-		meta.baseResource.SingleEditMetas[meta.Name] = meta
+		meta.BaseResource.SingleEditMetas[meta.Name] = meta
 		meta.Inline = true
 	}
 
@@ -643,7 +738,7 @@ func (meta *Meta) updateMeta() {
 	}
 
 	// run meta configors
-	if baseResource := meta.baseResource; baseResource != nil {
+	if baseResource := meta.BaseResource; baseResource != nil {
 		for key, fc := range baseResource.GetAdmin().metaConfigorMaps {
 			if key == meta.Type {
 				fc(meta)
@@ -666,7 +761,7 @@ func (meta *Meta) IsZero(recorde, value interface{}) bool {
 		if vt == "" {
 			return true
 		}
-	case int, uint, uint8, uint16, uint32, uint64:
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		if vt == 0 {
 			return true
 		}
@@ -680,4 +775,37 @@ func (meta *Meta) IsZero(recorde, value interface{}) bool {
 		}
 	}
 	return false
+}
+
+// GetSetter get setter from meta
+func (meta *Meta) GetSetter() func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+	if setter := meta.Meta.GetSetter(); setter != nil {
+		return func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) (err error) {
+			valuer := meta.Meta.GetValuer()
+			var old interface{}
+			if valuer != nil {
+				old = valuer(recorde, context)
+				if old != nil {
+					value := reflect.ValueOf(old)
+					if value.Kind() != reflect.Ptr {
+						newValue := reflect.New(value.Type())
+						newValue.Elem().Set(value)
+						old = newValue.Interface()
+					}
+				}
+			}
+			if err = meta.TriggerSetEvent(E_META_SET, recorde, context, setter, metaValue); err == nil {
+				err = errors2.Wrap(meta.TriggerValueChangedEvent(E_META_CHANGED, recorde, context, old, valuer), "Trigger POST_SET")
+			}
+			return
+		}
+	}
+	return nil
+}
+
+func (meta *Meta) Set(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+	if setter := meta.GetSetter(); setter != nil {
+		return setter(recorde, metaValue, context)
+	}
+	return nil
 }

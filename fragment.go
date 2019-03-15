@@ -3,6 +3,8 @@ package admin
 import (
 	"sort"
 
+	"github.com/aghape/core/resource"
+
 	"strings"
 
 	"database/sql"
@@ -85,7 +87,7 @@ func (f *Fragments) NewSlice() []interface{} {
 func (f *Fragments) Fields() (fields []*aorm.StructField) {
 	if len(f.fields) == 0 {
 		f.Build()
-		f.Walk(func(fr *Fragment) error {
+		_ = f.Walk(func(fr *Fragment) error {
 			fields = append(fields, fr.AllFields()...)
 			return nil
 		})
@@ -97,7 +99,7 @@ func (f *Fragments) Fields() (fields []*aorm.StructField) {
 func (f *Fragments) Query() (query string) {
 	var queries []string
 	f.Build()
-	f.Walk(func(fr *Fragment) error {
+	_ = f.Walk(func(fr *Fragment) error {
 		queries = append(queries, fr.AllQuery())
 		return nil
 	})
@@ -123,10 +125,11 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 			super = super.ParentResource
 		}
 		vf := res.ParentResource.FakeScope.SetVirtualField(res.Name, res.Value)
-		vf.Setter = func(recorde, value interface{}) {
-			recorde.(fragment.FragmentedModelInterface).SetFormFragment(fr.ID, value.(fragment.FormFragmentModelInterface))
+		vf.Setter = func(_ *aorm.VirtualField, recorde, value interface{}) {
+			r := recorde.(fragment.FragmentedModelInterface)
+			r.SetFormFragment(r, fr.ID, value.(fragment.FormFragmentModelInterface))
 		}
-		vf.Getter = func(recorde interface{}) (value interface{}, ok bool) {
+		vf.Getter = func(_ *aorm.VirtualField, recorde interface{}) (value interface{}, ok bool) {
 			v := recorde.(fragment.FragmentedModelInterface).GetFormFragment(fr.ID)
 			return v, v != nil
 		}
@@ -141,7 +144,7 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 				s.SetI18nKey(res.PluralLabelKey())
 				s.SchemeParam = utils.ToParamString(res.PluralName)
 				s.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
-					db = db.InlinePreload(res.Name, aorm.IPO_INNER_JOIN)
+					db = db.InlinePreload(res.Name, &aorm.InlinePreloadOptions{Join: aorm.JoinInner})
 					return fr.Filter(db)
 				})
 				fr.scheme = s
@@ -150,7 +153,31 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 				}
 			},
 		})
+	} else if isForm {
+		vf := res.ParentResource.FakeScope.SetVirtualField(res.Name, res.Value)
+		vf.Setter = func(_ *aorm.VirtualField, recorde, value interface{}) {
+			r := recorde.(fragment.FragmentedModelInterface)
+			r.SetFormFragment(r, fr.ID, value.(fragment.FormFragmentModelInterface))
+		}
+		vf.Getter = func(_ *aorm.VirtualField, recorde interface{}) (value interface{}, ok bool) {
+			v := recorde.(fragment.FragmentedModelInterface).GetFormFragment(fr.ID)
+			return v, v != nil
+		}
+	} else {
+		vf := res.ParentResource.FakeScope.SetVirtualField(res.Name, res.Value)
+		vf.Setter = func(_ *aorm.VirtualField, recorde, value interface{}) {
+			r := recorde.(fragment.FragmentedModelInterface)
+			r.SetFragment(r, fr.ID, value.(fragment.FragmentModelInterface))
+		}
+		vf.Getter = func(_ *aorm.VirtualField, recorde interface{}) (value interface{}, ok bool) {
+			v := recorde.(fragment.FragmentedModelInterface).GetFragment(fr.ID)
+			return v, v != nil
+		}
 	}
+
+	_ = res.ParentResource.OnDBAction(func(e *resource.DBEvent) {
+		e.SetDB(e.DB().InlinePreload(res.Name))
+	}, resource.E_DB_ACTION_FIND_ONE.Before())
 
 	return fr
 }
@@ -186,11 +213,10 @@ func (f *Fragments) extraFieldsScan(result fragment.FragmentedModelInterface, va
 		} else {
 			value := set(fr.Resource.Value, *low, *low+fr.fieldsCount).(fragment.FragmentModelInterface)
 			if fr.IsForm {
-				result.SetFormFragment(id, value.(fragment.FormFragmentModelInterface))
+				result.SetFormFragment(result, id, value.(fragment.FormFragmentModelInterface))
 			} else {
-				result.SetFragment(id, value)
+				result.SetFragment(result, id, value)
 			}
-			value.SetSuper(result)
 			*low += fr.fieldsCount
 			if fr.Resource.Fragments != nil {
 				fr.Resource.Fragments.extraFieldsScan(value.(fragment.FragmentedModelInterface), values, low, set)
@@ -226,15 +252,16 @@ type FormFragmentRecordState struct {
 	IsNil   bool
 }
 
-func (f *FormFragmentRecordState) EditSections(context *Context) []*Section {
-	if f.Config.NotInline || (f.Value == nil || !f.Value.Enabled()) {
-		return f.Resource.allowedSections(f.Value, []*Section{{Resource: f.Resource, Rows: [][]string{{"FragmentEnabled"}}}}, context, roles.Read)
+func (f *FormFragmentRecordState) EditSections(context *Context) (sections []*Section) {
+	sections = append(sections, &Section{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
+	if !f.Config.NotInline && (f.Value != nil && f.Value.Enabled()) {
+		sections = append(sections, f.Resource.EditAttrs()...)
 	}
-	return f.Resource.allowedSections(f.Value, f.Resource.EditAttrs(), context, roles.Read)
+	return f.Resource.allowedSections(f.Value, sections, context, roles.Update)
 }
 func (f *FormFragmentRecordState) ShowSections(context *Context) []*Section {
 	if f.Config.NotInline {
-		return f.Resource.allowedSections(f.Value, []*Section{{Resource: f.Resource, Rows: [][]string{{"FragmentEnabled"}}}}, context, roles.Read)
+		return f.Resource.allowedSections(f.Value, []*Section{{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}}}, context, roles.Read)
 	}
 	return f.Resource.allowedSections(f.Value, f.Resource.ShowAttrs(), context, roles.Read)
 }
@@ -242,8 +269,7 @@ func (f *FormFragmentRecordState) OnlyEnabledField(context *Context) bool {
 	if f.Config.NotInline {
 		return true
 	}
-	switch context.Type {
-	case EDIT:
+	if context.Type.Has(EDIT) {
 		return f.Value == nil || !f.Value.Enabled()
 	}
 	return false
@@ -331,7 +357,7 @@ func (f *Fragment) buildFields() {
 	fields := append([]*aorm.StructField{}, f.Resource.FakeScope.GetNonIgnoredStructFields()...)
 	if !f.IsForm {
 		for i, field := range fields {
-			if field.Name == "FragmentEnabled" {
+			if field.Name == AttrFragmentEnabled {
 				if i != 0 {
 					fields = append([]*aorm.StructField{field}, append(fields[0:i], fields[i+1:]...)...)
 				}
@@ -441,7 +467,7 @@ func (f *Fragment) Enabled(record fragment.FragmentedModelInterface, ctx *core.C
 		return true
 	} else if f.Config.NotInline && record.GetFormFragment(f.ID) != nil {
 		fv := record.GetFormFragment(f.ID)
-		if ctx.Data().Get(CONTEXT_KEY).(*Context).Type == SHOW {
+		if ctx.Data().Get(CONTEXT_KEY).(*Context).Type.Has(SHOW) {
 			if fv.Enabled() && (f.Config.Enabled == nil || f.Config.Enabled(record, ctx)) {
 				return true
 			}
@@ -451,35 +477,33 @@ func (f *Fragment) Enabled(record fragment.FragmentedModelInterface, ctx *core.C
 	}
 
 	fv := record.GetFormFragment(f.ID)
-	if ctx.Data().Get(CONTEXT_KEY).(*Context).Type == SHOW && (fv == nil || !fv.Enabled()) {
+	if ctx.Data().Get(CONTEXT_KEY).(*Context).Type.Has(SHOW) && (fv == nil || !fv.Enabled()) {
 		return false
 	}
 	enabled := f.Config.Enabled == nil || f.Config.Enabled(record, ctx)
 	return enabled
 }
 
-func (f *Fragment) FormRecordValue(record fragment.FragmentedModelInterface, ctx *core.Context) *FormFragmentRecordState {
-	value := record.GetFormFragment(f.ID)
-	return &FormFragmentRecordState{f, f.Enabled(record, ctx), value, value == nil}
+func (f *Fragment) FormRecordValue(recorde fragment.FragmentedModelInterface, ctx *core.Context) *FormFragmentRecordState {
+	value := recorde.GetFormFragment(f.ID)
+	return &FormFragmentRecordState{f, f.Enabled(recorde, ctx), value, value == nil}
 }
 
-func (f *Fragment) FormGetOrNew(record fragment.FragmentedModelInterface, ctx *core.Context) fragment.FormFragmentModelInterface {
-	value := record.GetFormFragment(f.ID)
+func (f *Fragment) FormGetOrNew(recorde fragment.FragmentedModelInterface, ctx *core.Context) fragment.FormFragmentModelInterface {
+	value := recorde.GetFormFragment(f.ID)
 	if value == nil {
 		value = f.Resource.NewStruct(ctx.Site).(fragment.FormFragmentModelInterface)
-		record.SetFormFragment(f.ID, value)
+		recorde.SetFormFragment(recorde, f.ID, value)
 	}
-	value.SetSuper(record)
 	return value
 }
 
-func (f *Fragment) GetOrNew(record fragment.FragmentedModelInterface, ctx *core.Context) fragment.FragmentModelInterface {
-	value := record.GetFragment(f.ID)
+func (f *Fragment) GetOrNew(recorde fragment.FragmentedModelInterface, ctx *core.Context) fragment.FragmentModelInterface {
+	value := recorde.GetFragment(f.ID)
 	if value == nil {
 		value = f.Resource.NewStruct(ctx.Site).(fragment.FragmentModelInterface)
-		record.SetFragment(f.ID, value)
+		recorde.SetFragment(recorde, f.ID, value)
 	}
-	value.SetSuper(record)
 	return value
 }
 

@@ -5,7 +5,7 @@
   <div class="qor-page__header qor-page__header-tabbar">
     <ul class="mdl-layout__tab-bar">
       {{if (gt (len .Result) 1)}}
-        <li class="mdl-layout__tab is-active qor-global-search--resource">{{t "qor_admin.search_center.all" "All"}}</li>
+        <li class="mdl-layout__tab is-active qor-global-search--resource">{{t "github_com:aghape:admin.search_center.all"}}</li>
       {{end}}
 
       {{range .Result}}
@@ -21,7 +21,7 @@
           <i class="material-icons">search</i>
         </label>
         <div class="mdl-textfield__expandable-holder">
-          <input class="mdl-textfield__input qor-search__input ignore-dirtyform" name="keyword" value="{{$keyword}}" type="text" id="inputGlobalSearch" placeholder="{{t "qor_admin.search_center.hint" "Search…"}}">
+          <input class="mdl-textfield__input qor-search__input ignore-dirtyform" name="keyword" value="{{$keyword}}" type="text" id="inputGlobalSearch" placeholder="{{t "github_com:aghape:admin.search_center.hint"}}">
           <label class="mdl-textfield__label" for="sample-expandable"></label>
         </div>
         <button class="mdl-button mdl-js-button mdl-button--icon mdl-button--colored qor-search__clear" type="button">
@@ -38,7 +38,7 @@
         {{if (len .Results)}}
           <h2 class="qor-section-title">
             <span>{{t (printf "%v.label+" .Resource.I18nPrefix) .Resource.Name}}</span>
-            <a href="{{patch_url (url_for .Resource) "keyword" $keyword}}" class="qor-view-all">{{t "qor_admin.search_center.view_all" "View All"}}</a>
+            <a href="{{patch_url (url_for .Resource) "keyword" $keyword}}" class="qor-view-all">{{t "github_com:aghape:admin.search_center.view_all"}}</a>
           </h2>
           <div class="qor-section__body qor-table-container">
             {{.Context.Render "index/table" .Results}}

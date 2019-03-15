@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"reflect"
+	"strings"
 
 	"github.com/aghape/core"
 	"github.com/aghape/core/resource"
@@ -15,22 +16,19 @@ import (
 
 var SelectOne2ResultTemplateBasicHTMLWithIcon = RawJS(`
 if (data.text) return data.text;
-var v = "";
-if (data.Icon) {
+let icon = data.QorChooserOptions.getKey(data, data.QorChooserOptions.iconKey, data.icon || data.Icon),
+	value = data.QorChooserOptions.getKey(data, data.QorChooserOptions.displayKey, data.text || data.HTML || data.html || data.value || data.Value),
+    v = "";
+if (icon) {
 	v += "<i class=\"material-icons\"";
     if (/\//.test(data.Icon)) {
-		v += "style=\"background-position-y:bottom;background-image: url('" + data.Icon + "');background-repeat:no-repeat;background-size:contain\">";
+		v += "style=\"background-position-y:bottom;background-image: url('" + icon + "');background-repeat:no-repeat;background-size:contain\">";
 	} else {
-		v += ">" + data.Icon;
+		v += ">" + icon;
 	}
 	v += "</i> ";
 }
-if (data.HTML) {
-	v += data.HTML;
-} else if (data.Text) {
-	v += data.Text;
-}
-return $("<span>" + v + "</span>");
+return $("<span>" + v + value + "</span>");
 `)
 
 type RemoteDataResourceConfig struct {
@@ -87,6 +85,7 @@ type SelectOneConfig struct {
 	SelectMode                  string // select, select_async, bottom_sheet
 	PrimaryField                string
 	DisplayField                string
+	IconField                   string
 	Select2ResultTemplate       *JS
 	Select2SelectionTemplate    *JS
 	BottomSheetSelectedTemplate string
@@ -96,9 +95,11 @@ type SelectOneConfig struct {
 	RemoteURL                   string
 	MakeRemoteURL               func(*Context) string
 	metaConfig
-	getCollection func(interface{}, *Context) [][]string
-	Note          string
-	Basic         bool
+	getCollection   func(interface{}, *Context) [][]string
+	Note            string
+	Basic           bool
+	SelfExclude     bool
+	SelfFilterParam string
 }
 
 func (cfg *SelectOneConfig) basic() {
@@ -114,19 +115,49 @@ func (cfg *SelectOneConfig) basic() {
 	}
 }
 
+func (cfg *SelectOneConfig) With(f func(cfg *SelectOneConfig)) *SelectOneConfig {
+	f(cfg)
+	return cfg
+}
+
 func (cfg *SelectOneConfig) IsRemote() bool {
 	return cfg.RemoteURL != "" || cfg.Remote || cfg.RemoteDataResource != nil
 }
 
+func (cfg *SelectOneConfig) HasDependency() bool {
+	if cfg.RemoteURL != "" {
+		if strings.ContainsRune(cfg.RemoteURL, '{') {
+			return true
+		}
+	} else if cfg.RemoteDataResource != nil && cfg.RemoteDataResource.Dependencies != nil {
+		return true
+	}
+	return false
+}
+
 // ToURLString Convert to URL string
-func (cfg *SelectOneConfig) URL(context *Context) string {
+func (cfg *SelectOneConfig) URL(context *Context) (url string) {
 	if cfg.RemoteDataResource != nil {
-		return cfg.RemoteDataResource.URL(context)
+		url = cfg.RemoteDataResource.URL(context)
+	} else if cfg.MakeRemoteURL != nil {
+		url = cfg.MakeRemoteURL(context)
+	} else {
+		url = cfg.RemoteURL
 	}
-	if cfg.MakeRemoteURL != nil {
-		return cfg.MakeRemoteURL(context)
+	if cfg.SelfExclude {
+		if strings.ContainsRune(url, '?') {
+			url += "&"
+		} else {
+			url += "?"
+		}
+		if cfg.SelfFilterParam == "" {
+			url += "filtersByName[exclude].Value"
+		} else {
+			url += cfg.SelfFilterParam
+		}
+		url += "={*ID}"
 	}
-	return cfg.RemoteURL
+	return
 }
 
 // GetPlaceholder get placeholder
@@ -154,48 +185,57 @@ func (cfg *SelectOneConfig) GetCollection(value interface{}, context *Context) [
 	return [][]string{}
 }
 
+func (cfg *SelectOneConfig) configure(res *Resource, dependencies ...interface{}) (r *Resource) {
+	r = res
+	if cfg.IsRemote() {
+		if cfg.RemoteDataResource == nil {
+			cfg.RemoteDataResource = &DataResource{}
+		}
+		if res == nil {
+			r = cfg.RemoteDataResource.Resource
+		} else if cfg.RemoteDataResource.Resource == nil {
+			cfg.RemoteDataResource.Resource = res
+		}
+		if cfg.RemoteDataResource.Layout == "" {
+			cfg.RemoteDataResource.Layout = cfg.Layout
+		}
+		if cfg.RemoteDataResource.Display == "" {
+			cfg.RemoteDataResource.Display = cfg.Display
+		}
+		if len(cfg.RemoteDataResource.Dependencies) == 0 {
+			cfg.RemoteDataResource.Dependencies = dependencies
+		}
+
+		if cfg.Basic {
+			cfg.basic()
+		}
+
+		switch cfg.RemoteDataResource.Layout {
+		case BASIC_LAYOUT_HTML_WITH_ICON, BASIC_LAYOUT_HTML, BASIC_LAYOUT:
+			cfg.Select2ResultTemplate = SelectOne2ResultTemplateBasicHTMLWithIcon
+			cfg.Select2SelectionTemplate = SelectOne2ResultTemplateBasicHTMLWithIcon
+		case "":
+			cfg.RemoteDataResource.Layout = BASIC_LAYOUT_HTML_WITH_ICON
+		}
+	}
+	return
+}
+
 // ConfigureQorMeta configure select one meta
 func (cfg *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	if meta, ok := metaor.(*Meta); ok {
+		meta.Resource = cfg.configure(meta.Resource, meta.Dependency...)
+
 		if cfg.IsRemote() {
-			if cfg.RemoteDataResource == nil {
-				cfg.RemoteDataResource = &DataResource{}
-			}
-			if cfg.RemoteDataResource.Resource == nil && meta.Resource != nil {
-				cfg.RemoteDataResource.Resource = meta.Resource
-			} else if cfg.RemoteDataResource.Resource != nil && meta.Resource == nil {
-				meta.Resource = cfg.RemoteDataResource.Resource
-			}
-			if cfg.RemoteDataResource.Layout == "" {
-				cfg.RemoteDataResource.Layout = cfg.Layout
-			}
-			if cfg.RemoteDataResource.Display == "" {
-				cfg.RemoteDataResource.Display = cfg.Display
-			}
-			if len(cfg.RemoteDataResource.Dependencies) == 0 {
-				cfg.RemoteDataResource.Dependencies = meta.Dependency
-			}
-
-			if cfg.Basic {
-				cfg.basic()
-			}
-
-			switch cfg.RemoteDataResource.Layout {
-			case BASIC_LAYOUT_HTML_WITH_ICON, BASIC_LAYOUT_HTML, BASIC_LAYOUT:
-				cfg.Select2ResultTemplate = SelectOne2ResultTemplateBasicHTMLWithIcon
-				cfg.Select2SelectionTemplate = SelectOne2ResultTemplateBasicHTMLWithIcon
-			case "":
-				cfg.RemoteDataResource.Layout = BASIC_LAYOUT_HTML_WITH_ICON
-			}
-
 			// Set FormattedValuer
 			if meta.FormattedValuer == nil {
 				meta.SetFormattedValuer(func(record interface{}, context *core.Context) interface{} {
 					if record != nil {
-						record = meta.Value(context, record)
-						return ContextFromQorContext(context).HtmlifyRecord(cfg.RemoteDataResource.Resource, record)
+						if record = meta.Value(context, record); record != nil {
+							return ContextFromQorContext(context).HtmlifyRecord(cfg.RemoteDataResource.Resource, record)
+						}
 					}
-					return nil
+					return ""
 				})
 			}
 		}
@@ -206,29 +246,29 @@ func (cfg *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor) {
 			})
 		}
 
-		cfg.prepareDataSource(meta.FieldStruct, meta.baseResource, "!remote_data_selector")
+		cfg.prepareDataSource(meta.FieldStruct, meta.BaseResource, "!remote_data_selector")
 
 		meta.Type = "select_one"
 	}
 }
 
 func (cfg *SelectOneConfig) ConfigureQORAdminFilter(filter *Filter) {
+	filter.Resource = cfg.configure(filter.Resource)
 	var structField *aorm.StructField
-	if field, ok := core.FakeDB.NewScope(filter.Resource.Value).FieldByName(filter.Name); ok {
-		structField = field.StructField
+	if filter.Field != nil {
+		structField = filter.Field.Struct
 	}
-
 	cfg.prepareDataSource(structField, filter.Resource, "!remote_data_filter")
 
 	if len(filter.Operations) == 0 {
-		filter.Operations = []string{"equal"}
+		filter.Operations = []string{"eq"}
 	}
 	filter.Type = "select_one"
 }
 
 func (cfg *SelectOneConfig) FilterValue(filter *Filter, context *Context) interface{} {
 	var (
-		prefix  = fmt.Sprintf("filters[%v].", filter.Name)
+		prefix  = fmt.Sprintf("filtersByName[%v].", filter.Name)
 		keyword string
 	)
 
@@ -267,18 +307,7 @@ func (cfg *SelectOneConfig) prepareDataSource(field *aorm.StructField, res *Reso
 			cfg.getCollection = func(interface{}, *Context) [][]string {
 				return cl
 			}
-		case func() [][]string:
-			cfg.getCollection = func(record interface{}, context *Context) [][]string {
-				return cl()
-			}
-		case func(*Context) [][]string:
-			cfg.getCollection = func(record interface{}, context *Context) [][]string {
-				return cl(context)
-			}
-		case func(interface{}, *core.Context) [][]string:
-			cfg.getCollection = func(record interface{}, context *Context) [][]string {
-				return cl(record, context.Context)
-			}
+
 		case func() []string:
 			cfg.getCollection = func(record interface{}, context *Context) (results [][]string) {
 				for _, value := range cl() {
@@ -286,6 +315,11 @@ func (cfg *SelectOneConfig) prepareDataSource(field *aorm.StructField, res *Reso
 				}
 				return
 			}
+		case func() [][]string:
+			cfg.getCollection = func(record interface{}, context *Context) [][]string {
+				return cl()
+			}
+
 		case func(*Context) []string:
 			cfg.getCollection = func(record interface{}, context *Context) (results [][]string) {
 				for _, value := range cl(context) {
@@ -293,6 +327,28 @@ func (cfg *SelectOneConfig) prepareDataSource(field *aorm.StructField, res *Reso
 				}
 				return
 			}
+		case func(*Context) [][]string:
+			cfg.getCollection = func(record interface{}, context *Context) [][]string {
+				return cl(context)
+			}
+
+		case func(*core.Context) []string:
+			cfg.getCollection = func(record interface{}, context *Context) (results [][]string) {
+				for _, value := range cl(context.Context) {
+					results = append(results, []string{value, value})
+				}
+				return
+			}
+		case func(*core.Context) [][]string:
+			cfg.getCollection = func(record interface{}, context *Context) [][]string {
+				return cl(context.Context)
+			}
+
+		case func(interface{}, *core.Context) [][]string:
+			cfg.getCollection = func(record interface{}, context *Context) [][]string {
+				return cl(record, context.Context)
+			}
+
 		case func(interface{}, *Context) [][]string:
 			cfg.getCollection = cl
 		default:

@@ -2,10 +2,10 @@ package admin
 
 import (
 	"github.com/moisespsena/go-i18n-modular/i18nmod"
-	"github.com/aghape/helpers"
+	"github.com/moisespsena/go-path-helpers"
 )
 
 var (
-	PKG       = helpers.GetCalledDir()
+	PKG       = path_helpers.GetCalledDir()
 	I18NGROUP = i18nmod.PkgToGroup(PKG)
 )

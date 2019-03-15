@@ -5,7 +5,6 @@ import (
 
 	"github.com/aghape/core"
 	"github.com/aghape/roles"
-	"github.com/moisespsena/go-route"
 )
 
 // GetMenus get all sidebar menus for admin
@@ -15,7 +14,7 @@ func (admin Admin) GetMenus() []*Menu {
 
 // AddMenu add a menu to admin sidebar
 func (admin *Admin) AddMenu(menu *Menu) *Menu {
-	menu.router = admin.Router
+	menu.prefix = admin.Config.MountPath
 	admin.menus = appendMenu(admin.menus, menu.Ancestors, menu)
 	return menu
 }
@@ -33,20 +32,20 @@ func (admin Admin) GetMenu(name string) *Menu {
 type Menu struct {
 	Name         string
 	Label        string
-	LabelFunc    func()string
+	LabelFunc    func() string
 	Link         string
 	Icon         string
 	RelativePath string
 	Priority     int
 	Ancestors    []string
-	Permissioner HasPermissioner
+	Permissioner core.Permissioner
 	Permission   *roles.Permission
 	Class        string
 	Enabled      func(menu *Menu, context *Context) bool
 	Resource     *Resource
 
 	subMenus []*Menu
-	router   route.Router
+	prefix   string
 	MakeLink func(context *Context, args ...interface{}) string
 }
 
@@ -75,8 +74,8 @@ func (menu Menu) RealURL() string {
 		return menu.Link
 	}
 
-	if (menu.router != nil) && (menu.RelativePath != "") {
-		return path.Join(menu.router.Prefix(), menu.RelativePath)
+	if (menu.prefix != "") && (menu.RelativePath != "") {
+		return path.Join(menu.prefix, menu.RelativePath)
 	}
 
 	return menu.RelativePath
@@ -96,20 +95,20 @@ func (menu Menu) URL(context *Context, args ...interface{}) string {
 }
 
 // HasPermission check menu has permission or not
-func (menu Menu) HasPermission(mode roles.PermissionMode, context *core.Context) bool {
+func (menu Menu) HasPermissionE(mode roles.PermissionMode, context *core.Context) (bool, error) {
 	if menu.Permission != nil {
-		var roles = []interface{}{}
+		var roles_ = []interface{}{}
 		for _, role := range context.Roles {
-			roles = append(roles, role)
+			roles_ = append(roles_, role)
 		}
-		return menu.Permission.HasPermission(mode, roles...)
+		return roles.HasPermissionDefaultE(true, menu.Permission, mode, roles_...)
 	}
 
 	if menu.Permissioner != nil {
-		return menu.Permissioner.HasPermission(mode, context)
+		return core.HasPermissionDefaultE(true, menu.Permissioner, mode, context)
 	}
 
-	return true
+	return true, roles.ErrDefaultPermission
 }
 
 // GetSubMenus get submenus for a menu

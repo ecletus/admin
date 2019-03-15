@@ -11,8 +11,8 @@ type Plugin struct {
 }
 
 func (p *Plugin) OnRegister() {
-	db.Events(p).DBOnInitGorm(func(e *db.GormDBEvent) {
-		DB := e.DB
+	db.Events(p).DBOnInitGorm(func(e *db.DBEvent) {
+		DB := e.DB.DB
 		if DB.Callback().Query().Get("qor_admin:composite_primary_key") == nil {
 			DB.Callback().Query().Before("gorm:query").Register("qor_admin:composite_primary_key", compositePrimaryKeyQueryCallback)
 		}

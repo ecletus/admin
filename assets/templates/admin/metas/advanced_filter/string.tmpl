@@ -1,0 +1,20 @@
+<advanced-filter-group class="qor-field clearfix" type="filter-string">
+  <label class="qor-field__label">{{.Label}}</label>
+  {{ $opt := .Context.Request.URL.Query.Get (print .InputNamePrefix ".Operation") }}
+  <div class="qor-field__flexbox">
+    <select name="{{.InputNamePrefix}}.Operation" data-toggle="qor.selector" placeholder="{{t (printf "%v.filter.%v" .Resource.ToParam .Filter.Label) .Filter.Label}}">
+      <option value="conts" {{if (or (eq $opt "conts") (eq $opt ""))}}selected{{end}}>{{t "github_com:aghape:admin.filter.strings.conts"}}</option>
+      <option value="eq" {{if (eq $opt "eq")}}selected{{end}}>{{t "github_com:aghape:admin.filter.strings.eq"}}</option>
+      <option value="start_with" {{if (eq $opt "start_with")}}selected{{end}}>{{t "github_com:aghape:admin.filter.strings.start_with"}}</option>
+      <option value="end_with" {{if (eq $opt "end_with")}}selected{{end}}>{{t "github_com:aghape:admin.filter.strings.end_with"}}</option>
+    </select>
+
+    {{ $value := .Context.Request.URL.Query.Get (print .InputNamePrefix ".Value") }}
+    <div class="qor-field__edit">
+      <div class="mdl-textfield mdl-js-textfield">
+        <label class="qor-field__label mdl-textfield__label"></label>
+        <input class="mdl-textfield__input" type="text" name="{{.InputNamePrefix}}.Value" value="{{$value}}" filter-required>
+      </div>
+    </div>
+  </div>
+</advanced-filter-group>

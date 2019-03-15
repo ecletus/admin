@@ -1,4 +1,4 @@
-// +build !bindata
+// +build !assetfs_bindata
 
 package admin
 

@@ -5,7 +5,7 @@ import (
 
 	"github.com/aghape/core"
 	"github.com/aghape/roles"
-	"github.com/moisespsena/go-route"
+	"github.com/moisespsena-go/xroute"
 )
 
 var blankPermissionMode roles.PermissionMode
@@ -22,7 +22,7 @@ func (d *DataStack) NewChild() DataStack {
 // RouteConfig config for admin routes
 type RouteConfig struct {
 	Resource       *Resource
-	Permissioner   HasPermissioner
+	Permissioner   core.Permissioner
 	PermissionMode roles.PermissionMode
 	Values         map[interface{}]interface{}
 	Data           DataStack
@@ -89,10 +89,23 @@ func (c *Chain) Next() {
 }
 
 type RouteHandler struct {
+	Path               string
 	Handle             Handler
 	ParentInterseptors [][]func(chain *Chain)
 	Interseptors       []func(chain *Chain)
 	Config             *RouteConfig
+	Name               string
+	CrumbsLoader       CrumbsLoader
+}
+
+func (h *RouteHandler) SetName(name string) *RouteHandler {
+	h.Name = name
+	return h
+}
+
+func (h RouteHandler) WithName(name string) *RouteHandler {
+	h.Name = name
+	return &h
 }
 
 func (h RouteHandler) Clone() *RouteHandler {
@@ -109,18 +122,41 @@ func (h RouteHandler) Child() *RouteHandler {
 	h.Config.Data = h.Config.Data.NewChild()
 	return &h
 }
-func (h *RouteHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
+func (h *RouteHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
 	context := ContextFromRouteContext(rctx)
+	if !core.HasPermission(h, context.PermissionMode, context.Context) {
+		context.Writer.WriteHeader(http.StatusForbidden)
+		context.Writer.Write([]byte(`Forbidden`))
+		return
+	}
+	context.RouteHandler = h
 	var interseptors []func(chain *Chain)
 	for _, p := range h.ParentInterseptors {
 		interseptors = append(interseptors, p...)
 	}
 	interseptors = append(interseptors, h.Interseptors...)
+	h.generateCrumbs(context)
 	NewChain(context, h.Handle, interseptors).Next()
 }
 
 func (h *RouteHandler) Intercept(f ...func(chain *Chain)) {
 	h.Interseptors = append(h.Interseptors, f...)
+}
+
+func (h RouteHandler) HasPermissionE(permissionMode roles.PermissionMode, context *core.Context) (ok bool, err error) {
+	if h.Config.Available != nil && !h.Config.Available(context) {
+		return false, nil
+	}
+
+	if h.Config.Permissioner == nil {
+		return true, nil
+	}
+
+	if h.Config.PermissionMode != "" {
+		permissionMode = h.Config.PermissionMode
+	}
+
+	return h.Config.Permissioner.HasPermissionE(permissionMode, context)
 }
 
 func NewHandler(handle Handler, configs ...*RouteConfig) *RouteHandler {
@@ -142,23 +178,8 @@ func NewHandler(handle Handler, configs ...*RouteConfig) *RouteHandler {
 
 	if handler.Config.Resource != nil {
 		handler.Config.Resource.mounted = true
+		handler.CrumbsLoader = handler.Config.Resource.GetAdmin()
 	}
 
 	return &handler
-}
-
-func (handler RouteHandler) HasPermission(permissionMode roles.PermissionMode, context *core.Context) bool {
-	if handler.Config.Available != nil && !handler.Config.Available(context) {
-		return false
-	}
-
-	if handler.Config.Permissioner == nil {
-		return true
-	}
-
-	if handler.Config.PermissionMode != "" {
-		return handler.Config.Permissioner.HasPermission(handler.Config.PermissionMode, context)
-	}
-
-	return handler.Config.Permissioner.HasPermission(permissionMode, context)
 }

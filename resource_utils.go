@@ -32,7 +32,10 @@ func resourceParamIDName(level int, paramName string) string {
 
 func subResourceConfigureFilters(res *Resource) {
 	res.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
-		return res.FilterByParent(db, context.URLParam(res.ParentResource.paramIDName))
+		if context.ResourceID == "" && len(context.ParentResourceID) > 0 {
+			return res.FilterByParent(db, context.ParentResourceID[len(context.ParentResourceID)-1])
+		}
+		return db
 	})
 
 	res.DefaultFilter(res.Config.Sub.Filters...)

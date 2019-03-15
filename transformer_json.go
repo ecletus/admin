@@ -59,8 +59,6 @@ func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, 
 				indexValue = indexValue.Addr()
 				values = append(values, convertObjectToJSONMap(res, context, indexValue.Interface(), layout))
 			} else {
-				k := indexValue.Kind()
-				println(k)
 				values = append(values, fmt.Sprint(indexValue.Interface()))
 			}
 		}

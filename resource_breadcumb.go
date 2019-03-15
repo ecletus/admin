@@ -27,7 +27,12 @@ func (r *ResourceCrumber) NewCrumb(ctx *core.Context, recorde bool) core.Breadcr
 	}
 	if recorde {
 		crumb.ID = r.ID
-		model, err := r.Resource.CrudDB(ctx.DB).FindOneBasic(r.ID)
+		clone := ctx.Clone()
+
+		if HasDeletedUrlQuery(ctx.Request.URL.Query()) {
+			clone.SetDB(clone.DB.Unscoped())
+		}
+		model, err := r.Resource.Crud(clone).FindOneBasic(r.ID)
 
 		if err != nil {
 			if aorm.IsRecordNotFoundError(err) {
@@ -36,7 +41,9 @@ func (r *ResourceCrumber) NewCrumb(ctx *core.Context, recorde bool) core.Breadcr
 			panic(err)
 		}
 
-		uri = uri + "/" + r.ID
+		if !r.Resource.Config.Singleton {
+			uri += "/" + r.ID
+		}
 		crumb.Breadcrumb = core.NewBreadcrumb(uri, model.BasicLabel(), model.BasicIcon())
 	} else if r.Resource.Config.Singleton {
 		crumb.Breadcrumb = core.NewBreadcrumb(uri, r.Resource.SingularLabelKey())
@@ -48,7 +55,7 @@ func (r *ResourceCrumber) NewCrumb(ctx *core.Context, recorde bool) core.Breadcr
 
 func (r *ResourceCrumber) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
 	crumbs = append(crumbs, r.NewCrumb(ctx, false))
-	if r.ID != "" && !r.Resource.Config.Singleton {
+	if !r.Resource.Config.Singleton && r.ID != "" {
 		if crumb := r.NewCrumb(ctx, true); crumb != nil {
 			crumbs = append(crumbs, crumb)
 		}

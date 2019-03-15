@@ -1,0 +1,10 @@
+{{define "content"}}
+    {{if has_prefix .Value "<"}}
+        {{.Value}}
+    {{else}}
+        <img src="{{.Value}}"/>
+    {{end}}
+{{end}}
+{{if .Value}}
+    {{trim (template_exec "content" .)}}
+{{end}}

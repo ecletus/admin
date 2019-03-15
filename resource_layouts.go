@@ -49,7 +49,7 @@ func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 		Name:  BASIC_META_LABEL,
 		Label: I18NGROUP + ".basic_metas.Label",
 		Valuer: func(r interface{}, context *core.Context) interface{} {
-			if b, ok := r.(resource.BasicValue); ok {
+			if b, ok := r.(resource.BasicLabel); ok {
 				return b.BasicLabel()
 			}
 			return utils.StringifyContext(r, context)
@@ -58,13 +58,14 @@ func configureDefaultBasicLayouts(res *Resource, defaultLayout *Layout) {
 	res.SetMeta(&Meta{
 		Name:  BASIC_META_ICON,
 		Label: I18NGROUP + ".basic_metas.Icon",
+		Type:  "image_url",
 		Valuer: func(r interface{}, context *core.Context) interface{} {
 			switch rt := r.(type) {
 			case resource.IconGetter:
 				return rt.GetIcon()
 			case resource.IconContextGetter:
 				return rt.GetIcon(context)
-			case resource.BasicValue:
+			case resource.BasicIcon:
 				return rt.BasicIcon()
 			default:
 				return ""

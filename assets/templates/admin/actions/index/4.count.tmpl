@@ -1,0 +1,5 @@
+{{if (admin_context).Searcher.Pagination.Total}}
+  <div class="qor-actions">
+      <span class="qor-action--label">{{sprintf (ts "github_com:aghape:admin.recordes.count") (admin_context).Searcher.Pagination.Total}}</span>
+  </div>
+{{end}}

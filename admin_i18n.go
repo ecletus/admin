@@ -13,7 +13,7 @@ type I18n interface {
 }
 
 // T call i18n backend to translate
-func (admin *Admin) T(context *core.Context, key string, value string, values ...interface{}) template.HTML {
+func (admin *Admin) T(context *core.Context, key string, value interface{}, values ...interface{}) template.HTML {
 	if len(values) > 1 {
 		panic("Values has many args.")
 	}

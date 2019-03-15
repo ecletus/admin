@@ -43,7 +43,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 		}}, true)
 		if isForm {
 			meta := &Meta{
-				Name: "FragmentEnabled",
+				Name: AttrFragmentEnabled,
 			}
 			if cfg.Is {
 				meta.SkipDefaultLabel = true
@@ -56,7 +56,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 					meta.Label = fragRes.I18nPrefix + meta.Label
 				}
 				meta.Enabled = func(recorde interface{}, context *Context, meta *Meta) bool {
-					if context.Type == SHOW {
+					if context.Type.Has(SHOW) {
 						return false
 					}
 					return true
@@ -82,24 +82,32 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 		cfg.Config.Invisible = true
 	} else {
 		if cfg.Is || cfg.NotInline {
+			old := cfg.Config.MenuEnabled
+			if old == nil {
+				old = func(menu *Menu, ctx *Context) bool { return true }
+			}
 			cfg.Config.MenuEnabled = func(menu *Menu, ctx *Context) bool {
 				if r, ok := ctx.Result.(fragment.FragmentedModelInterface); ok {
 					if f := r.GetFormFragment(menu.Resource.Fragment.ID); f != nil {
 						return f.Enabled() && (menu.Resource.Fragment.Config.Is || menu.Resource.Fragment.Config.NotInline)
+					} else if menu == menu.Resource.defaultMenu {
+						return false
 					}
 				}
-				return false
+				return old(menu, ctx)
 			}
+		} else {
+
 		}
 	}
 
 	fragRes := res.AddResourceConfig(value, cfg.Config)
 
 	if len(res.Fragments.Fragments) == 1 {
-		res.GetAdmin().OnDone(func(e *AdminEvent) {
+		_ = res.GetAdmin().OnDone(func(e *AdminEvent) {
 			res.Fragments.Build()
 		})
-		res.OnDBActionE(func(e *resource.DBEvent) (err error) {
+		_ = res.OnDBActionE(func(e *resource.DBEvent) (err error) {
 			context := e.Context
 			if v := context.Data().Get("skip.fragments"); v == nil {
 				r := e.Result().(fragment.FragmentedModelInterface)
@@ -125,7 +133,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 			return nil
 		}, resource.E_DB_ACTION_SAVE.After())
 
-		res.Scheme.OnDBActionE(func(e *resource.DBEvent) (err error) {
+		_ = res.Scheme.OnDBActionE(func(e *resource.DBEvent) (err error) {
 			context := e.Context
 			if v := context.Data().Get("skip.fragments"); v == nil {
 				DB := context.DB
@@ -140,22 +148,6 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 			}
 			return nil
 		}, resource.BEFORE|resource.E_DB_ACTION_FIND_MANY|resource.E_DB_ACTION_FIND_ONE)
-
-		/*res.OnDBActionE(func(e *resource.DBEvent) (err error) {
-			context := e.Context
-			if v := context.Data().Get("skip.fragments"); v == nil {
-				DB := context.DB
-				fields, query := res.Fragments.Fields(), res.Fragments.Query()
-				DB = DB.ExtraSelectFieldsSetter(
-					PKG+".fragments",
-					func(result interface{}, values []interface{}, set func(result interface{}, low, hight int) interface{}) {
-						res.Fragments.ExtraFieldsScan(result.(fragment.FragmentedModelInterface), values, set)
-					}, fields, query)
-				DB = res.Fragments.JoinLeft(DB)
-				context.SetDB(DB)
-			}
-			return nil
-		}, resource.BEFORE|resource.E_DB_ACTION_FIND_MANY|resource.E_DB_ACTION_FIND_ONE)*/
 
 		res.FakeScope.GetModelStruct().BeforeRelatedCallback(func(fromScope *aorm.Scope, toScope *aorm.Scope, DB *aorm.DB, fromField *aorm.Field) *aorm.DB {
 			fields, query := res.Fragments.Fields(), res.Fragments.Query()
@@ -173,8 +165,9 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 
 	if !isForm {
 		fieldsNames := fragRes.Fragment.FieldsNames()
-		for _, field := range fieldsNames {
-			meta := NewMetaProxy(field, fragRes.Meta(&Meta{Name: field}), func(meta *Meta, recorde interface{}) interface{} {
+
+		for _, fieldName := range fieldsNames {
+			meta := NewMetaProxy(fieldName, fragRes.Meta(&Meta{Name: fieldName}), func(meta *Meta, recorde interface{}) interface{} {
 				fragmentedRecorde := recorde.(fragment.FragmentedModelInterface)
 				frag := meta.Fragment
 				return fragmentedRecorde.GetFragment(frag.ID)

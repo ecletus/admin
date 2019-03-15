@@ -113,7 +113,7 @@
                 display: block;
                 width: 110px;
                 height: 64px;
-                background: url(../images/logo.png) no-repeat center center;
+                background: url(../../images/logo.png) no-repeat center center;
                 color: transparent;
             }
             &:last-child {
@@ -281,7 +281,7 @@
     }
 }
 
-@media screen and (max-width: 1024px) {
+@media screen and (max-width: 512px) {
     .qor-page__header {
         width: 100%;
         top: 56px;
@@ -289,7 +289,7 @@
     }
 }
 
-@media screen and (min-width: 1025px) {
+@media screen and (min-width: 513px) {
     .mdl-layout--fixed-drawer > .mdl-layout__header .mdl-layout__header-row {
         padding-left: 24px;
     }

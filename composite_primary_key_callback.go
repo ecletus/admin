@@ -5,17 +5,15 @@ import (
 	"regexp"
 
 	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena/go-route"
+	"github.com/moisespsena-go/xroute"
 )
 
 var primaryKeyRegexp = regexp.MustCompile(`primary_key\[.+_.+\]`)
 
-func (admin *Admin) registerCompositePrimaryKeyCallback() {
-	// register middleware
-	router := admin.Router
-	router.Use(&route.Middleware{
+func (admin *Admin) registerCompositePrimaryKeyCallback(router xroute.Router) {
+	router.Use(&xroute.Middleware{
 		Name: PKG + ".composite_primary_key_filter",
-		Handler: func(chain *route.ChainHandler) {
+		Handler: func(chain *xroute.ChainHandler) {
 			context := ContextFromChain(chain)
 			db := context.DB
 			for key, value := range context.Request.URL.Query() {

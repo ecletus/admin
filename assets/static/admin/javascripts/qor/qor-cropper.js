@@ -29,7 +29,8 @@
         CLASS_SAVE = '.qor-cropper__save',
         CLASS_DELETE = '.qor-cropper__toggle--delete',
         CLASS_CROP = '.qor-cropper__toggle--crop',
-        CLASS_UNDO = '.qor-fieldset__undo';
+        CLASS_UNDO = '.qor-fieldset__undo',
+        HIDDEN_DATA_INPUT = 'input[name="QorResource.MediaOption"]:hidden';
 
     function capitalize(str) {
         if (typeof str === 'string') {
@@ -63,13 +64,6 @@
         if ($.isPlainObject(obj)) {
             return obj[lowerCaseKey] || obj[capitalizeKey] || obj[upperCaseKey];
         }
-    }
-
-    function clearObject(obj) {
-        for (let prop in obj) {
-            if (obj.hasOwnProperty(prop)) obj[prop] = '';
-        }
-        return obj;
     }
 
     function replaceText(str, data) {
@@ -114,6 +108,7 @@
 
             this.$parent = $parent;
             this.$output = $parent.find(options.output);
+            this.$formCropInput = $parent.closest('form').find(HIDDEN_DATA_INPUT);
             this.$list = $parent.find(options.list);
 
             fetchUrl = this.$output.data('fetchSizedata');
@@ -122,6 +117,7 @@
                 $.getJSON(fetchUrl, function(data) {
                     imageData = JSON.parse(data.MediaOption);
                     _this.$output.val(JSON.stringify(data));
+                    _this.$formCropInput.val(JSON.stringify(data));
                     _this.data = imageData || {};
                     if (isSVG(imageData.URL || imageData.Url)) {
                         _this.resetImage();
@@ -230,6 +226,8 @@
                 data.Delete = true;
 
                 this.$output.val(JSON.stringify(data));
+                this.$formCropInput.val(JSON.stringify(data));
+
                 this.$list.hide();
 
                 $alert = $(QorCropper.ALERT);
@@ -240,6 +238,7 @@
                         this.$list.show();
                         delete data.Delete;
                         this.$output.val(JSON.stringify(data));
+                        this.$formCropInput.val(JSON.stringify(data));
                     }.bind(this)
                 );
                 this.$parent.find('.qor-fieldset').append($alert);
@@ -255,11 +254,13 @@
         read: function(e) {
             let files = e.target.files,
                 file,
+                $list = this.$list,
                 $alert = this.$parent.find('.qor-fieldset__alert');
+
+            $list.show();
 
             if ($alert.length) {
                 $alert.remove();
-                this.data = clearObject(this.data);
             }
 
             if (files && files.length) {
@@ -270,30 +271,30 @@
                     this.load(URL.createObjectURL(file));
                     this.$parent.find('.qor-medialibrary__image-desc').show();
                 } else {
-                    this.$list.empty().html(QorCropper.FILE_LIST.replace('{{filename}}', file.name));
+                    $list.empty().html(QorCropper.FILE_LIST.replace('{{filename}}', file.name));
                 }
             }
         },
 
-        load: function(url, callback) {
+        load: function(url, fromExternal, callback) {
             let options = this.options,
                 _this = this,
                 $list = this.$list,
-                $ul = $list.find('ul'),
+                $ul = $(QorCropper.LIST),
                 data = this.data || {},
                 fileType = this.fileType,
                 $image,
                 imageLength;
 
-            if (!$ul.length || !$ul.find('li').length) {
-                $ul = $(QorCropper.LIST);
+            // media box will use load method, has it's own html structure.
+            if (!fromExternal) {
+                $list.find('ul').remove();
                 $list.html($ul);
-                this.wrap();
             }
 
-            $ul.show(); // show ul when it is hidden
-
             $image = $list.find('img');
+            this.wrap();
+
             imageLength = $image.length;
             $image
                 .one('load', function() {
@@ -350,23 +351,28 @@
                                 data[options.key] = {};
                             }
 
-                            data[options.key][sizeName] = emulateCropData;
+                            if (sizeName != 'original') {
+                                data[options.key][sizeName] = emulateCropData;
+                            }
                         }
                     } else {
                         _this.center($this);
                     }
 
                     // Crop, CropOptions and Delete should be BOOL type, if empty should delete,
-                    if (data.Crop === '') {
+                    if (data.Crop === '' || !fromExternal) {
                         delete data.Crop;
                     }
 
-                    if (data.CropOptions === '') {
-                        delete data.CropOptions;
+                    if (!fromExternal) {
+                        data.CropOptions = null;
+                        delete data.Sizes;
                     }
 
                     delete data.Delete;
+
                     _this.$output.val(JSON.stringify(data));
+                    _this.$formCropInput.val(JSON.stringify(data));
 
                     // callback after load complete
                     if (sizeName && data[options.key] && Object.keys(data[options.key]).length >= imageLength) {
@@ -388,7 +394,7 @@
                 sizeData = $target.data(),
                 sizeName = sizeData.sizeName || 'original',
                 sizeResolution = sizeData.sizeResolution,
-                $clone = $('<img>').attr('src', sizeData.originalUrl),
+                $clone = $(`<img src=${sizeData.originalUrl}>`),
                 data = this.data || {},
                 _this = this,
                 sizeAspectRatio = NaN,
@@ -430,10 +436,9 @@
                 zoomable: false,
                 scalable: false,
                 rotatable: false,
-                checkImageOrigin: false,
                 autoCropArea: 1,
 
-                built: function() {
+                ready: function() {
                     $modal
                         .find('.qor-cropper__options-toggle')
                         .on(EVENT_CLICK, function() {
@@ -453,7 +458,12 @@
                         _this.cropData = cropData;
 
                         if (croppedCanvas) {
-                            url = croppedCanvas.toDataURL();
+                            try {
+                                url = croppedCanvas.toDataURL();
+                            } catch (error) {
+                                console.log(error);
+                                console.log('Please check image Cross-origin setting');
+                            }
                         }
 
                         $modal.find(CLASS_OPTIONS + ' input').each(function() {
@@ -506,18 +516,18 @@
                         if (width / height === aspectRatio) {
                             list.push(
                                 '<label>' +
-                                    '<input class="qor-cropper__options-input" type="checkbox" name="' +
-                                    name +
-                                    '" checked> ' +
-                                    '<span>' +
-                                    name +
-                                    '<small>(' +
-                                    width +
-                                    '&times;' +
-                                    height +
-                                    ' px)</small>' +
-                                    '</span>' +
-                                    '</label>'
+                                '<input class="qor-cropper__options-input" type="checkbox" name="' +
+                                name +
+                                '" checked> ' +
+                                '<span>' +
+                                name +
+                                '<small>(' +
+                                width +
+                                '&times;' +
+                                height +
+                                ' px)</small>' +
+                                '</span>' +
+                                '</label>'
                             );
                         }
                     }
@@ -540,6 +550,7 @@
             }
 
             this.$output.val(JSON.stringify(this.data)).trigger(EVENT_CHANGE);
+            this.$formCropInput.val(JSON.stringify(this.data));
         },
 
         preview: function($target, emulateImageData, emulateCropData) {
@@ -714,7 +725,7 @@
     };
 
     $(function() {
-        let selector = '.qor-file__input',
+        let selector = ".qor-file__input:not([data-cropper='disabled'])",
             options = {
                 parent: '.qor-file',
                 output: '.qor-file__options',

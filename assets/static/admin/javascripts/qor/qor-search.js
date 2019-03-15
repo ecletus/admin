@@ -58,34 +58,28 @@
     },
 
     click : function (e) {
-      var $target = $(e.target);
-      var data = $target.data();
+      let $target = $(e.target),
+        data = $target.data();
 
       if ($target.is(SEARCH_RESOURCE)){
-        var oldUrl = location.href.replace(/#/g, '');
-        var newUrl;
-        var newResourceName = data.resource;
-        var hasResource = /resource_name/.test(oldUrl);
-        var hasKeyword = /keyword/.test(oldUrl);
-        var resourceParam = 'resource_name=' + newResourceName;
-        var searchSymbol = hasKeyword ? '&' : '?keyword=&';
+        let url = QOR.Xurl(location.href, this.$element),
+          newUrl;
 
-        if (newResourceName){
-          if (hasResource){
-            newUrl = oldUrl.replace(/resource_name=\w+/g, resourceParam);
-          } else {
-            newUrl = oldUrl + searchSymbol + resourceParam;
-          }
+        if (data.resource) {
+          url.qset('resource_name', data.resource)
         } else {
-          newUrl = oldUrl.replace(/&resource_name=\w+/g, '');
+          url.qdel('resource_name')
         }
+
+        url.qdel('keyword');
+
+        newUrl = url.toString();
 
         if (history.pushState){
           this.fetchSearch(newUrl, $target);
         } else {
           location.href = newUrl;
         }
-
       }
     },
 

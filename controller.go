@@ -2,6 +2,7 @@ package admin
 
 import (
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"mime"
 	"net/http"
@@ -10,16 +11,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aghape/core/serializer"
+	"github.com/moisespsena-go/field-access"
+
+	"github.com/aghape/roles"
+
+	"github.com/aghape/core"
 	"github.com/aghape/responder"
-	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/valuesmap"
 )
 
 // Controller admin controller
 type Controller struct {
 	*Admin
-	action *Action
+	action     *Action
+	controller interface{}
 }
 
 // HTTPUnprocessableEntity error status code
@@ -31,19 +36,14 @@ func (ac *Controller) Dashboard(context *Context) {
 }
 
 func (ac *Controller) LoadIndexData(context *Context) interface{} {
-	var result interface{}
-	if context.ValidateLayout() {
-		var err error
-		result, err = context.FindMany()
-		context.AddError(err)
-	}
-	return result
+	return ac.controller.(ControllerIndex).Index(context)
 }
 
 // Index render index page
 func (ac *Controller) Index(context *Context) {
 	context.Type = INDEX
 	context.DefaulLayout()
+	defer context.LogErrors()
 	responder.With("html", func() {
 		var result interface{}
 		if context.LoadDisplayOrError() {
@@ -83,129 +83,159 @@ func (ac *Controller) SearchCenter(context *Context) {
 	context.Execute("search_center", searchResults)
 }
 
+// Search render search page
+func (ac *Controller) Search(context *Context) {
+	type Result struct {
+		Context  *Context
+		Resource *Resource
+		Results  interface{}
+	}
+
+	var searchResult = Result{Context: context, Resource: context.Resource}
+	searchResult.Results, _ = context.FindMany()
+
+	context.Execute("search_center", []Result{searchResult})
+}
+
 // New render new page
 func (ac *Controller) New(context *Context) {
 	context.Type = NEW
-	context.Execute("", context.Resource.NewStruct(context.Context.Site))
+	context.Execute("", ac.controller.(ControllerCreator).New(context))
 }
 
 // Create create data
 func (ac *Controller) Create(context *Context) {
 	context.Type = NEW
 	res := context.Resource
-	result := res.NewStruct(context.Context.Site)
+	recorde := ac.controller.(ControllerCreator).New(context)
 
-	if context.AddError(res.Decode(context.Context, result)); !context.HasError() {
-		context.WithTransaction(func() {
-			context.AddError(context.Crud().Create(result))
-		})
+	if !context.HasError() {
+		if context.AddError(res.Decode(context.Context, recorde)); !context.HasError() {
+			ac.controller.(ControllerCreator).Create(context, recorde)
+		}
 	}
 
 	if context.HasError() {
 		responder.With("html", func() {
 			context.Writer.WriteHeader(HTTPUnprocessableEntity)
-			context.Execute("", result)
+			context.Execute("", recorde)
 		}).With([]string{"json", "xml"}, func() {
 			context.Api = true
 			context.Writer.WriteHeader(HTTPUnprocessableEntity)
 			context.Encode(map[string]interface{}{"errors": context.GetErrors()})
 		}).Respond(context.Request)
 	} else {
+		defer context.LogErrors()
 		context.Type = SHOW
 		context.DefaulLayout()
+		context.Flash(string(context.tt(I18NGROUP+".form.successfully_created",
+			NewResourceRecorde(context, res, recorde),
+			"{{.}} was successfully created")), "success")
 		responder.With("html", func() {
-			context.Flash(string(context.t(I18NGROUP+".form.successfully_created", "{{.}} was successfully created", res)), "success")
-			http.Redirect(context.Writer, context.Request, context.URLFor(result, res), http.StatusFound)
+			url := context.RedirectTo
+			if url == "" {
+				if context.Request.URL.Query().Get("continue_editing") != "" {
+					url = res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
+				} else if context.Request.URL.Query().Get("continue_editing_url") != "" {
+					url = res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
+					context.Writer.Header().Set("X-Location", url)
+					context.Writer.WriteHeader(http.StatusNoContent)
+					return
+				} else {
+					url = res.GetContextIndexURI(context.Context)
+				}
+			}
+			http.Redirect(context.Writer, context.Request, url, http.StatusFound)
 		}).With([]string{"json", "xml"}, func() {
 			context.Api = true
-			context.Encode(result)
+			if context.Request.URL.Query().Get("continue_editing") != "" {
+				url := res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
+				context.Encode(map[string]interface{}{"HTTPRedirectTo": url})
+				return
+			}
+			context.Encode(recorde)
 		}).Respond(context.Request)
 	}
 }
 
-func (ac *Controller) renderSingleton(context *Context) (interface{}, bool, error) {
-	var result interface{}
-	var err error
+func (ac *Controller) LoadShowData(context *Context) (result interface{}) {
 	res := context.Resource
 
 	if res.Config.Singleton {
-		result = res.NewStruct(context.Context.Site)
-		if err = context.Crud(res.ApplyDefaultFilters(context.Context)).FindMany(result); err == aorm.ErrRecordNotFound {
-			context.Type = NEW
-			context.Execute("", result)
-			return nil, true, nil
+		if reader, ok := ac.controller.(ControllerReader); ok {
+			result = reader.Read(context)
+		} else if creator, ok := ac.controller.(ControllerCreator); ok {
+			result = creator.New(context)
+		} else {
+			result = res.NewStruct(context.Site)
+		}
+		if result == nil {
+			if core.HasPermission(res, roles.Create, context.Context) {
+				if creator, ok := ac.controller.(ControllerCreator); ok {
+					result = creator.New(context)
+				} else {
+					result = res.NewStruct(context.Site)
+				}
+				context.Type = NEW
+			}
 		}
 	} else {
-		result, err = context.FindOne()
-	}
-	return result, false, err
-}
-
-func (ac *Controller) LoadShowData(context *Context) (result interface{}, rendered bool) {
-	var err error
-	result, rendered, err = ac.renderSingleton(context)
-	if rendered {
-		return
-	}
-	context.AddError(err)
-	if err != nil && aorm.IsRecordNotFoundError(err) {
-		context.NotFound = true
+		context.SetDB(context.DB.Unscoped())
+		result = ac.controller.(ControllerReader).Read(context)
 	}
 	return
 }
 
 // Show render show page
-func (ac *Controller) Show(context *Context) {
-	context.Type = SHOW
+func (ac *Controller) showOrEdit(context *Context) {
 	context.DefaulLayout()
 	responder.With("html", func() {
 		if context.LoadDisplayOrError() {
-			result, rendered := ac.LoadShowData(context)
-			if context.NotFound {
-				http.NotFound(context.Writer, context.Request)
-				return
+			recorde := ac.LoadShowData(context)
+			if !context.HasError() {
+				if recorde == nil {
+					context.NotFound = true
+					http.NotFound(context.Writer, context.Request)
+					return
+				}
+				if !context.Type.Has(DELETED) && context.Resource.IsSoftDeleted(recorde) {
+					http.Redirect(context.Writer, context.Request, context.Resource.GetContextIndexURI(context.Context), http.StatusSeeOther)
+					return
+				}
 			}
-			if !rendered {
-				context.Execute("", result)
-			}
+			context.Execute("", recorde)
 		}
 	}).With([]string{"json", "xml"}, func() {
 		if context.ValidateLayoutOrError() {
-			result, _ := ac.LoadShowData(context)
-			if context.NotFound {
-				http.NotFound(context.Writer, context.Request)
-				return
+			recorde := ac.LoadShowData(context)
+			if !context.HasError() {
+				if recorde == nil {
+					context.NotFound = true
+					http.NotFound(context.Writer, context.Request)
+					return
+				}
+			} else {
+				context.Writer.WriteHeader(http.StatusBadGateway)
+				context.Writer.Write([]byte(context.Error()))
 			}
-			context.Encode(result)
+			context.Encode(recorde)
 		}
 	}).Respond(context.Request)
+}
+
+// Show render show page
+func (ac *Controller) Show(context *Context) {
+	context.Type = SHOW
+	if HasDeletedUrlQuery(context.Request.URL.Query()) {
+		context.Type |= DELETED
+	}
+	ac.showOrEdit(context)
 }
 
 // Edit render edit page
 func (ac *Controller) Edit(context *Context) {
 	context.Type = EDIT
-	context.DefaulLayout()
-	responder.With("html", func() {
-		if context.LoadDisplayOrError() {
-			result, rendered := ac.LoadShowData(context)
-			if context.NotFound {
-				http.NotFound(context.Writer, context.Request)
-				return
-			}
-			if !rendered {
-				context.Execute("", result)
-			}
-		}
-	}).With([]string{"json", "xml"}, func() {
-		if context.ValidateLayoutOrError() {
-			result, _ := ac.LoadShowData(context)
-			if context.NotFound {
-				http.NotFound(context.Writer, context.Request)
-				return
-			}
-			context.Encode(result)
-		}
-	}).Respond(context.Request)
+	ac.showOrEdit(context)
 }
 
 // Update update data
@@ -215,40 +245,57 @@ func (ac *Controller) Update(context *Context) {
 	if !context.ValidateLayoutOrError() {
 		return
 	}
-	var result interface{}
+	var recorde interface{}
 	res := context.Resource
 
 	if !context.LoadDisplayOrError() {
 		return
 	}
 
-	result, _ = ac.LoadShowData(context)
+	recorde = ac.LoadShowData(context)
 
 	if !context.HasError() {
-		decerror := res.Decode(context.Context, result)
+		decerror := res.Decode(context.Context, recorde)
 		if context.AddError(decerror); !context.HasError() {
-			context.WithTransaction(func() {
-				context.AddError(context.Crud().Update(result))
-			})
+			ac.controller.(ControllerUpdater).Update(context, recorde)
 		}
 	}
 
 	if context.HasError() {
 		context.Writer.WriteHeader(HTTPUnprocessableEntity)
 		responder.With("html", func() {
-			context.Execute("", result)
+			context.Execute("", recorde)
 		}).With([]string{"json", "xml"}, func() {
 			context.Encode(map[string]interface{}{"errors": context.GetErrors()})
 		}).Respond(context.Request)
 	} else {
+		defer context.LogErrors()
 		context.Type = SHOW
 		context.DefaulLayout()
 		responder.With("html", func() {
-			context.Flash(string(context.t(I18NGROUP+".form.successfully_updated", "{{.}} was successfully updated", res)), "success")
-			context.Execute("", result)
+			context.Flash(string(context.tt(I18NGROUP+".form.successfully_updated", NewResourceRecorde(context, res, recorde),
+				"{{.}} was successfully updated")), "success")
+			url := context.RedirectTo
+			if url == "" {
+				if res.Config.Singleton {
+					url = res.GetContextIndexURI(context.Context)
+				} else {
+					url = res.GetContextURI(context.Context, res.GetKey(recorde))
+				}
+				url += P_OBJ_UPDATE_FORM
+			}
+			if context.Request.URL.Query().Get("continue_editing") != "" {
+				http.Redirect(context.Writer, context.Request, url, http.StatusFound)
+				return
+			} else if context.Request.URL.Query().Get("continue_editing_url") != "" {
+				context.Writer.Header().Set("X-Location", url)
+				context.Writer.WriteHeader(http.StatusNoContent)
+				return
+			}
+			http.Redirect(context.Writer, context.Request, url, http.StatusFound)
 		}).With([]string{"json", "xml"}, func() {
 			if context.Request.FormValue("qorInlineEdit") != "" {
-				rresult := reflect.ValueOf(result)
+				rresult := reflect.ValueOf(recorde)
 				for rresult.Kind() == reflect.Ptr {
 					rresult = rresult.Elem()
 				}
@@ -260,10 +307,8 @@ func (ac *Controller) Update(context *Context) {
 						f := rresult.FieldByName(key)
 						if f.IsValid() {
 							newResult[key] = f.Interface()
-						} else if gsf, ok := result.(serializer.SerializableField); ok {
-							if value, ok := gsf.GetVirtualField(key); ok {
-								newResult[key] = value
-							}
+						} else if v, ok := field_access.Get(recorde, key); ok {
+							newResult[key] = v
 						}
 					}
 				}
@@ -271,7 +316,7 @@ func (ac *Controller) Update(context *Context) {
 				context.Encode(newResult)
 				return
 			}
-			context.Encode(result)
+			context.Encode(recorde)
 		}).Respond(context.Request)
 	}
 }
@@ -280,18 +325,244 @@ func (ac *Controller) Update(context *Context) {
 func (ac *Controller) Delete(context *Context) {
 	res := context.Resource
 	status := http.StatusOK
-	context.WithTransaction(func() {
-		context.AddError(context.Crud(res.ApplyDefaultFilters(context.Context)).Delete(res.NewStruct(context.Context.Site)))
-	})
-	if context.HasError() {
-		context.Flash(string(context.t(I18NGROUP+".form.failed_to_delete", "Failed to delete {{.}}", res)), "error")
+	recorde := ac.controller.(ControllerReader).Read(context)
+	var msg string
+
+	if recorde == nil && !context.HasError() {
 		status = http.StatusNotFound
+	} else {
+		if context.HasError() {
+			msg = string(context.tt(I18NGROUP+".form.failed_to_delete",
+				NewResourceRecorde(context, res, recorde),
+				"Failed to delete {{.}}"))
+			status = http.StatusBadRequest
+		} else {
+			ac.controller.(ControllerDeleter).Delete(context, recorde)
+			if context.HasError() {
+				status = http.StatusBadRequest
+				msg = string(context.tt(I18NGROUP+".form.failed_to_delete_error",
+					map[string]interface{}{
+						"Value": NewResourceRecorde(context, res, recorde),
+						"Error": context.Errors,
+					},
+					"Failed to delete {{.Value}}: {{.Error}}"))
+			} else {
+				msg = string(context.tt(I18NGROUP+".form.successfully_deleted", NewResourceRecorde(context, res, recorde),
+					"{{.}} was successfully deleted"))
+			}
+		}
 	}
 
 	responder.With("html", func() {
-		http.Redirect(context.Writer, context.Request, res.GetContextIndexURI(context.Context), http.StatusFound)
+		if status == http.StatusOK {
+			uri := res.GetContextIndexURI(context.Context)
+			http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
+			return
+		} else {
+			context.Writer.WriteHeader(status)
+			context.Writer.Write([]byte(msg))
+		}
 	}).With([]string{"json", "xml"}, func() {
 		context.Writer.WriteHeader(status)
+		messageStatus := "ok"
+		if status != http.StatusOK {
+			messageStatus = "error"
+		}
+		context.Layout = "OK"
+		context.Encode(map[string]string{"message": msg, "status": messageStatus})
+		uri := res.GetContextIndexURI(context.Context)
+		http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
+	}).Respond(context.Request)
+}
+
+// BulkDelete delete many recordes
+func (ac *Controller) BulkDelete(context *Context) {
+	var (
+		res      = context.Resource
+		status   = http.StatusOK
+		recordes []interface{}
+		keySep   = context.Request.URL.Query().Get("key_sep")
+		keys     []string
+		msg      string
+	)
+
+	if context.Request.ContentLength > 0 {
+		if context.Request.Header.Get("Content-Type") == "application/json" {
+			err := json.NewDecoder(context.Request.Body).Decode(&keys)
+			if err != nil {
+				status = http.StatusBadRequest
+				context.AddError(err)
+			}
+		} else {
+			keys = context.Request.Form["primary_values[]"]
+		}
+	} else {
+		if keySep == "" {
+			keySep = ":"
+		}
+		keys = strings.Split(context.Request.URL.Query().Get("key"), keySep)
+	}
+
+	if !context.HasError() {
+		for _, key := range keys {
+			if key == "" {
+				continue
+			}
+
+			context.ResourceID = key
+			recorde := ac.controller.(ControllerReader).Read(context)
+			if !context.HasError() {
+				recordes = append(recordes, recorde)
+			}
+		}
+	}
+
+	context.ResourceID = ""
+
+	if len(recordes) == 0 && !context.HasError() {
+		status = http.StatusNotFound
+	} else {
+		if context.HasError() {
+			msg = string(context.tt(I18NGROUP+".form.failed_to_delete",
+				NewResourceRecorde(context, res, recordes[len(recordes)-1]),
+				"Failed to delete {{.}}"))
+			status = http.StatusBadRequest
+		} else {
+			ac.controller.(ControllerBulkDeleter).DeleteBulk(context, recordes...)
+		}
+	}
+
+	if msg == "" && !context.HasError() {
+		msg = string(context.tt(I18NGROUP+".form.successfully_bulk_deleted", NewResourceRecorde(context, res, recordes...),
+			"{{.}} was successfully deleted"))
+	}
+
+	responder.With("html", func() {
+		if status == http.StatusOK {
+			uri := res.GetContextIndexURI(context.Context, context.Context.ParentResourceID...)
+			http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
+		} else {
+			context.Writer.WriteHeader(status)
+			context.Writer.Write([]byte(msg))
+		}
+	}).With([]string{"json", "xml"}, func() {
+		context.Writer.WriteHeader(status)
+		messageStatus := "ok"
+		if status != http.StatusOK {
+			messageStatus = "error"
+		}
+		if msg == "" && context.HasError() {
+			msg = context.Error()
+		}
+		context.Layout = "OK"
+		context.Encode(map[string]string{"message": msg, "status": messageStatus})
+		uri := res.GetContextIndexURI(context.Context, context.Context.ParentResourceID...)
+		http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
+	}).Respond(context.Request)
+}
+
+// Delete delete data
+func (ac *Controller) DeletedIndex(context *Context) {
+	context.Type = INDEX | DELETED
+	context.DefaulLayout()
+	ctrl := ac.controller.(ControllerRestorer)
+	defer context.LogErrors()
+	responder.With("html", func() {
+		var result interface{}
+		if context.LoadDisplayOrError() {
+			result = ctrl.DeletedIndex(context)
+		}
+		context.Execute(INDEX.S(), result)
+	}).With([]string{"json", "xml"}, func() {
+		if context.ValidateLayoutOrError() {
+			result := ctrl.DeletedIndex(context)
+			context.Api = true
+			context.Encode(result)
+		}
+	}).Respond(context.Request)
+}
+
+// BulkDelete delete many recordes
+func (ac *Controller) Restore(context *Context) {
+	var (
+		res    = context.Resource
+		status = http.StatusOK
+		keySep = context.Request.URL.Query().Get("key_sep")
+		keys   []string
+		msg    string
+	)
+
+	if context.Request.ContentLength > 0 {
+		if context.Request.Header.Get("Content-Type") == "application/json" {
+			err := json.NewDecoder(context.Request.Body).Decode(&keys)
+			if err != nil {
+				status = http.StatusBadRequest
+				context.AddError(err)
+			}
+		} else {
+			keys = context.Request.Form["primary_values[]"]
+		}
+	} else {
+		if keySep == "" {
+			keySep = ":"
+		}
+		keys = strings.Split(context.Request.URL.Query().Get("key"), keySep)
+	}
+
+	if len(keys) == 0 {
+		context.Writer.WriteHeader(HTTPUnprocessableEntity)
+		return
+	}
+
+	context.Type |= DELETED
+
+	context.ResourceID = ""
+
+	if context.HasError() {
+		msg = string(context.tt(I18NGROUP+".form.failed_to_restore",
+			NewResourceRecorde(context, res),
+			"Failed to restore {{.}}"))
+		status = http.StatusBadRequest
+	} else {
+		ac.controller.(ControllerRestorer).Restore(context, keys...)
+	}
+
+	if msg == "" && !context.HasError() {
+		msg = string(context.tt(I18NGROUP+".form.successfully_restored", NewResourceRecorde(context, res),
+			"{{.}} was successfully restored"))
+	}
+
+	responder.With("html", func() {
+		if status == http.StatusOK {
+			url := res.GetContextIndexURI(context.Context)
+
+			if context.Request.URL.Query().Get("continue_editing") != "" {
+				http.Redirect(context.Writer, context.Request, url+"/"+keys[0], http.StatusFound)
+				return
+			} else if context.Request.URL.Query().Get("continue_editing_url") != "" {
+				context.Writer.Header().Set("X-Continue-Editing-Url", url+"/"+keys[0])
+				context.Writer.WriteHeader(http.StatusNoContent)
+				return
+			}
+
+			http.Redirect(context.Writer, context.Request, url, http.StatusFound)
+		} else {
+			context.Writer.WriteHeader(status)
+			context.Writer.Write([]byte(msg))
+		}
+	}).With([]string{"json", "xml"}, func() {
+		context.Writer.WriteHeader(status)
+		messageStatus := "ok"
+		if status != http.StatusOK {
+			messageStatus = "error"
+		}
+		if msg == "" && context.HasError() {
+			msg = context.Error()
+		}
+		context.Layout = "OK"
+		context.Encode(map[string]string{"message": msg, "status": messageStatus})
+		uri := res.GetContextIndexURI(context.Context, context.Context.ParentResourceID...)
+		http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
 	}).Respond(context.Request)
 }
 
@@ -305,6 +576,8 @@ func (ac *Controller) Action(context *Context) {
 			return
 		}
 	}
+
+	defer context.LogErrors()
 
 	if context.Request.Method == "GET" {
 		context.Execute("action", action)
@@ -328,7 +601,7 @@ func (ac *Controller) Action(context *Context) {
 
 		if !actionArgument.SkipDefaultResponse {
 			if err == nil {
-				message := string(context.t(I18NGROUP+".actions.executed_successfully", "Action {{.Name}}: Executed successfully", action))
+				message := string(context.tt(I18NGROUP+".actions.executed_successfully", action, "Action {{.Name}}: Executed successfully"))
 				responder.With("html", func() {
 					context.Flash(message, "success")
 					http.Redirect(context.Writer, context.Request, context.Request.Referer(), http.StatusFound)
@@ -343,7 +616,7 @@ func (ac *Controller) Action(context *Context) {
 					context.Execute("action", action)
 				}).With([]string{"json", "xml"}, func() {
 					context.Layout = "OK"
-					message := string(context.t(I18NGROUP+".actions.executed_failed", "Action {{.Name}}: Failed to execute", action))
+					message := string(context.tt(I18NGROUP+".actions.executed_failed", action, "Action {{.Name}}: Failed to execute"))
 					context.Encode(map[string]string{"error": message, "status": "error"})
 				}).Respond(context.Request)
 			}
@@ -372,7 +645,7 @@ func (ac *Controller) Asset(context *Context) {
 	if done {
 		return
 	}
-	file := strings.TrimPrefix(context.Request.URL.Path, ac.Router.Prefix())
+	file := strings.TrimPrefix(context.Request.URL.Path, ac.Config.MountPath)
 
 	if asset, err := context.Asset(file); err == nil {
 		var etag string

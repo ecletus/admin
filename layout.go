@@ -55,7 +55,7 @@ func (l *Layout) SetMetaNames(names ...interface{}) *Layout {
 	var columns []interface{}
 
 	for _, f := range ms.PrimaryFields {
-		columns = append(columns, f.DBName)
+		columns = append(columns, aorm.IQ("{}."+f.DBName))
 	}
 
 	for _, metaName := range l.MetaNames {
@@ -75,7 +75,7 @@ func (l *Layout) SetMetaNames(names ...interface{}) *Layout {
 			columns = append(columns, aorm.IQ("{}."+dbName))
 		}
 	}
-	l.SelectColumns = columns
+	l.Select(columns...)
 	return l
 }
 

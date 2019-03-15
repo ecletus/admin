@@ -37,17 +37,16 @@ type ImmutableScopes struct {
 }
 
 func (is *ImmutableScopes) Has(names ...interface{}) bool {
-	return is.set.Has(names...)
+	return is.set != nil && is.set.Has(names...)
 }
 
-func (is *ImmutableScopes) List() []string {
-	var items []string
-
-	for _, v := range is.set.List() {
-		items = append(items, v.(string))
+func (is *ImmutableScopes) List() (items []string) {
+	if is.set != nil {
+		for _, v := range is.set.List() {
+			items = append(items, v.(string))
+		}
 	}
-
-	return items
+	return
 }
 
 // Searcher is used to search results
@@ -63,7 +62,7 @@ type Searcher struct {
 func (s *Searcher) DefaulLayout(layout ...string) {
 	if s.Layout == "" {
 		if len(layout) == 0 || layout[0] == "" {
-			layout = []string{s.Type.S()}
+			layout = []string{s.Type.Clear(DELETED).S()}
 		}
 		s.Layout = layout[0]
 	}
@@ -110,7 +109,7 @@ func (s *Searcher) Scope(names ...string) *Searcher {
 	scopesSet := set.New(set.NonThreadSafe)
 
 	for _, name := range names {
-		for _, scope := range s.Resource.scopes {
+		for _, scope := range s.Scheme.scopes {
 			if scope.Name == name {
 				scopesSet.Add(name)
 
@@ -126,7 +125,7 @@ func (s *Searcher) Scope(names ...string) *Searcher {
 	return newSearcher
 }
 
-// Filter filter with defined filters, filter with columns value
+// Filter filter with defined filtersByName, filter with columns value
 func (s *Searcher) Filter(filter *Filter, values *resource.MetaValues) *Searcher {
 	newSearcher := s.clone()
 	if newSearcher.filters == nil {
@@ -163,7 +162,7 @@ func (s *Searcher) FindOne() (interface{}, error) {
 	return result, err
 }
 
-var filterRegexp = regexp.MustCompile(`^filters\[(.*?)\]`)
+var filterRegexp = regexp.MustCompile(`^filtersByName\[(.*?)\]`)
 
 func (s *Searcher) callScopes(context *core.Context) *core.Context {
 	db := context.DB
@@ -180,11 +179,13 @@ func (s *Searcher) callScopes(context *core.Context) *core.Context {
 		db = scope.Handler(db, s, context)
 	}
 
-	// call filters
+	// call filtersByName
 	if s.filters != nil {
 		for filter, value := range s.filters {
 			if filter.Handler != nil {
 				filterArgument := &FilterArgument{
+					Filter:   filter,
+					Scheme:   s.Scheme,
 					Value:    value,
 					Context:  context,
 					Resource: s.Resource,
@@ -195,7 +196,7 @@ func (s *Searcher) callScopes(context *core.Context) *core.Context {
 	}
 
 	// add order by
-	if orderBy := context.Request.Form.Get("order_by"); orderBy != "" {
+	if orderBy := context.GetFormOrQuery("order_by"); orderBy != "" {
 		if regexp.MustCompile("^[a-zA-Z_]+$").MatchString(orderBy) {
 			if field, ok := db.NewScope(s.Context.Resource.Value).FieldByName(strings.TrimSuffix(orderBy, "_desc")); ok {
 				if strings.HasSuffix(orderBy, "_desc") {
@@ -210,14 +211,10 @@ func (s *Searcher) callScopes(context *core.Context) *core.Context {
 	context.DB = db
 
 	// call search
-	var keyword string
-	if keyword = context.Request.Form.Get("keyword"); keyword == "" {
-		keyword = context.Request.URL.Query().Get("keyword")
-	}
-
-	if s.Scheme.SearchHandler != nil {
-		context.DB = s.Scheme.SearchHandler(keyword, context)
-		return context
+	if keyword := context.GetFormOrQuery("keyword"); keyword != "" {
+		if sh := s.Scheme.CurrentSearchHandler(); sh != nil {
+			context.DB = sh(keyword, context)
+		}
 	}
 
 	return context
@@ -226,7 +223,7 @@ func (s *Searcher) callScopes(context *core.Context) *core.Context {
 func (s *Searcher) FilterRaw(data map[string]string) *Searcher {
 	params := url.Values{}
 	for key, value := range data {
-		params.Add("filters["+key+"].Value", value)
+		params.Add("filtersByName["+key+"].Value", value)
 	}
 
 	return s.FilterFromParams(params, nil)
@@ -237,8 +234,8 @@ func (s *Searcher) FilterFromParams(params url.Values, form *multipart.Form) *Se
 
 	for key := range params {
 		if matches := filterRegexp.FindStringSubmatch(key); len(matches) > 0 {
-			var prefix = fmt.Sprintf("filters[%v].", matches[1])
-			if filter, ok := s.Resource.filters[matches[1]]; ok {
+			var prefix = fmt.Sprintf("filtersByName[%v].", matches[1])
+			if filter, ok := s.Scheme.filtersByName[matches[1]]; ok {
 				if metaValues, err := resource.ConvertFormDataToMetaValues(s.Context.Context, params, form, []resource.Metaor{}, prefix); err == nil {
 					searcher = searcher.Filter(filter, metaValues)
 				}
@@ -267,13 +264,48 @@ func (s *Searcher) parseContext() *core.Context {
 	if s.Scheme == nil {
 		s.Scheme = s.Resource.Scheme
 	}
+
+	context.SetDB(context.DB.Order(s.Scheme.CurrentOrders()))
 	context = s.Scheme.ApplyDefaultFilters(context)
 
 	if context != nil && context.Request != nil {
+		var query = context.Request.URL.Query()
 		// parse scopes
-		scopes := context.Request.Form["scopes"]
-		searcher = searcher.Scope(scopes...)
-		searcher = searcher.FilterFromParams(context.Request.Form, context.Request.MultipartForm)
+		if scopes, ok := query["scopes"]; ok {
+			searcher = searcher.Scope(scopes...)
+		}
+		searcher = searcher.FilterFromParams(query, context.Request.MultipartForm)
+
+		if savingName := query.Get("filter_saving_name"); savingName != "" {
+			var filters []SavedFilter
+			requestURL := context.Request.URL
+			requestURLQuery := context.Request.URL.Query()
+			requestURLQuery.Del("filter_saving_name")
+			requestURL.RawQuery = requestURLQuery.Encode()
+			newFilters := []SavedFilter{{Name: savingName, URL: requestURL.String()}}
+			if context.AddError(s.Admin.settings.Get("saved_filters", &filters, searcher.Context)); !context.HasError() {
+				for _, filter := range filters {
+					if filter.Name != savingName {
+						newFilters = append(newFilters, filter)
+					}
+				}
+
+				context.AddError(s.Admin.settings.Save("saved_filters", newFilters, searcher.Resource, context.CurrentUser(), searcher.Context))
+			}
+		}
+
+		if savingName := query.Get("delete_saved_filter"); savingName != "" {
+			var filters, newFilters []SavedFilter
+			if context.AddError(s.Admin.settings.Get("saved_filters", &filters, searcher.Context)); !context.HasError() {
+				for _, filter := range filters {
+					if filter.Name != savingName {
+						newFilters = append(newFilters, filter)
+					}
+				}
+
+				context.AddError(s.Admin.settings.Save("saved_filters", newFilters, searcher.Resource, context.CurrentUser(), searcher.Context))
+			}
+		}
 	}
 
 	s.Scheme.PrepareContext(context)
@@ -290,7 +322,7 @@ func (s *Searcher) parseContext() *core.Context {
 
 	if s.Pagination.CurrentPage == 0 {
 		if s.Context.Request != nil {
-			if page, err := strconv.Atoi(s.Context.Request.Form.Get("page")); err == nil {
+			if page, err := strconv.Atoi(s.Context.Request.URL.Query().Get("page")); err == nil {
 				s.Pagination.CurrentPage = page
 			}
 		}
@@ -301,7 +333,7 @@ func (s *Searcher) parseContext() *core.Context {
 	}
 
 	if s.Pagination.PerPage == 0 {
-		if perPage, err := strconv.Atoi(s.Context.Request.Form.Get("per_page")); err == nil {
+		if perPage, err := strconv.Atoi(s.Context.Request.URL.Query().Get("per_page")); err == nil {
 			s.Pagination.PerPage = perPage
 		} else if s.Resource.Config.PageCount > 0 {
 			s.Pagination.PerPage = s.Resource.Config.PageCount
@@ -322,204 +354,145 @@ func (s *Searcher) parseContext() *core.Context {
 }
 
 type filterField struct {
-	FieldName string
+	Field     *FieldFilter
 	Operation string
+	Typ       reflect.Type
+}
+
+func (f filterField) Apply(arg interface{}) (query string, argx interface{}) {
+	op := f.Operation
+	fieldName := f.Field.QueryField()
+
+	var cb = func() string {
+		return fieldName + " " + op + " ?"
+	}
+
+	if f.Field.Struct.Struct.Type.Kind() == reflect.String {
+		cb = func() string {
+			return "UPPER(" + fieldName + ") " + op + " UPPER(?)"
+		}
+	} else if op == "" {
+		op = "eq"
+	}
+	switch op {
+	case "eq", "equal":
+		op = "="
+	case "ne":
+		op = "!="
+	case "btw":
+		op = "BETWEEN"
+		cb = func() string {
+			return fieldName + " BETWEEN ? AND ?"
+		}
+	case "gt":
+		op = ">"
+	case "lt":
+		op = "<"
+	default:
+		if f.Field.Struct.Struct.Type.Kind() == reflect.String {
+			op = "LIKE"
+			arg = "%" + arg.(string) + "%"
+		}
+	}
+	return cb(), f.Field.FormatTerm(arg)
 }
 
 func filterResourceByFields(res *Resource, filterFields []filterField, keyword string, db *aorm.DB, context *core.Context) *aorm.DB {
-	if keyword != "" {
-		var (
-			joinConditionsMap  = map[string][]string{}
-			conditions         []string
-			keywords           []interface{}
-			generateConditions func(field filterField, scope *aorm.Scope)
-		)
+	var (
+		joinConditionsMap  = map[string][]string{}
+		conditions         []string
+		keywords           []interface{}
+		generateConditions func(field filterField, scope *aorm.Scope)
+	)
 
-		generateConditions = func(filterfield filterField, scope *aorm.Scope) {
-			column := filterfield.FieldName
-			currentScope, nextScope := scope, scope
+	generateConditions = func(filterfield filterField, scope *aorm.Scope) {
+		field := filterfield.Field.Struct
 
-			if strings.Contains(column, ".") {
-				for _, field := range strings.Split(column, ".") {
-					column = field
-					currentScope = nextScope
-					if field, ok := currentScope.FieldByName(field); ok {
-						if relationship := field.Relationship; relationship != nil {
-							nextScope = currentScope.New(reflect.New(field.Field.Type()).Interface())
-							if relationship.Kind == "many_to_many" {
-								var (
-									condition string
-									jointable = scope.Quote(relationship.JoinTableHandler.Table(scope.DB()))
-									key       = fmt.Sprintf("LEFT JOIN %v ON", jointable)
-								)
+		apply := func(kw interface{}) {
+			query, arg := filterfield.Apply(kw)
+			conditions = append(conditions, query)
+			keywords = append(keywords, arg)
+		}
 
-								conditions := []string{}
-								for index := range relationship.ForeignDBNames {
-									conditions = append(conditions,
-										fmt.Sprintf("%v.%v = %v.%v",
-											currentScope.QuotedTableName(), scope.Quote(relationship.ForeignFieldNames[index]),
-											jointable, scope.Quote(relationship.ForeignDBNames[index]),
-										))
-								}
-								condition = strings.Join(conditions, " AND ")
+		appendString := func() {
+			apply(keyword)
+		}
 
-								conditions = []string{}
-								for index := range relationship.AssociationForeignDBNames {
-									conditions = append(conditions,
-										fmt.Sprintf("%v.%v = %v.%v",
-											nextScope.QuotedTableName(), scope.Quote(relationship.AssociationForeignFieldNames[index]),
-											jointable, scope.Quote(relationship.AssociationForeignDBNames[index]),
-										))
-								}
-
-								joinConditionsMap[key] = []string{fmt.Sprintf("%v LEFT JOIN %v ON %v", condition, nextScope.QuotedTableName(), strings.Join(conditions, " AND "))}
-							} else {
-								key := fmt.Sprintf("LEFT JOIN %v ON", nextScope.QuotedTableName())
-
-								for index := range relationship.ForeignDBNames {
-									if relationship.Kind == "has_one" || relationship.Kind == "has_many" {
-										joinConditionsMap[key] = append(joinConditionsMap[key],
-											fmt.Sprintf("%v.%v = %v.%v",
-												nextScope.QuotedTableName(), scope.Quote(relationship.ForeignDBNames[index]),
-												currentScope.QuotedTableName(), scope.Quote(relationship.AssociationForeignDBNames[index]),
-											))
-									} else if relationship.Kind == "belongs_to" {
-										joinConditionsMap[key] = append(joinConditionsMap[key],
-											fmt.Sprintf("%v.%v = %v.%v",
-												currentScope.QuotedTableName(), scope.Quote(relationship.ForeignDBNames[index]),
-												nextScope.QuotedTableName(), scope.Quote(relationship.AssociationForeignDBNames[index]),
-											))
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			tableName := currentScope.QuotedTableName()
-
-			appendString := func(field *aorm.Field) {
-				switch filterfield.Operation {
-				case "equal":
-					conditions = append(conditions, fmt.Sprintf("upper(%v.%v) = upper(?)", tableName, scope.Quote(field.DBName)))
-					keywords = append(keywords, keyword)
-				default:
-					conditions = append(conditions, fmt.Sprintf("upper(%v.%v) like upper(?)", tableName, scope.Quote(field.DBName)))
-					keywords = append(keywords, "%"+keyword+"%")
-				}
-			}
-
-			appendInteger := func(field *aorm.Field) {
-				if _, err := strconv.Atoi(keyword); err == nil {
-					conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
-					keywords = append(keywords, keyword)
-				}
-			}
-
-			appendFloat := func(field *aorm.Field) {
-				if _, err := strconv.ParseFloat(keyword, 64); err == nil {
-					conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
-					keywords = append(keywords, keyword)
-				}
-			}
-
-			appendBool := func(field *aorm.Field) {
-				if value, err := strconv.ParseBool(keyword); err == nil {
-					conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
-					keywords = append(keywords, value)
-				}
-			}
-
-			appendTime := func(field *aorm.Field) {
-				if parsedTime, err := utils.ParseTime(keyword, context); err == nil {
-					conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
-					keywords = append(keywords, parsedTime)
-				}
-			}
-
-			appendStruct := func(field *aorm.Field) {
-				switch field.Field.Interface().(type) {
-				case time.Time, *time.Time:
-					appendTime(field)
-					// add support for sql null fields
-				case sql.NullInt64:
-					appendInteger(field)
-				case sql.NullFloat64:
-					appendFloat(field)
-				case sql.NullString:
-					appendString(field)
-				case sql.NullBool:
-					appendBool(field)
-				default:
-					// if we don't recognize the struct type, just ignore it
-				}
-			}
-
-			if field, ok := currentScope.FieldByName(column); ok {
-				if field.IsNormal {
-					switch field.Field.Kind() {
-					case reflect.String:
-						appendString(field)
-					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-						appendInteger(field)
-					case reflect.Float32, reflect.Float64:
-						appendFloat(field)
-					case reflect.Bool:
-						appendBool(field)
-					case reflect.Struct, reflect.Ptr:
-						appendStruct(field)
-					default:
-						conditions = append(conditions, fmt.Sprintf("%v.%v = ?", tableName, scope.Quote(field.DBName)))
-						keywords = append(keywords, keyword)
-					}
-				} else if relationship := field.Relationship; relationship != nil {
-					switch relationship.Kind {
-					case "select_one", "select_many":
-						for _, foreignFieldName := range relationship.ForeignFieldNames {
-							generateConditions(filterField{
-								FieldName: strings.Join([]string{field.Name, foreignFieldName}, "."),
-								Operation: filterfield.Operation,
-							}, currentScope)
-						}
-					case "belongs_to":
-						for _, foreignFieldName := range relationship.ForeignFieldNames {
-							generateConditions(filterField{
-								FieldName: foreignFieldName,
-								Operation: filterfield.Operation,
-							}, currentScope)
-						}
-					case "many_to_many":
-						for _, foreignFieldName := range relationship.ForeignFieldNames {
-							generateConditions(filterField{
-								FieldName: strings.Join([]string{field.Name, foreignFieldName}, "."),
-								Operation: filterfield.Operation,
-							}, currentScope)
-						}
-					}
-				}
-			} else {
-				// context.AddError(fmt.Errorf("filter `%v` is not supported", column))
+		appendInteger := func() {
+			if _, err := strconv.Atoi(keyword); err == nil {
+				apply(keyword)
 			}
 		}
 
-		scope := db.NewScope(res.Value)
-		for _, field := range filterFields {
-			generateConditions(field, scope)
-		}
-
-		// join conditions
-		if len(joinConditionsMap) > 0 {
-			var joinConditions []string
-			for key, values := range joinConditionsMap {
-				joinConditions = append(joinConditions, fmt.Sprintf("%v %v", key, strings.Join(values, " AND ")))
+		appendFloat := func() {
+			if _, err := strconv.ParseFloat(keyword, 64); err == nil {
+				apply(keyword)
 			}
-			db = db.Joins(strings.Join(joinConditions, " "))
 		}
 
-		// search conditions
-		if len(conditions) > 0 {
-			return db.Where(strings.Join(conditions, " OR "), keywords...)
+		appendBool := func() {
+			if value, err := strconv.ParseBool(keyword); err == nil {
+				apply(value)
+			}
 		}
+
+		appendTime := func() {
+			if parsedTime, err := utils.ParseTime(keyword, context); err == nil {
+				apply(parsedTime)
+			}
+		}
+
+		appendStruct := func() {
+			v := reflect.New(field.Struct.Type).Elem()
+			switch v.Interface().(type) {
+			case time.Time, *time.Time:
+				appendTime()
+			case sql.NullInt64:
+				appendInteger()
+			case sql.NullFloat64:
+				appendFloat()
+			case sql.NullString:
+				appendString()
+			case sql.NullBool:
+				appendBool()
+			default:
+				// if we don't recognize the struct type, just ignore it
+			}
+		}
+
+		switch field.Struct.Type.Kind() {
+		case reflect.String:
+			appendString()
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			appendInteger()
+		case reflect.Float32, reflect.Float64:
+			appendFloat()
+		case reflect.Bool:
+			appendBool()
+		case reflect.Struct, reflect.Ptr:
+			appendStruct()
+		default:
+			apply(keyword)
+		}
+	}
+
+	scope := db.NewScope(res.Value)
+	for _, field := range filterFields {
+		generateConditions(field, scope)
+	}
+
+	// join conditions
+	if len(joinConditionsMap) > 0 {
+		var joinConditions []string
+		for key, values := range joinConditionsMap {
+			joinConditions = append(joinConditions, fmt.Sprintf("%v %v", key, strings.Join(values, " AND ")))
+		}
+		db = db.Joins(strings.Join(joinConditions, " "))
+	}
+
+	// search conditions
+	if len(conditions) > 0 {
+		return db.Where(aorm.IQ(strings.Join(conditions, " OR ")), keywords...)
 	}
 
 	return db

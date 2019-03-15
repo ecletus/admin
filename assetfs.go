@@ -2,7 +2,9 @@ package admin
 
 import (
 	"os"
+
 	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena/go-assetfs/assetfsapi"
 )
 
 var (
@@ -22,7 +24,7 @@ func RegisterViewPath(pth string) {
 	globalViewPaths = append(globalViewPaths, pth)
 
 	for _, assetFS := range globalAssetFSes {
-		if assetFS.RegisterPath(pth) != nil {
+		if assetFS.(assetfsapi.PathRegistrator).RegisterPath(pth) != nil {
 			return
 		}
 	}

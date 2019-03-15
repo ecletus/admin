@@ -220,8 +220,13 @@
 
             if (FormData) {
                 e.preventDefault();
+                let action = $form.prop('action'),
+                    continueEditing = /[?|&]continue_editing=true/.test(action);
 
-                $.ajax($form.prop('action'), {
+                if (continueEditing) {
+                    action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
+                }
+                $.ajax(action, {
                     method: $form.prop('method'),
                     data: new FormData(form),
                     dataType: 'html',
@@ -231,23 +236,29 @@
                         $submit.prop('disabled', true);
                         $.fn.qorSlideoutBeforeHide = null;
                     },
-                    success: function(html) {
-                        var returnUrl = $form.data('returnUrl');
-                        var refreshUrl = $form.data('refreshUrl');
-
+                    success: function(html, statusText, jqXHR) {
                         $slideout.trigger(EVENT_SLIDEOUT_SUBMIT_COMPLEMENT);
+                        let xLocation = jqXHR.getResponseHeader('X-Location');
+
+                        if (xLocation) {
+                            _this.load(xLocation);
+                            return
+                        }
+
+                        var returnUrl = $form.data('returnUrl'),
+                            refreshUrl = $form.data('refreshUrl');
 
                         if (refreshUrl) {
                             window.location.href = refreshUrl;
                             return;
                         }
 
-                        if (returnUrl == 'refresh') {
+                        if (returnUrl === 'refresh') {
                             _this.refresh();
                             return;
                         }
 
-                        if (returnUrl && returnUrl != 'refresh') {
+                        if (returnUrl && returnUrl !== 'refresh') {
                             _this.load(returnUrl);
                         } else {
                             var prefix = '/' + location.pathname.split('/')[1];

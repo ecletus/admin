@@ -7,9 +7,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/jinzhu/inflection"
+	"github.com/aghape/core"
 	"github.com/aghape/core/utils"
 	"github.com/aghape/roles"
+	"github.com/jinzhu/inflection"
 )
 
 // XMLTransformer xml transformer
@@ -149,7 +150,7 @@ var XMLMarshalDefaultHandler = func(xmlStruct XMLStruct, e *xml.Encoder, start x
 			}
 
 			for _, meta := range metas {
-				if meta.HasPermission(roles.Read, context.Context) {
+				if core.HasPermission(meta, roles.Read, context.Context) {
 					metaStart := xml.StartElement{
 						Name: xml.Name{
 							Space: "",

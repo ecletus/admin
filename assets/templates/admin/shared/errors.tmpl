@@ -7,7 +7,7 @@
           <i class="material-icons">error</i>
           {{range $error := $formatted_error.Errors}}
             {{$message := escape $error}}
-            <span>{{t (printf "qor_admin.errors.%v" $message) $message}}</span>
+            <span>{{t (printf "github_com:aghape:admin:errors.%v" $message) $message}}</span>
           {{end}}
         </label>
       </li>

@@ -1,13 +1,25 @@
 {{$current_value := (raw_value_of .ResourceValue .Meta)}}
 {{$is_existing_record := (not (is_new_record $current_value))}}
 
-{{if (or $is_existing_record (.Context.Is "edit"))}}
+{{if (or $is_existing_record (not (.Context.Is "show")))}}
 <div class="qor-field">
   <label class="qor-field__label" for="{{.InputId}}">
     {{meta_label .Meta}}
   </label>
 
-  <div class="qor-field__show">{{.Value}}</div>
+  <div class="qor-field__show">
+      {{$value := (raw_value_of .ResourceValue .Meta)}}
+      {{if (defined_resource_show_page .Meta.Resource)}}
+          {{$url := (top_url_for $value .Meta.Resource)}}
+          {{if $url}}
+              {{if not (is_new_record $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
+          {{else}}
+              {{.Value}}
+          {{end}}
+      {{else}}
+          {{.Value}}
+      {{end}}
+  </div>
 
   <div class="qor-field__block qor-field__edit  qor-field__selectone" {{if (eq .Meta.Config.SelectMode "bottom_sheet")}} data-toggle="qor.selectone"{{end}}>
       {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
@@ -44,6 +56,7 @@
         data-select-default-creating="{{.Meta.Config.DefaultCreating}}"
         {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
         {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
+        {{if .Meta.Config.IconField}}data-remote-data-icon-key="{{.Meta.Config.IconField}}"{{end}}
         {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}>
         {{meta_placeholder .Meta .Context "Click to Select"}}
       </a>
@@ -73,9 +86,11 @@
         {{if not (has_update_permission .Meta)}}disabled{{end}}
         {{if .Meta.Config.AllowBlank}}data-allow-clear="true"{{end}}
         {{if .Meta.Config.IsRemote}}
-          data-remote-data="true" data-ajax--url="{{url_for .Meta.Config}}"
+          data-remote-data="true"
+          data-ajax--url="{{url_for .Meta.Config}}"
           {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
           {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
+          {{if .Meta.Config.IconField}}data-remote-data-icon-key="{{.Meta.Config.IconField}}"{{end}}
           {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}
         {{end}}>
         {{if .Meta.Config.RemoteDataResource}}
@@ -100,4 +115,12 @@
     <input type="hidden" name="{{.InputName}}" value="">
   </div>
 </div>
+{{else}}
+    <div class="qor-field">
+        <label class="qor-field__label" for="{{.InputId}}">
+            {{meta_label .Meta}}
+        </label>
+
+        <div class="qor-field__show">{{.Value}}</div>
+    </div>
 {{end}}

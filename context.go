@@ -15,29 +15,105 @@ import (
 	"github.com/aghape/responder"
 	"github.com/aghape/roles"
 	"github.com/aghape/session"
+	"github.com/moisespsena-go/xroute"
 	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-assetfs/api"
-	"github.com/moisespsena/go-route"
+	"github.com/moisespsena/go-assetfs/assetfsapi"
 	"github.com/moisespsena/template/cache"
 	"github.com/moisespsena/template/html/template"
 )
 
-type ContextType string
+type ContextType uint8
 
-func (ct ContextType) String() string {
-	return string(ct)
+func (b ContextType) Set(flag ContextType) ContextType    { return b | flag }
+func (b ContextType) Clear(flag ContextType) ContextType  { return b &^ flag }
+func (b ContextType) Toggle(flag ContextType) ContextType { return b ^ flag }
+func (b ContextType) Has(flag ...ContextType) bool {
+	for _, flag := range flag {
+		if (b & flag) != 0 {
+			return true
+		}
+	}
+	return false
+}
+func (b ContextType) HasAll(flag ...ContextType) bool {
+	if len(flag) == 0 {
+		return false
+	}
+
+	for _, flag := range flag {
+		if (b & flag) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (b ContextType) String() string {
+	var s []string
+	if b.Has(INDEX) {
+		s = append(s, "index")
+	}
+	if b.Has(NEW) {
+		s = append(s, "new")
+	}
+	if b.Has(SHOW) {
+		s = append(s, "show")
+	}
+	if b.Has(EDIT) {
+		s = append(s, "edit")
+	}
+	if b.Has(DELETED) {
+		s = append(s, "deleted")
+	}
+	return strings.Join(s, "_")
+}
+
+func (b ContextType) HasS(s string) bool {
+	switch s {
+	case "index":
+		return b.Has(INDEX)
+	case "new":
+		return b.Has(NEW)
+	case "show":
+		return b.Has(SHOW)
+	case "edit":
+		return b.Has(EDIT)
+	case "deleted":
+		return b.Has(DELETED)
+	default:
+		return false
+	}
+}
+
+func ParseContextType(s string) (b ContextType) {
+	for _, s := range strings.Split(strings.ToLower(s), "_") {
+		switch s {
+		case "index":
+			b |= INDEX
+		case "new":
+			b |= NEW
+		case "show":
+			b |= SHOW
+		case "edit":
+			b |= EDIT
+		case "deleted":
+			b |= DELETED
+		}
+	}
+	return
 }
 
 func (ct ContextType) S() string {
-	return string(ct)
+	return ct.String()
 }
 
 const (
-	NONE  ContextType = ""
-	INDEX ContextType = "index"
-	NEW   ContextType = "new"
-	SHOW  ContextType = "show"
-	EDIT  ContextType = "edit"
+	NONE ContextType = 1 << iota
+	INDEX
+	NEW
+	SHOW
+	EDIT
+	DELETED
 )
 
 // Context admin context, which is used for admin controller
@@ -61,6 +137,7 @@ type Context struct {
 	Display        string
 	Type           ContextType
 	NotFound       bool
+	RouteHandler   *RouteHandler
 }
 
 const (
@@ -80,7 +157,7 @@ func (admin *Admin) NewContext(args ...interface{}) (c *Context) {
 		case *core.Context:
 			c = &Context{Context: ctx}
 		case http.ResponseWriter:
-			_, qorCtx := core.NewContextFromRequestPair(ctx, args[i+1].(*http.Request), admin.Router.Prefix())
+			_, qorCtx := admin.ContextFactory.NewContextFromRequestPair(ctx, args[i+1].(*http.Request), admin.Config.MountPath)
 			qorCtx.Config = admin.Config.Config
 			c = &Context{Context: qorCtx}
 		}
@@ -88,7 +165,7 @@ func (admin *Admin) NewContext(args ...interface{}) (c *Context) {
 
 	if c != nil {
 		if c.Context == nil {
-			_, c.Context = core.NewContextFromRequestPair(c.Writer, c.Request, admin.Router.Prefix())
+			_, c.Context = admin.ContextFactory.NewContextFromRequestPair(c.Writer, c.Request, admin.Config.MountPath)
 			c.Request = c.Context.Request
 		}
 		c.Settings = map[string]interface{}{}
@@ -271,11 +348,11 @@ func (context *Context) Is(values ...interface{}) bool {
 	for _, v := range values {
 		switch vt := v.(type) {
 		case ContextType:
-			if context.Type == vt {
+			if context.Type.Has(vt) {
 				return true
 			}
 		case string:
-			if context.Type.S() == vt {
+			if context.Type.HasS(vt) {
 				return true
 			}
 		}
@@ -285,7 +362,7 @@ func (context *Context) Is(values ...interface{}) bool {
 
 func (context *Context) LoadDisplayOrError(displayType ...string) bool {
 	if len(displayType) == 0 || displayType[0] == "" {
-		displayType = []string{context.Type.S()}
+		displayType = []string{context.Type.Clear(DELETED).S()}
 	}
 	if !context.LoadDisplay(displayType[0]) {
 		context.Writer.WriteHeader(http.StatusPreconditionFailed)
@@ -338,6 +415,7 @@ func (context *Context) clone() *Context {
 		funcMaps:     context.funcMaps,
 		PageTitle:    context.PageTitle,
 		Type:         context.Type,
+		RouteHandler: context.RouteHandler,
 	}
 }
 
@@ -425,7 +503,7 @@ func (context *Context) StaticAsset(layouts ...string) (asset assetfs.AssetInter
 	return context.getAsset(context.Admin.StaticFS, layouts...)
 }
 
-func (context *Context) getAsset(fs assetfs.Interface, layouts ...string) (asset assetfs.AssetInterface, err error) {
+func (context *Context) findAsset(fs assetfs.Interface, layouts ...string) (asset assetfs.AssetInterface, err error) {
 	var prefixes, themes []string
 
 	if context.Request != nil {
@@ -495,7 +573,7 @@ func (context *Context) LoadTemplate(name string) (*template.Executor, error) {
 	}
 }
 
-func (context *Context) LoadTemplateInfo(info api.FileInfo) (*template.Executor, error) {
+func (context *Context) LoadTemplateInfo(info assetfsapi.FileInfo) (*template.Executor, error) {
 	data, err := info.Data()
 	if err != nil {
 		return nil, err
@@ -533,7 +611,7 @@ func (context *Context) GetTemplate(name string, others ...string) (t *template.
 }
 
 // renderWith render template based on data
-func (context *Context) GetTemplateInfo(info api.FileInfo, others ...api.FileInfo) (t *template.Executor, err error) {
+func (context *Context) GetTemplateInfo(info assetfsapi.FileInfo, others ...assetfsapi.FileInfo) (t *template.Executor, err error) {
 	t, err = cache.Cache.LoadOrStoreInfos(info, context.LoadTemplateInfo, others...)
 	if err != nil {
 		return nil, err
@@ -559,7 +637,7 @@ func (context *Context) renderWith(name string, data interface{}) template.HTML 
 }
 
 // renderWith render template based on data
-func (context *Context) renderWithInfo(info api.FileInfo, data interface{}) template.HTML {
+func (context *Context) renderWithInfo(info assetfsapi.FileInfo, data interface{}) template.HTML {
 	executor, err := context.GetTemplateInfo(info)
 	if err != nil {
 		return template.HTML(err.Error())
@@ -576,6 +654,10 @@ func (context *Context) renderWithInfo(info api.FileInfo, data interface{}) temp
 
 // Render render template based on context
 func (context *Context) Render(name string, results ...interface{}) template.HTML {
+	clone := context.clone()
+	if len(results) > 0 {
+		clone.Result = results[0]
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			err := fmt.Errorf("Get error when render file %v:\n%v", name, r)
@@ -587,16 +669,11 @@ func (context *Context) Render(name string, results ...interface{}) template.HTM
 		}
 	}()
 
-	clone := context.clone()
-	if len(results) > 0 {
-		clone.Result = results[0]
-	}
-
 	return clone.renderWith(name, clone)
 }
 
 // Render render template based on context
-func (context *Context) RenderInfo(info api.FileInfo, results ...interface{}) template.HTML {
+func (context *Context) RenderInfo(info assetfsapi.FileInfo, results ...interface{}) template.HTML {
 	defer func() {
 		if r := recover(); r != nil {
 			err := fmt.Errorf("Get error when render file %v:\n%v", info.RealPath(), r)
@@ -692,7 +769,7 @@ func (context *Context) SendError() bool {
 func (context *Context) GetSearchableResources() (resources []*Resource) {
 	if admin := context.Admin; admin != nil {
 		for _, res := range admin.searchResources {
-			if res.HasPermission(roles.Read, context.Context) {
+			if core.HasPermission(res, roles.Read, context.Context) {
 				resources = append(resources, res)
 			}
 		}
@@ -764,6 +841,13 @@ func (context *Context) Transaction(f ...func(commit func())) func() {
 	return nil
 }
 
+func (context *Context) LogErrors() {
+	if context.HasError() {
+		logger := context.Logger()
+		logger.Error(context.Errors.String())
+	}
+}
+
 func ContextFromQorContext(ctx *core.Context) *Context {
 	return ctx.Data().Get(CONTEXT_KEY).(*Context)
 }
@@ -778,15 +862,15 @@ func ContextFromQorContextOrNew(ctx *core.Context, admin *Admin) *Context {
 
 var CONTEXT_KEY = PKG + ".context"
 
-func ContextFromChain(chain *route.ChainHandler) *Context {
+func ContextFromChain(chain *xroute.ChainHandler) *Context {
 	return ContextFromRouteContext(chain.Context)
 }
 
-func SetContexToChain(chain *route.ChainHandler, context *Context) {
+func SetContexToChain(chain *xroute.ChainHandler, context *Context) {
 	SetContextToRouteContext(chain.Context, context)
 }
 
-func ContextFromRouteContext(rctx *route.RouteContext) *Context {
+func ContextFromRouteContext(rctx *xroute.RouteContext) *Context {
 	v, ok := rctx.Data[CONTEXT_KEY]
 	if ok {
 		return v.(*Context)
@@ -794,6 +878,6 @@ func ContextFromRouteContext(rctx *route.RouteContext) *Context {
 	return nil
 }
 
-func SetContextToRouteContext(rctx *route.RouteContext, context *Context) {
+func SetContextToRouteContext(rctx *xroute.RouteContext, context *Context) {
 	rctx.Data[CONTEXT_KEY] = context
 }

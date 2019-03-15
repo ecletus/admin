@@ -2,6 +2,10 @@
   <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
     <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
       {{meta_label .Meta}}
+      {{$description := meta_description .Meta}}
+      {{if $description}}
+          ({{$description}})
+      {{end}}
     </label>
 
     <div class="qor-field__show">

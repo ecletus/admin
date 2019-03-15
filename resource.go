@@ -2,6 +2,7 @@ package admin
 
 import (
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"time"
@@ -14,7 +15,7 @@ import (
 	"github.com/aghape/roles"
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena/go-route"
+	"github.com/moisespsena-go/xroute"
 
 	//"github.com/aghape/responder"
 	"strconv"
@@ -35,65 +36,41 @@ const (
 	P_OBJ_UPDATE_FORM       = "/edit"
 	P_OBJ_DELETE            = "/"
 	P_SINGLETON_READ        = P_OBJ_READ
-	P_SINGLETON_READ_FORM   = P_OBJ_READ_FORM
 	P_SINGLETON_UPDATE      = P_OBJ_UPDATE
 	P_SINGLETON_UPDATE_FORM = P_OBJ_UPDATE_FORM
+	P_BULK_DELETE           = "/delete"
+	P_RESTORE               = "/" + A_RESTORE
+	P_DELETED_INDEX         = "/" + A_DELETED_INDEX
 	P_INDEX                 = "/"
+	P_SEARCH                = "/search"
 
 	// actions
-	A_CREATE = "create"
-	A_UPDATE = "update"
-	A_READ   = "read"
-	A_DELETE = "delete"
-	A_INDEX  = "index"
+	A_CREATE      = "create"
+	A_UPDATE      = "update"
+	A_READ        = "read"
+	A_DELETE      = "delete"
+	A_BULK_DELETE = "bulk_delete"
+	A_INDEX       = "index"
+	A_SEARCH      = "search"
+
+	A_RESTORE       = "restore"
+	A_DELETED_INDEX = "deleted_index"
+
+	META_STRING = "String"
+
+	ActionDelete     = "Delete"
+	ActionBulkDelete = "BulkDelete"
 )
-
-type SubResourceConfig struct {
-	Value         interface{}
-	FieldName     string
-	LabelPlural   string
-	LabelSingular string
-	IconSingular  string
-	IconPlural    string
-	Invisible     bool
-	MenuEnabled   func(record interface{}, context *Context)
-}
-
-type SubResource struct {
-	Resource *Resource
-	Config   *SubResourceConfig
-}
-
-func (res *SubResource) CreateMenu(plural bool, parentParams ...string) *Menu {
-	menu := res.Resource.CreateMenu(plural)
-	if plural {
-		if res.Config.LabelPlural != "" {
-			menu.Label = res.Config.LabelPlural
-		}
-		if res.Config.IconPlural != "" {
-			menu.Icon = res.Config.IconPlural
-		}
-	} else {
-		if res.Config.LabelSingular != "" {
-			menu.Label = res.Config.LabelSingular
-		}
-		if res.Config.IconSingular != "" {
-			menu.Icon = res.Config.IconSingular
-		}
-	}
-
-	menu.RelativePath = res.Resource.GetIndexURI(parentParams...)
-	return menu
-}
-
-func (res *SubResource) CreateDefaultMenu(parentParams ...string) *Menu {
-	return res.CreateMenu(!res.Resource.Config.Singleton, parentParams...)
-}
 
 // Resource is the most important thing for qor admin, every model is defined as a resource, qor admin will genetate management interface based on its definition
 type Resource struct {
 	*resource.Resource
 	*Scheme
+
+	Paged
+
+	ObjectPages Paged
+
 	ParentResource   *Resource
 	Config           *Config
 	Metas            []*Meta
@@ -102,13 +79,14 @@ type Resource struct {
 	SingleEditMetas  map[string]*Meta
 	Actions          []*Action
 
-	admin           *Admin
-	mounted         bool
-	cachedMetas     *map[string][]*Meta
-	AdminController *Controller
+	admin       *Admin
+	mounted     bool
+	cachedMetas *map[string][]*Meta
 
-	Router       *route.Mux
-	ObjectRouter *route.Mux
+	Controller ResourceController
+
+	Router       *xroute.Mux
+	ObjectRouter *xroute.Mux
 	Parents      []*Resource
 	Param        string
 	ParamName    string
@@ -116,7 +94,6 @@ type Resource struct {
 
 	Resources          map[string]*Resource
 	ResourcesByParam   map[string]*Resource
-	menus              []*Menu
 	MetaAliases        map[string]*resource.MetaName
 	defaultDisplayName string
 	Children           *Inheritances
@@ -125,10 +102,23 @@ type Resource struct {
 	Fragment           *Fragment
 	registered         bool
 	afterRegister      []func()
+	afterMount         []func()
+	RouteHandlers      map[string]*RouteHandler
+
+	labelKey   string
+	softDelete bool
 }
 
-func (res *Resource) IndexHandler() *RouteHandler {
-	return res.Router.FindHandler("GET", P_INDEX).(*RouteHandler)
+func (res *Resource) IsSoftDelete() bool {
+	return res.softDelete
+}
+
+func (res *Resource) Top() (top *Resource) {
+	top = res
+	for top.ParentResource != nil {
+		top = top.ParentResource
+	}
+	return
 }
 
 func (res *Resource) OnDBActionE(cb func(e *resource.DBEvent) error, action ...resource.DBActionEvent) (err error) {
@@ -137,23 +127,6 @@ func (res *Resource) OnDBActionE(cb func(e *resource.DBEvent) error, action ...r
 
 func (res *Resource) OnDBAction(cb func(e *resource.DBEvent), action ...resource.DBActionEvent) (err error) {
 	return resource.OnDBAction(res, cb, action...)
-}
-
-// GetMenus get all sidebar menus for admin
-func (res *Resource) GetMenus() []*Menu {
-	return res.menus
-}
-
-// AddMenu add a menu to admin sidebar
-func (res *Resource) AddMenu(menu *Menu) *Menu {
-	menu.router = res.Router
-	res.menus = appendMenu(res.menus, menu.Ancestors, menu)
-	return menu
-}
-
-// GetMenu get sidebar menu with name
-func (res *Resource) GetMenu(name string) *Menu {
-	return getMenu(res.menus, name)
 }
 
 // GetDBKeys Returns the DB Keys values from `value`.
@@ -173,16 +146,20 @@ func (res *Resource) GetDBKey(value interface{}) string {
 }
 
 // GetKeys Returns the Resource Keys values from `value`.
-func (res *Resource) GetKeys(value interface{}) (keys []string) {
+func (res *Resource) GetKeys(value interface{}) []string {
 	reflectValue := reflect.ValueOf(value)
 	for reflectValue.Kind() == reflect.Ptr {
 		reflectValue = reflectValue.Elem()
 	}
+
+	key := aorm.Key()
+
 	for _, field := range res.PrimaryFields {
 		rf := reflectValue.FieldByName(field.Struct.Name).Interface()
-		keys = append(keys, fmt.Sprint(rf))
+		key.Append(rf)
 	}
-	return keys
+
+	return key.Strings()
 }
 
 func (res *Resource) GetKey(value interface{}) (key string) {
@@ -190,13 +167,20 @@ func (res *Resource) GetKey(value interface{}) (key string) {
 	case interface{ GetID() string }:
 		return vt.GetID()
 	case interface{ GetID() int64 }:
-		return fmt.Sprint(vt.GetID())
+		if id := vt.GetID(); id > 0 {
+			return strconv.Itoa(int(id))
+		}
+		return ""
 	default:
 		return strings.Join(res.GetKeys(value), ",")
 	}
 }
 
 func (res *Resource) LabelKey() string {
+	if res.labelKey != "" {
+		return res.labelKey
+	}
+
 	return res.I18nPrefix + ".label"
 }
 
@@ -238,123 +222,41 @@ func (res *Resource) GetActionLabel(context *Context, action *Action) template.H
 	return context.t(res.GetActionLabelKey(action), action.Label)
 }
 
-// Meta register meta for admin resource
-func (res *Resource) SetMeta(meta *Meta, notUpdate ...bool) *Meta {
-	return res.Meta(meta, true)
-}
-
-// Meta register meta for admin resource
-func (res *Resource) Meta(meta *Meta, notUpdate ...bool) *Meta {
-	if oldMeta := res.GetMeta(meta.Name, notUpdate...); oldMeta != nil {
-		if meta.Type != "" {
-			oldMeta.Type = meta.Type
-			oldMeta.Config = nil
-		}
-
-		if meta.TypeHandler != nil {
-			oldMeta.TypeHandler = meta.TypeHandler
-		}
-
-		if meta.Enabled != nil {
-			oldMeta.Enabled = meta.Enabled
-		}
-
-		if meta.SkipDefaultLabel {
-			oldMeta.SkipDefaultLabel = true
-		}
-
-		if meta.DefaultLabel != "" {
-			oldMeta.DefaultLabel = meta.DefaultLabel
-		}
-
-		if meta.Label != "" {
-			oldMeta.Label = meta.Label
-		}
-
-		if meta.FieldName != "" {
-			oldMeta.FieldName = meta.FieldName
-		}
-
-		if meta.Setter != nil {
-			oldMeta.Setter = meta.Setter
-		}
-
-		if meta.Valuer != nil {
-			oldMeta.Valuer = meta.Valuer
-		}
-
-		if meta.FormattedValuer != nil {
-			oldMeta.FormattedValuer = meta.FormattedValuer
-		}
-
-		if meta.Resource != nil {
-			oldMeta.Resource = meta.Resource
-		}
-
-		if meta.Permission != nil {
-			oldMeta.Permission = meta.Permission
-		}
-
-		if meta.Config != nil {
-			oldMeta.Config = meta.Config
-		}
-
-		if meta.Collection != nil {
-			oldMeta.Collection = meta.Collection
-		}
-
-		if meta.EditName != "" {
-			if meta.EditName == "-#" {
-				meta.EditName = strings.TrimSuffix(meta.Name, "ID")
-			}
-			oldMeta.EditName = meta.EditName
-		}
-
-		if len(meta.Dependency) > 0 {
-			oldMeta.Dependency = meta.Dependency
-		}
-
-		if meta.Fragment != nil {
-			oldMeta.Fragment = meta.Fragment
-		}
-
-		meta = oldMeta
-	} else {
-		res.MetasByName[meta.Name] = meta
-		res.Metas = append(res.Metas, meta)
-		meta.baseResource = res
-	}
-
-	meta.updateMeta()
-	return meta
-}
-
-func (res *Resource) InitRoutes() *route.Mux {
-	if !res.Config.Singleton {
-		for param, subRes := range res.ResourcesByParam {
-			r := subRes.InitRoutes()
-			pattern := "/" + param
-			res.ObjectRouter.Mount(pattern, r)
-		}
-		res.Router.Mount("/"+res.ParamIDPattern(), res.ObjectRouter)
-	}
-	return res.Router
-}
-
 // GetAdmin get admin from resource
 func (res *Resource) GetAdmin() *Admin {
 	return res.admin
 }
 
 // GetURL
-func (res *Resource) GetIndexURI(parentkeys ...string) string {
+func (res *Resource) GetParentFaultURI(fault func(res *Resource) string, parentkeys ...string) string {
 	var p []string
-	r := res.ParentResource
-	for l, i := len(parentkeys), 0; i < l; i++ {
-		p = append(p, r.ToParam(), parentkeys[i])
-		r = res.ParentResource
+	l := len(parentkeys)
+	for i, key := range parentkeys {
+		pres := res.Parents[l-i-1]
+		p = append(p, pres.ToParam())
+		if !pres.Config.Singleton {
+			if key == "" {
+				key = fault(pres)
+			}
+			p = append(p, key)
+		}
 	}
-	return "/" + strings.Join(append(p, res.ToParam()), "/")
+	if len(p) > 0 {
+		return "/" + strings.Join(p, "/")
+	}
+	return ""
+}
+
+// GetURL
+func (res *Resource) GetParentURI(parentkeys ...string) string {
+	return res.GetParentFaultURI(func(res *Resource) string {
+		return "{" + res.ParamIDPattern() + "}"
+	}, parentkeys...)
+}
+
+// GetURL
+func (res *Resource) GetIndexURI(parentkeys ...string) string {
+	return res.GetParentURI(parentkeys...) + "/" + res.ToParam()
 }
 
 // GetURL
@@ -363,20 +265,21 @@ func (res *Resource) GetURI(key string, parentkeys ...string) string {
 }
 
 // GetURL
+func (res *Resource) URLFor(recorde interface{}, parentkeys ...string) string {
+	return res.GetIndexURI(parentkeys...) + "/" + res.GetKey(recorde)
+}
+
+// GetURL
 func (res *Resource) GetContextIndexURI(context *core.Context, parentkeys ...string) string {
-	var p []string
-	if len(parentkeys) == 0 {
-		if res.ParentResource != nil {
-			return res.ParentResource.GetContextURI(context, "") + "/" + res.ToParam()
-		}
-	} else {
-		r := res.ParentResource
-		for l, i := len(parentkeys), 0; i < l; i++ {
-			p = append(p, r.ToParam(), parentkeys[i])
-			r = res.ParentResource
+	if len(parentkeys) == 0 && res.ParentResource != nil {
+		parentkeys = context.ParentResourceID
+		if len(parentkeys) == 0 {
+			parentkeys = make([]string, len(res.Parents))
 		}
 	}
-	return context.GenURL(append(p, res.ToParam())...)
+	return context.GenURL(res.GetParentFaultURI(func(res *Resource) string {
+		return context.URLParam(res.ParamIDPattern())
+	}, parentkeys...), res.ToParam())
 }
 
 // GetURL
@@ -395,7 +298,8 @@ func (res *Resource) GetRecordURI(record interface{}, parentKeys ...string) stri
 			return res.GetURI(child.ID)
 		}
 	}
-	return res.GetURI(res.GetKey(record), parentKeys...)
+	uri := res.GetURI(res.GetKey(record), parentKeys...)
+	return uri
 }
 
 // GetPrimaryValue get priamry value from request
@@ -419,93 +323,6 @@ func (res *Resource) ParamIDPattern() string {
 // ToParam used as urls to register routes for resource
 func (res *Resource) ToParam() string {
 	return res.Param
-}
-
-// UseTheme use them for resource, will auto load the theme's javascripts, stylesheets for this resource
-func (res *Resource) UseDisplay(display interface{}) {
-	var displayInterface DisplayInterface
-	if ti, ok := display.(DisplayInterface); ok {
-		displayInterface = ti
-	} else if str, ok := display.(string); ok {
-		if res.GetDisplay(str) != nil {
-			return
-		}
-
-		displayInterface = &Display{Name: str}
-	}
-
-	if displayInterface != nil {
-		if res.Config.Displays == nil {
-			res.Config.Displays = make(map[string]DisplayInterface)
-		}
-		res.Config.Displays[displayInterface.GetName()] = displayInterface
-		displayInterface.ConfigAdminTheme(res)
-	}
-}
-
-func (res *Resource) GetDefaultDisplayName() string {
-	if res.defaultDisplayName == "" {
-		return "default"
-	}
-	return res.defaultDisplayName
-}
-
-func (res *Resource) SetDefaultDisplay(displayName string) {
-	display := res.GetDisplay(displayName)
-	if display == nil {
-		panic(fmt.Errorf("Display %q does not exists.", displayName))
-	}
-	res.defaultDisplayName = displayName
-}
-
-func (res *Resource) GetDefaultDisplay() DisplayInterface {
-	display := res.GetDisplay(res.GetDefaultDisplayName())
-	if display == nil {
-		return DefaultDisplay
-	}
-	return display
-}
-
-// GetDisplay get registered theme with name
-func (res *Resource) GetDisplay(name string) DisplayInterface {
-	if res.Config.Displays != nil {
-		if d, ok := res.Config.Displays[name]; ok {
-			return d
-		}
-	}
-	return nil
-}
-
-// UseTheme use them for resource, will auto load the theme's javascripts, stylesheets for this resource
-func (res *Resource) UseTheme(theme interface{}) []ThemeInterface {
-	var themeInterface ThemeInterface
-	if ti, ok := theme.(ThemeInterface); ok {
-		themeInterface = ti
-	} else if str, ok := theme.(string); ok {
-		for _, theme := range res.Config.Themes {
-			if theme.GetName() == str {
-				return res.Config.Themes
-			}
-		}
-
-		themeInterface = Theme{Name: str}
-	}
-
-	if themeInterface != nil {
-		res.Config.Themes = append(res.Config.Themes, themeInterface)
-		themeInterface.ConfigAdminTheme(res)
-	}
-	return res.Config.Themes
-}
-
-// GetTheme get registered theme with name
-func (res *Resource) GetTheme(name string) ThemeInterface {
-	for _, theme := range res.Config.Themes {
-		if theme.GetName() == name {
-			return theme
-		}
-	}
-	return nil
 }
 
 // NewResource initialize a new qor resource, won't add it to admin, just initialize it
@@ -537,6 +354,37 @@ func (res *Resource) AddResourceConfig(value interface{}, cfg *Config) *Resource
 	}
 	cfg.Sub.Parent = res
 	return res.admin.AddResource(value, cfg)
+}
+
+func (res *Resource) AddResourceFieldConfig(fieldName string, value interface{}, cfg *Config) *Resource {
+	if value == nil {
+		field, _ := utils.IndirectType(res.Value).FieldByName(fieldName)
+		fieldType := utils.IndirectType(field.Type)
+
+		if fieldType.Kind() == reflect.Slice {
+			fieldType = utils.IndirectType(fieldType.Elem())
+		}
+
+		value = reflect.New(fieldType).Interface()
+	}
+	setup := cfg.Setup
+	cfg.Setup = func(child *Resource) {
+		res.SetMeta(&Meta{Name: fieldName, Resource: child})
+		if setup != nil {
+			setup(child)
+		}
+	}
+	return res.AddResource(&SubConfig{FieldName: fieldName}, value, cfg)
+}
+
+func (res *Resource) AddResourceField(fieldName string, value interface{}, setup ...func(res *Resource)) *Resource {
+	return res.AddResourceFieldConfig(fieldName, value, &Config{
+		Setup: func(res *Resource) {
+			for _, s := range setup {
+				s(res)
+			}
+		},
+	})
 }
 
 func (res *Resource) DBName(quote bool) (name string, alias string, pkfields []string) {
@@ -597,204 +445,6 @@ func (res *Resource) Decode(context *core.Context, value interface{}) error {
 	return resource.Decode(context, value, res)
 }
 
-func (res *Resource) allAttrs() []string {
-	var attrs []string
-	scope := &aorm.Scope{Value: res.Value}
-
-Fields:
-	for _, field := range scope.GetModelStruct().StructFields {
-		for _, meta := range res.Metas {
-			if field.Name == meta.FieldName {
-				attrs = append(attrs, meta.Name)
-				continue Fields
-			}
-		}
-
-		if field.IsForeignKey {
-			continue
-		}
-
-		for _, value := range []string{"CreatedAt", "UpdatedAt", "DeletedAt"} {
-			if value == field.Name {
-				continue Fields
-			}
-		}
-
-		if (field.IsNormal || field.Relationship != nil) && !field.IsIgnored {
-			attrs = append(attrs, field.Name)
-			continue
-		}
-
-		fieldType := field.Struct.Type
-		for fieldType.Kind() == reflect.Ptr || fieldType.Kind() == reflect.Slice {
-			fieldType = fieldType.Elem()
-		}
-
-		if fieldType.Kind() == reflect.Struct {
-			attrs = append(attrs, field.Name)
-		}
-	}
-
-MetaIncluded:
-	for _, meta := range res.Metas {
-		if meta.Name[0] != '_' {
-			for _, attr := range attrs {
-				if attr == meta.FieldName || attr == meta.Name {
-					continue MetaIncluded
-				}
-			}
-			attrs = append(attrs, meta.Name)
-		}
-	}
-
-	return attrs
-}
-
-func (res *Resource) SectionsList(values ...interface{}) (dest []*Section) {
-	res.setSections(&dest, values...)
-	return
-}
-
-func (res *Resource) getCachedMetas(cacheKey string, fc func() []resource.Metaor) []*Meta {
-	if res.cachedMetas == nil {
-		res.cachedMetas = &map[string][]*Meta{}
-	}
-
-	if values, ok := (*res.cachedMetas)[cacheKey]; ok {
-		return values
-	}
-
-	values := fc()
-	var metas []*Meta
-	for _, value := range values {
-		metas = append(metas, value.(*Meta))
-	}
-	(*res.cachedMetas)[cacheKey] = metas
-	return metas
-}
-
-// GetMetas get metas with give attrs
-func (res *Resource) GetMetas(attrs []string) []resource.Metaor {
-	if len(attrs) == 0 {
-		attrs = res.allAttrs()
-	}
-	var showSections, ignoredAttrs []string
-	for _, attr := range attrs {
-		if strings.HasPrefix(attr, "-") {
-			ignoredAttrs = append(ignoredAttrs, strings.TrimLeft(attr, "-"))
-		} else {
-			showSections = append(showSections, attr)
-		}
-	}
-
-	metas := []resource.Metaor{}
-
-Attrs:
-	for _, attr := range showSections {
-		for _, a := range ignoredAttrs {
-			if attr == a {
-				continue Attrs
-			}
-		}
-
-		var meta *Meta
-		for _, m := range res.Metas {
-			if m.GetName() == attr {
-				meta = m
-				break
-			}
-		}
-
-		if meta == nil {
-			meta = &Meta{Name: attr, baseResource: res, Resource: res}
-			for _, primaryField := range res.PrimaryFields {
-				if attr == primaryField.Name {
-					meta.Type = "hidden_primary_key"
-					break
-				}
-			}
-			meta.updateMeta()
-		}
-
-		metas = append(metas, meta)
-	}
-
-	return metas
-}
-
-func (res *Resource) GetDefinedMeta(name string) *Meta {
-	meta := res.MetasByName[name]
-	if meta == nil {
-		meta = res.MetasByFieldName[name]
-	}
-	return meta
-}
-
-// GetMeta get meta with name
-func (res *Resource) GetMeta(name string, notUpdate ...bool) *Meta {
-	fallbackMeta := res.MetasByName[name]
-
-	if fallbackMeta == nil {
-		fallbackMeta = res.MetasByFieldName[name]
-	}
-
-	if fallbackMeta == nil {
-		if field, ok := res.FakeScope.FieldByName(name); ok {
-			meta := &Meta{Name: field.Name, baseResource: res, Resource: res}
-			if field.IsPrimaryKey {
-				meta.Type = "hidden_primary_key"
-			}
-			if len(notUpdate) == 0 || !notUpdate[0] {
-				meta.updateMeta()
-			}
-			res.MetasByName[meta.Name] = meta
-			res.MetasByFieldName[name] = meta
-			res.Metas = append(res.Metas, meta)
-			return meta
-		} else if name == "String" {
-			meta := &Meta{
-				Name:         name,
-				Label:        res.SingularLabelKey(),
-				baseResource: res,
-				Resource:     res,
-				Type:         "string",
-				Valuer: func(recorde interface{}, context *core.Context) interface{} {
-					return utils.StringifyContext(recorde, context)
-				},
-			}
-			res.MetasByName[name] = meta
-			return meta
-		} else {
-			parts := strings.Split(name, ".")
-			if len(parts) > 1 {
-				r := res
-				var pth []interface{}
-				for _, p := range parts[0 : len(parts)-1] {
-					if r.Fragments != nil && r.Fragments.Get(p) != nil {
-						r = r.Fragments.Get(p).Resource
-						pth = append(pth, ProxyVirtualFieldPath{r.Fragment.ID, r.Value})
-					} else if meta := r.GetMeta(p); meta != nil {
-						pth = append(pth, ProxyMetaPath{meta})
-					}
-				}
-
-				if pth != nil {
-					to := r.GetMeta(parts[len(parts)-1])
-					meta := NewMetaFieldProxy(to.Name, pth, res.Value, to)
-					res.MetasByName[meta.Name] = meta
-					res.Metas = append(res.Metas, meta)
-					meta.updateMeta()
-					return meta
-				}
-
-				return nil
-			}
-		}
-	}
-
-	return fallbackMeta
-}
-
 func DefaultPermission(action string, defaul ...roles.PermissionMode) roles.PermissionMode {
 	switch action {
 	case "index", "show":
@@ -808,84 +458,6 @@ func DefaultPermission(action string, defaul ...roles.PermissionMode) roles.Perm
 	return defaul[0]
 }
 
-func (res *Resource) allowedSections(record interface{}, sections []*Section, context *Context, roles ...roles.PermissionMode) []*Section {
-	var newSections []*Section
-	for _, section := range sections {
-		newSection := &Section{Resource: section.Resource, Title: section.Title}
-		var editableRows [][]string
-		for _, row := range section.Rows {
-			var editableColumns []string
-			for _, column := range row {
-				meta := section.Resource.GetMeta(column)
-				if meta != nil {
-					if meta.Enabled != nil && !meta.Enabled(record, context, meta) {
-						continue
-					}
-
-					for _, role := range roles {
-						if meta.HasPermission(role, context.Context) {
-							editableColumns = append(editableColumns, column)
-							break
-						}
-					}
-				}
-			}
-			if len(editableColumns) > 0 {
-				editableRows = append(editableRows, editableColumns)
-			}
-		}
-
-		if len(editableRows) > 0 {
-			newSection.Rows = editableRows
-			newSections = append(newSections, newSection)
-		}
-	}
-	return newSections
-}
-
-func (res *Resource) MetasFromLayoutContext(layout string, context *Context, value interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName) {
-	if len(roles) == 0 {
-		defaultRole := DefaultPermission(layout)
-		roles = append(roles, defaultRole)
-	}
-	l := res.GetLayout(layout).(*Layout)
-	if l != nil {
-		if l.MetasFunc != nil {
-			metas, names = l.MetasFunc(res, context, value, roles...)
-		} else if l.MetaNamesFunc != nil {
-			namess := l.MetaNamesFunc(res, context, value, roles...)
-			if len(namess) > 0 {
-				metas = res.ConvertSectionToMetas(res.allowedSections(value, res.generateSections(namess), context, roles...))
-			}
-		} else if len(l.Metas) > 0 {
-			for _, metaName := range l.Metas {
-				metas = append(metas, res.MetasByName[metaName])
-			}
-
-			names = l.MetaNames
-		}
-
-		if len(metas) > 0 && len(names) == 0 {
-			names = make([]*resource.MetaName, len(metas), len(metas))
-
-			if l.MetaAliases == nil {
-				for i, meta := range metas {
-					names[i] = meta.Namer()
-				}
-			} else {
-				for i, meta := range metas {
-					if alias, ok := l.MetaAliases[meta.Name]; ok {
-						names[i] = alias
-					} else {
-						names[i] = meta.Namer()
-					}
-				}
-			}
-		}
-	}
-	return
-}
-
 func (res *Resource) BasicValue(ctx *core.Context, recorde interface{}) resource.BasicValue {
 	metaLabel, metaIcon := res.MetasByName[BASIC_META_LABEL], res.MetasByName[BASIC_META_ICON]
 	id, label, icon := res.GetKey(recorde),
@@ -894,200 +466,11 @@ func (res *Resource) BasicValue(ctx *core.Context, recorde interface{}) resource
 	return &resource.Basic{id, label, icon}
 }
 
-func (res *Resource) MountTo(param string) *Resource {
-	config := &(*res.Config)
-	if config.Sub != nil {
-		config.Sub = &(*config.Sub)
+func (res *Resource) DeleteAction() *Action {
+	if res.Config.Singleton || !res.Controller.IsDeleter() {
+		return nil
 	}
-	nmp := utils.NamifyString(param)
-	config.Name += nmp
-	config.Param = param
-	config.ID += nmp
-	config.NotMount = false
-	config.Invisible = true
-	return res.admin.AddResource(res.Value, config)
-}
-
-func (res *Resource) GetDefaultRouterActions(object bool) []string {
-	if res.Config.Singleton {
-		return []string{A_READ, A_UPDATE}
-	}
-	r := []string{A_CREATE, A_READ, A_UPDATE, A_DELETE}
-	if !object {
-		r = append(r, A_INDEX)
-	}
-	return r
-}
-
-func DefaultRouterPathAndMethod(action string, form, object, singleton bool) (pth, method string) {
-	switch strings.ToLower(action) {
-	case A_CREATE:
-		if form {
-			return P_NEW_FORM, "GET"
-		}
-		return P_NEW, "POST"
-	case A_UPDATE:
-		if singleton || object {
-			if form {
-				return P_OBJ_UPDATE_FORM, "GET"
-			}
-			return P_OBJ_UPDATE, "PUT"
-		} else {
-			if form {
-				return "/{id}" + P_OBJ_READ_FORM, "GET"
-			}
-			return "/{id}" + P_OBJ_UPDATE, "PUT"
-		}
-	case A_READ:
-		if singleton || object {
-			return P_OBJ_READ, "GET"
-		}
-		return "/{id}" + P_OBJ_READ_FORM, "GET"
-	case A_INDEX:
-		if !object && !singleton {
-			return "/", "GET"
-		}
-	case A_DELETE:
-		if !singleton {
-			if object {
-				return P_OBJ_DELETE, "DELETE"
-			}
-			return "/{id}" + P_OBJ_DELETE, "DELETE"
-		}
-	}
-	return "", ""
-}
-
-func (res *Resource) RegisterDefaultRouters(actions ...string) {
-	if len(actions) == 0 {
-		actions = []string{"create", "update", "read", "delete"}
-	}
-
-	var (
-		adminController = &Controller{Admin: res.GetAdmin()}
-	)
-
-	if res.AdminController == nil {
-		res.AdminController = adminController
-	}
-
-	for _, action := range actions {
-		switch strings.ToLower(action) {
-		case "create":
-			if !res.Config.Singleton {
-				// New
-				res.Router.Get(P_NEW_FORM, NewHandler(adminController.New, &RouteConfig{PermissionMode: roles.Create, Resource: res}))
-			}
-
-			res.Router.Api(func(router *route.Mux) {
-				// Create
-				router.Post(P_NEW, NewHandler(adminController.Create, &RouteConfig{PermissionMode: roles.Create, Resource: res}))
-			})
-		case "update":
-			if res.Config.Singleton {
-				// Edit
-				res.Router.Get(P_SINGLETON_UPDATE_FORM, NewHandler(adminController.Edit, &RouteConfig{PermissionMode: roles.Update, Resource: res}))
-				res.Router.Api(func(router *route.Mux) {
-					// Update
-					router.Put(P_SINGLETON_UPDATE, NewHandler(adminController.Update, &RouteConfig{PermissionMode: roles.Update, Resource: res}))
-				})
-			} else {
-				// Edit
-				res.ObjectRouter.Get(P_OBJ_UPDATE_FORM, NewHandler(adminController.Edit, &RouteConfig{PermissionMode: roles.Update, Resource: res}))
-
-				res.ObjectRouter.Api(func(router *route.Mux) {
-					update := NewHandler(adminController.Update, &RouteConfig{PermissionMode: roles.Update, Resource: res})
-					// Update
-					router.Put(P_OBJ_UPDATE, update)
-					router.Post(P_OBJ_UPDATE, update)
-				})
-			}
-		case "read":
-			res.Router.Api(func(router *route.Mux) {
-				if res.Config.Singleton {
-					// Show
-					router.Get(P_SINGLETON_READ_FORM, NewHandler(adminController.Show, &RouteConfig{PermissionMode: roles.Read, Resource: res}))
-				} else {
-					// Index
-					router.Get(P_INDEX, NewHandler(adminController.Index, &RouteConfig{PermissionMode: roles.Read, Resource: res}))
-
-				}
-			})
-			res.ObjectRouter.Api(func(router *route.Mux) {
-				// Show
-				router.Get(P_OBJ_READ_FORM, NewHandler(adminController.Show, &RouteConfig{PermissionMode: roles.Read, Resource: res}))
-			})
-		case "delete":
-			if !res.Config.Singleton {
-				// Delete
-				res.ObjectRouter.Delete(P_OBJ_DELETE, NewHandler(adminController.Delete, &RouteConfig{PermissionMode: roles.Delete, Resource: res}))
-			}
-		}
-	}
-}
-
-func (res *Resource) CreateMenu(plural bool) *Menu {
-	menuName := res.Name
-
-	if plural {
-		menuName = inflection.Plural(menuName)
-	}
-
-	menu := &Menu{
-		Name:         menuName,
-		Label:        res.GetLabelKey(plural),
-		Permissioner: res,
-		Priority:     res.Config.Priority,
-		Ancestors:    res.Config.Menu,
-		RelativePath: res.GetIndexURI(),
-		Enabled:      res.Config.MenuEnabled,
-		Resource:     res,
-	}
-
-	if res.ParentResource != nil {
-		menu.MakeLink = func(context *Context, args ...interface{}) string {
-			var parentKeys []string
-			for _, arg := range args {
-				switch t := arg.(type) {
-				case string:
-					if t != "" {
-						parentKeys = append(parentKeys, t)
-					}
-				case []string:
-					parentKeys = append(parentKeys, t...)
-				}
-			}
-			if len(parentKeys) == 0 {
-				return res.GetContextIndexURI(context.Context)
-			}
-			return res.GetContextIndexURI(context.Context, parentKeys...)
-		}
-	}
-
-	return menu
-}
-
-func (res *Resource) GetIndexLink(context *core.Context, args ...interface{}) string {
-	return res.GetLink(nil, context, args...)
-}
-
-func (res *Resource) GetLink(record interface{}, context *core.Context, args ...interface{}) string {
-	var parentKeys []string
-	for _, arg := range args {
-		switch t := arg.(type) {
-		case string:
-			if t != "" {
-				parentKeys = append(parentKeys, t)
-			}
-		case []string:
-			parentKeys = append(parentKeys, t...)
-		}
-	}
-	if record == nil {
-		return res.GetContextIndexURI(context, parentKeys...)
-	}
-	uri := res.GetRecordURI(record, parentKeys...)
-	return context.GenURL(uri)
+	return res.Action(&Action{Name: ActionDelete})
 }
 
 func (res *Resource) configure() {
@@ -1105,48 +488,144 @@ func (res *Resource) configure() {
 		injector.ConfigureQorResource(res)
 	}
 
-	if res.Config.Singleton {
-		return
-	}
-
-	typ := reflect.TypeOf(res.Value)
-
-	for typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-	_, softDelete := typ.FieldByName("DeletedAt")
-
-	res.Action(&Action{
-		Name:   "Delete",
-		Method: "DELETE",
-		Type:   ActionDanger,
-		URL: func(record interface{}, context *Context, args ...interface{}) string {
-			return res.GetLink(record, context.Context, args...)
-		},
-		Permission: res.Config.Permission,
-		Modes:      []string{"menu_item"},
-		Visible: func(record interface{}, context *Context) bool {
-			if softDelete {
-				typ := reflect.ValueOf(record)
-
-				for typ.Kind() == reflect.Ptr {
-					typ = typ.Elem()
+	if !res.Config.Singleton && res.Controller.IsDeleter() {
+		res.Action(&Action{
+			Name:   ActionDelete,
+			Method: http.MethodDelete,
+			Type:   ActionDanger,
+			URL: func(record interface{}, context *Context, args ...interface{}) string {
+				return res.GetContextURI(context.Context, res.GetKey(record))
+			},
+			Modes: []string{"menu_item"},
+			Visible: func(recorde interface{}, context *Context) bool {
+				if context.RouteHandler != nil && context.RouteHandler.Name == A_DELETED_INDEX {
+					return false
 				}
+				return !res.IsSoftDeleted(recorde)
+			},
+			RefreshURL: func(record interface{}, context *Context) string {
+				return res.GetContextIndexURI(context.Context)
+			},
+		})
 
-				f := typ.FieldByName("DeletedAt")
-				if f.IsValid() {
-					v := f.Interface()
-					if t, ok := v.(time.Time); ok {
-						return t.IsZero()
-					} else if t, ok := v.(*time.Time); ok {
-						return t == nil || t.IsZero()
+		if res.Controller.IsBulkDeleter() {
+			res.Action(&Action{
+				Name:   ActionBulkDelete,
+				Method: http.MethodPost,
+				Type:   ActionDanger,
+				URL: func(record interface{}, context *Context, args ...interface{}) string {
+					return res.GetContextIndexURI(context.Context) + P_BULK_DELETE
+				},
+				Modes: []string{"index"},
+				Visible: func(recorde interface{}, context *Context) bool {
+					if context.RouteHandler != nil && context.RouteHandler.Name == A_DELETED_INDEX {
+						return false
 					}
-				}
-				return false
+					return !res.IsSoftDeleted(recorde)
+				},
+				IndexVisible: func(context *Context) bool {
+					if context.RouteHandler != nil && context.RouteHandler.Name == A_DELETED_INDEX {
+						return false
+					}
+					return true
+				},
+			})
+		}
+
+		if res.softDelete && res.Controller.IsRestorer() {
+			res.AfterRegister(res.configureRestorer)
+		}
+	}
+
+	res.AfterRegister(res.configureAudited)
+}
+func (res *Resource) configureRestorer() {
+	/*
+		res.AddDefaultMenuChild(&Menu{
+			Name: A_DELETED_INDEX,
+			MakeLink: func(context *Context, args ...interface{}) string {
+				return res.GetContextIndexURI(context.Context) + "/" + A_DELETED_INDEX
+			},
+		})
+	*/
+	res.Action(&Action{
+		Name:   A_RESTORE,
+		Modes:  []string{"index"},
+		Method: http.MethodGet,
+		URL: func(record interface{}, context *Context, args ...interface{}) (url string) {
+			url = res.GetContextIndexURI(context.Context) + "/" + A_RESTORE
+			if reflect.Indirect(reflect.ValueOf(record)).Kind() == reflect.Slice {
+				return
 			}
-			return true
+			return url + "?key=" + res.GetKey(record)
+		},
+		IndexVisible: func(context *Context) bool {
+			if context.RouteHandler != nil && context.RouteHandler.Name == A_DELETED_INDEX {
+				return true
+			}
+			return false
+		},
+		Visible: func(record interface{}, context *Context) bool {
+			return false
+		},
+		Handler: func(argument *ActionArgument) error {
+			println()
+			return nil
 		},
 	})
+}
+
+func (res *Resource) Restore(ctx *Context, key ...string) {
+	DB := ctx.DB.Model(res.Value)
+	var where []string
+	var args []interface{}
+
+	for _, key := range key {
+		pwhere, pargs := resource.StringToPrimaryQuery(res, key)
+		where = append(where, pwhere)
+		args = append(args, pargs...)
+	}
+
+	data := map[string]interface{}{"deleted_at": nil}
+	if f, ok := reflect.TypeOf(res.Value).Elem().FieldByName("DeletedByID"); ok {
+		switch f.Type.Kind() {
+		case reflect.Ptr:
+			data["deleted_by_id"] = nil
+		case reflect.String:
+			data["deleted_by_id"] = ""
+		default:
+			data["deleted_by_id"] = 0
+		}
+	}
+
+	DB = DB.Table(res.FakeScope.TableName()).
+		Unscoped().
+		Where(strings.Join(where, " OR "), args...).
+		Set("validations:skip_validations", true)
+
+	err := DB.Updates(data).Error
+	ctx.AddError(err)
+}
+
+func (res *Resource) IsSoftDeleted(recorde interface{}) bool {
+	if res.softDelete {
+		typ := reflect.ValueOf(recorde)
+
+		for typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
+
+		f := typ.FieldByName(aorm.SoftDeleteFieldDeletedAt)
+		if f.IsValid() {
+			v := f.Interface()
+			if t, ok := v.(time.Time); ok {
+				return !t.IsZero()
+			} else if t, ok := v.(*time.Time); ok {
+				return t != nil && !t.IsZero()
+			}
+		}
+	}
+	return false
 }
 
 // GetResources get defined resources from admin
@@ -1267,10 +746,24 @@ func (res *Resource) RegisterScheme(name string, cfg ...*SchemeConfig) *Scheme {
 	if res.registered {
 		return f()
 	}
-	res.afterRegister = append(res.afterRegister, func() {
+	res.AfterRegister(func() {
 		f()
 	})
 	return nil
+}
+
+func (res *Resource) AfterRegister(f ...func()) {
+	res.afterRegister = append(res.afterRegister, f...)
+}
+
+func (res *Resource) AfterMount(f ...func()) {
+	if res.mounted {
+		for _, f := range f {
+			f()
+		}
+	} else {
+		res.afterMount = append(res.afterMount, f...)
+	}
 }
 
 func (res *Resource) triggerSchemeAdded(s *Scheme) {
@@ -1288,4 +781,12 @@ func (res *Resource) DefaultFilter(fns ...func(context *core.Context, db *aorm.D
 
 func (res *Resource) GetAdminLayout(name string, defaul ...string) *Layout {
 	return res.GetLayout(name, defaul...).(*Layout)
+}
+
+func (res *Resource) ChildrenLabelKey(childrenID string) string {
+	return res.I18nPrefix + ".children." + childrenID
+}
+
+func (res *Resource) BasicLayout() *Layout {
+	return res.GetLayout(resource.BASIC_LAYOUT).(*Layout)
 }

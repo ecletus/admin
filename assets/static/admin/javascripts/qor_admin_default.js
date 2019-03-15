@@ -1,6 +1,68 @@
 // init for slideout after show event
 $.fn.qorSliderAfterShow = $.fn.qorSliderAfterShow || {};
-window.QOR = {};
+window.QOR = {
+    Xurl: function (url, $this) {
+        let $form = $this.parents('form'),
+            names = $this.attr('name').split('.').slice(0, -1),
+            depGet = function (name) {
+                let l = names.length,
+                    discovery = name[0] === '*',
+                    field,
+                    value;
+                if (discovery) {
+                    let tmpName;
+                    name = name.substring(1);
+                    do {
+                        tmpName = l > 0 ? names.slice(0, l) + '.' + name : name;
+                        field = $form.find(`[name='${tmpName}']`);
+                        l--;
+                    } while(l >= 0 && field.length === 0);
+
+                    if (field.length === 0) {
+                        if (name !== 'ID' || !$form.data('id')) {
+                            value = '';
+                        } else {
+                            value = $form.data('id');
+                        }
+                    } else {
+                        value = field.val();
+                    }
+                } else {
+                    while (name !== "" && name[0] === '.') {
+                        l--;
+                        name = name.substring(1);
+                    }
+                    name = names.slice(0, l).join('.') + '.' + name;
+                    field = $form.find(`[name='${name}']`);
+                    if (field.length === 0) {
+                        return [null, false]
+                    }
+                    value = field.val();
+                }
+                return [value, true]
+            };
+
+        return new Xurl(url, depGet);
+    },
+
+    submitContinueEditing: function (e) {
+        let $form = $(e).parents('form'),
+            action = $form.attr('action') || window.location.href;
+        if (!/(\?|&)continue_editing=/.test(action)) {
+            let param = 'continue_editing=true';
+            if (action.indexOf('?') === -1) {
+                action += '?' + param
+            } else if (action[action.length-1] !== '?') {
+                action += '&' + param
+            } else {
+                action += param
+            }
+        }
+        $form.attr('action', action);
+        $form.submit();
+        return false;
+    }
+};
 
 // change Mustache tags from {{}} to [[]]
 window.Mustache && (window.Mustache.tags = ['[[', ']]']);
@@ -27,6 +89,7 @@ $.fn.select2 = $.fn.select2 || function(){};
 $.fn.select2.ajaxCommonOptions = function(select2Data) {
     let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey,
         remoteDataDisplayKey = select2Data.remoteDataDisplayKey,
+        remoteDataIconKey = select2Data.remoteDataIconKey,
         remoteDataCache = !(select2Data.remoteDataCache === 'false');
 
     return {
@@ -35,7 +98,7 @@ $.fn.select2.ajaxCommonOptions = function(select2Data) {
         delay: 250,
         data: function(params) {
             return {
-                keyword: params.term, // search term
+                keyword: params.term || '', // search term
                 page: params.page,
                 per_page: 20
             };
@@ -51,6 +114,12 @@ $.fn.select2.ajaxCommonOptions = function(select2Data) {
                 obj.id = obj[remoteDataPrimaryKey] || obj.primaryKey || obj.Id || obj.ID;
                 if (remoteDataDisplayKey) {
                     obj.text = obj[remoteDataDisplayKey];
+                }
+                if (remoteDataIconKey) {
+                    obj.icon = obj[remoteDataIconKey];
+                    if (obj.icon && /\.svg/.test(obj.icon)) {
+                        obj.iconSVG = true;
+                    }
                 }
                 return obj;
             });
@@ -73,7 +142,7 @@ $.fn.select2.ajaxFormatResult = function(data, tmpl) {
     if (tmpl.length > 0) {
         result = window.Mustache.render(tmpl.html().replace(/{{(.*?)}}/g, '[[$1]]'), data);
     } else {
-        result = data.text || data.Name || data.Title || data.Code || data[Object.keys(data)[0]];
+        result = data.text || data.html || data.Name || data.Title || data.Code || data[Object.keys(data)[0]];
     }
 
     // if is HTML
@@ -2173,6 +2242,240 @@ $(function() {
     return QorAction;
 });
 
+(function(factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function($) {
+    'use strict';
+
+    let location = window.location,
+        QOR = window.QOR,
+        NAMESPACE = 'qor.advancedsearch',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_CLICK = 'click.' + NAMESPACE,
+        EVENT_SHOWN = 'shown.qor.modal',
+        EVENT_SUBMIT = 'submit.' + NAMESPACE;
+
+    function getExtraPairs(names) {
+        let pairs = decodeURIComponent(location.search.substr(1)).split('&'),
+            pairsObj = {},
+            pair,
+            i;
+
+        if (pairs.length == 1 && pairs[0] == '') {
+            return false;
+        }
+
+        for (i in pairs) {
+            if (pairs[i] === '') continue;
+
+            pair = pairs[i].split('=');
+            pairsObj[pair[0]] = pair[1];
+        }
+
+        names.forEach(function(item) {
+            delete pairsObj[item];
+        });
+
+        return pairsObj;
+    }
+
+    function QorAdvancedSearch(element, options) {
+        this.$element = $(element);
+        this.options = $.extend({}, QorAdvancedSearch.DEFAULTS, $.isPlainObject(options) && options);
+        this.init();
+    }
+
+    QorAdvancedSearch.prototype = {
+        constructor: QorAdvancedSearch,
+
+        init: function() {
+            this.$form = this.$element.find('form');
+            this.$modal = $(QorAdvancedSearch.MODAL).appendTo('body');
+            this.bind();
+        },
+
+        bind: function() {
+            this.$element
+                .on(EVENT_SUBMIT, 'form', this.submit.bind(this))
+                .on(EVENT_CLICK, '.qor-advanced-filter__save', this.showSaveFilter.bind(this))
+                .on(EVENT_CLICK, '.qor-advanced-filter__toggle', this.toggleFilterContent)
+                .on(EVENT_CLICK, '.qor-advanced-filter__close', this.closeFilter)
+                .on(EVENT_CLICK, '.qor-advanced-filter__delete', this.deleteSavedFilter);
+
+            this.$modal.on(EVENT_SHOWN, this.start.bind(this));
+        },
+
+        closeFilter: function() {
+            $('.qor-advanced-filter__dropdown').hide();
+        },
+
+        toggleFilterContent: function(e) {
+            $(e.target)
+                .closest('.qor-advanced-filter__toggle')
+                .parent()
+                .find('>[advanced-search-toggle]')
+                .toggle();
+        },
+
+        showSaveFilter: function() {
+            this.$modal.qorModal('show');
+        },
+
+        deleteSavedFilter: function(e) {
+            let $target = $(e.target).closest('.qor-advanced-filter__delete'),
+                $savedFilter = $target.closest('.qor-advanced-filter__savedfilter'),
+                name = $target.data('filter-name'),
+                url = location.pathname,
+                message = {
+                    confirm: 'Are you sure you want to delete this saved filter?'
+                };
+
+            QOR.qorConfirm(message, function(confirm) {
+                if (confirm) {
+                    $.get(url, $.param({delete_saved_filter: name}))
+                        .done(function() {
+                            $target.closest('li').remove();
+                            if ($savedFilter.find('li').length === 0) {
+                                $savedFilter.remove();
+                            }
+                        })
+                        .fail(function() {
+                            QOR.qorConfirm('Server error, please try again!');
+                        });
+                }
+            });
+            return false;
+        },
+
+        start: function() {
+            this.$modal.trigger('enable.qor.material').on(EVENT_CLICK, '.qor-advanced-filter__savefilter', this.saveFilter.bind(this));
+        },
+
+        saveFilter: function() {
+            let name = this.$modal.find('#qor-advanced-filter__savename').val();
+
+            if (!name) {
+                return;
+            }
+
+            this.$form.prepend(`<input type="hidden" name="filter_saving_name" value=${name}  />`).submit();
+        },
+
+        submit: function() {
+            let $form = this.$form,
+                formArr = $form.find('input[name],select[name]'),
+                names = [],
+                extraPairs;
+
+            formArr.each(function() {
+                names.push($(this).attr('name'));
+            });
+
+            extraPairs = getExtraPairs(names);
+
+            if (!$.isEmptyObject(extraPairs)) {
+                for (let key in extraPairs) {
+                    if (extraPairs.hasOwnProperty(key)) {
+                        $form.prepend(`<input type="hidden" name=${key} value=${extraPairs[key]}  />`);
+                    }
+                }
+            }
+
+            this.$element.find('.qor-advanced-filter__dropdown').hide();
+
+            this.removeEmptyPairs($form);
+        },
+
+        removeEmptyPairs: function($form) {
+            $form.find('advanced-filter-group').each(function() {
+                let $this = $(this),
+                    $input = $this.find('[filter-required]');
+                if ($input.val() == '') {
+                    $this.remove();
+                }
+            });
+        },
+
+        unbind: function() {},
+
+        destroy: function() {
+            this.unbind();
+            this.$element.removeData(NAMESPACE);
+        }
+    };
+
+    QorAdvancedSearch.DEFAULTS = {};
+
+    QorAdvancedSearch.MODAL = `<div class="qor-modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="mdl-card mdl-shadow--2dp" role="document">
+                <div class="mdl-card__title">
+                    <h2 class="mdl-card__title-text">Save advanced filter</h2>
+                </div>
+                <div class="mdl-card__supporting-text">
+                        
+                    <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
+                        <input class="mdl-textfield__input" type="text" id="qor-advanced-filter__savename">
+                        <label class="mdl-textfield__label" for="qor-advanced-filter__savename">Please enter name for this filter</label>
+                    </div>
+                </div>
+                <div class="mdl-card__actions">
+                    <a class="mdl-button mdl-button--colored mdl-button--raised qor-advanced-filter__savefilter">Save This Filter</a>
+                    <a class="mdl-button mdl-button--colored" data-dismiss="modal">Cancel</a>
+                </div>
+                <div class="mdl-card__menu">
+                    <button class="mdl-button mdl-button--icon" data-dismiss="modal" aria-label="close">
+                        <i class="material-icons">close</i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+
+    QorAdvancedSearch.plugin = function(options) {
+        return this.each(function() {
+            let $this = $(this),
+                data = $this.data(NAMESPACE),
+                fn;
+
+            if (!data) {
+                if (/destroy/.test(options)) {
+                    return;
+                }
+
+                $this.data(NAMESPACE, (data = new QorAdvancedSearch(this, options)));
+            }
+
+            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+                fn.apply(data);
+            }
+        });
+    };
+
+    $(function() {
+        let selector = '[data-toggle="qor.advancedsearch"]',
+            options;
+
+        $(document)
+            .on(EVENT_DISABLE, function(e) {
+                QorAdvancedSearch.plugin.call($(selector, e.target), 'destroy');
+            })
+            .on(EVENT_ENABLE, function(e) {
+                QorAdvancedSearch.plugin.call($(selector, e.target), options);
+            })
+            .triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorAdvancedSearch;
+});
 (function (factory) {
   if (typeof define === 'function' && define.amd) {
     // AMD. Register as anonymous module.
@@ -2510,10 +2813,10 @@ $(function() {
 
         search: function() {
             var $bottomsheets = this.$bottomsheets,
-                param = '?keyword=',
+                param = 'keyword=',
                 baseUrl = $bottomsheets.data().url,
-                searchValue = $.trim($bottomsheets.find(CLASS_BOTTOMSHEETS_INPUT).val()),
-                url = baseUrl + param + searchValue;
+                searchValue = $.trim($bottomsheets.find(CLASS_BOTTOMSHEETS_INPUT).val() || ''),
+                url = baseUrl + (baseUrl.indexOf('?') == -1 ? '?' : '&') + param + searchValue;
 
             this.reload(url);
         },
@@ -2538,7 +2841,7 @@ $(function() {
             var $bottomsheets = this.$bottomsheets,
                 _this = this;
 
-            $.get(url, function(response) {
+            $.get(url, $.proxy(function(response) {
                 var $response = $(response).find(CLASS_MAIN_CONTENT),
                     $responseHeader = $response.find(CLASS_BODY_HEAD),
                     $responseBody = $response.find(CLASS_BODY_CONTENT);
@@ -2547,18 +2850,18 @@ $(function() {
                     $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html());
 
                     if ($responseHeader.length) {
-                        _this.$body
+                        this.$body
                             .find(CLASS_BODY_HEAD)
                             .html($responseHeader.html())
                             .trigger('enable');
-                        _this.addHeaderClass();
+                        this.addHeaderClass();
                     }
                     // will trigger this event(relaod.qor.bottomsheets) when bottomsheets reload complete: like pagination, filter, action etc.
                     $bottomsheets.trigger(EVENT_RELOAD);
                 } else {
-                    _this.reload(url);
+                    this.reload(url);
                 }
-            }).fail(function() {
+            }, this)).fail(function() {
                 window.alert('server error, please try again later!');
             });
         },
@@ -2756,6 +3059,10 @@ $(function() {
                 return;
             }
 
+            if (data.$element) {
+                url = QOR.Xurl(url, data.$element).toString();
+            }
+
             this.show();
             this.addLoading($body);
 
@@ -2824,13 +3131,13 @@ $(function() {
                                     .data('selectId', resourseData.selectId)
                                     .data('loadInline', true);
                                 if (
-                                    selectModal != 'one' &&
+                                    selectModal !== 'one' &&
                                     !data.selectNohint &&
-                                    (typeof resourseData.maxItem === 'undefined' || resourseData.maxItem != '1')
+                                    (typeof resourseData.maxItem === 'undefined' || resourseData.maxItem !== '1')
                                 ) {
                                     $body.addClass('has-hint');
                                 }
-                                if (selectModal == 'mediabox' && !this.scriptAdded) {
+                                if (selectModal === 'mediabox' && !this.scriptAdded) {
                                     this.loadMedialibraryJS($response);
                                 }
                             }
@@ -3029,12 +3336,39 @@ $(function() {
                 option = {
                     minimumResultsForSearch: 8,
                     dropdownParent: $this.parent()
+                },
+                dataOptions = {
+                    displayKey: select2Data.remoteDataDisplayKey,
+                    iconKey: select2Data.remoteDataIconKey,
+                    getKey: function (data, key, defaul) {
+                        if (key) {
+                            let tmp = data, keys = key.split('.');
+                            for (let i = 0; (typeof tmp !== 'undefined') && i < keys.length; i++) {
+                                tmp = tmp[i]
+                            }
+                            if (typeof tmp !== 'undefined') {
+                                return tmp;
+                            }
+                        }
+                        return defaul
+                    }
                 };
 
             if (select2Data.remoteData) {
                 option.ajax = $.fn.select2.ajaxCommonOptions(select2Data);
+                let xurl = QOR.Xurl(select2Data["ajax-Url"], $this);
+
+                delete select2Data["ajax-Url"];
+                option.ajax.url = function (params) {
+                    xurl.query.keyword = [params.term];
+                    xurl.query.page = params.page;
+                    xurl.query.per_page = 20;
+                    let url = xurl.toString();
+                    return url
+                };
 
                 option.templateResult = function(data) {
+                    data.QorChooserOptions = dataOptions;
                     let tmpl = $this.parents('.qor-field').find('[name="select2-result-template"]');
                     if (tmpl.length > 0 && tmpl.data("raw")) {
                         var f = tmpl.data("func");
@@ -3049,6 +3383,7 @@ $(function() {
 
                 option.templateSelection = function(data) {
                     if (data.loading) return data.text;
+                    data.QorChooserOptions = dataOptions;
                     let tmpl = $this.parents('.qor-field').find('[name="select2-selection-template"]');
                     if (tmpl.length > 0 && tmpl.data("raw")) {
                         var f = tmpl.data("func");
@@ -3165,7 +3500,8 @@ $(function() {
         CLASS_SAVE = '.qor-cropper__save',
         CLASS_DELETE = '.qor-cropper__toggle--delete',
         CLASS_CROP = '.qor-cropper__toggle--crop',
-        CLASS_UNDO = '.qor-fieldset__undo';
+        CLASS_UNDO = '.qor-fieldset__undo',
+        HIDDEN_DATA_INPUT = 'input[name="QorResource.MediaOption"]:hidden';
 
     function capitalize(str) {
         if (typeof str === 'string') {
@@ -3199,13 +3535,6 @@ $(function() {
         if ($.isPlainObject(obj)) {
             return obj[lowerCaseKey] || obj[capitalizeKey] || obj[upperCaseKey];
         }
-    }
-
-    function clearObject(obj) {
-        for (let prop in obj) {
-            if (obj.hasOwnProperty(prop)) obj[prop] = '';
-        }
-        return obj;
     }
 
     function replaceText(str, data) {
@@ -3250,6 +3579,7 @@ $(function() {
 
             this.$parent = $parent;
             this.$output = $parent.find(options.output);
+            this.$formCropInput = $parent.closest('form').find(HIDDEN_DATA_INPUT);
             this.$list = $parent.find(options.list);
 
             fetchUrl = this.$output.data('fetchSizedata');
@@ -3258,6 +3588,7 @@ $(function() {
                 $.getJSON(fetchUrl, function(data) {
                     imageData = JSON.parse(data.MediaOption);
                     _this.$output.val(JSON.stringify(data));
+                    _this.$formCropInput.val(JSON.stringify(data));
                     _this.data = imageData || {};
                     if (isSVG(imageData.URL || imageData.Url)) {
                         _this.resetImage();
@@ -3366,6 +3697,8 @@ $(function() {
                 data.Delete = true;
 
                 this.$output.val(JSON.stringify(data));
+                this.$formCropInput.val(JSON.stringify(data));
+
                 this.$list.hide();
 
                 $alert = $(QorCropper.ALERT);
@@ -3376,6 +3709,7 @@ $(function() {
                         this.$list.show();
                         delete data.Delete;
                         this.$output.val(JSON.stringify(data));
+                        this.$formCropInput.val(JSON.stringify(data));
                     }.bind(this)
                 );
                 this.$parent.find('.qor-fieldset').append($alert);
@@ -3391,11 +3725,13 @@ $(function() {
         read: function(e) {
             let files = e.target.files,
                 file,
+                $list = this.$list,
                 $alert = this.$parent.find('.qor-fieldset__alert');
+
+            $list.show();
 
             if ($alert.length) {
                 $alert.remove();
-                this.data = clearObject(this.data);
             }
 
             if (files && files.length) {
@@ -3406,30 +3742,30 @@ $(function() {
                     this.load(URL.createObjectURL(file));
                     this.$parent.find('.qor-medialibrary__image-desc').show();
                 } else {
-                    this.$list.empty().html(QorCropper.FILE_LIST.replace('{{filename}}', file.name));
+                    $list.empty().html(QorCropper.FILE_LIST.replace('{{filename}}', file.name));
                 }
             }
         },
 
-        load: function(url, callback) {
+        load: function(url, fromExternal, callback) {
             let options = this.options,
                 _this = this,
                 $list = this.$list,
-                $ul = $list.find('ul'),
+                $ul = $(QorCropper.LIST),
                 data = this.data || {},
                 fileType = this.fileType,
                 $image,
                 imageLength;
 
-            if (!$ul.length || !$ul.find('li').length) {
-                $ul = $(QorCropper.LIST);
+            // media box will use load method, has it's own html structure.
+            if (!fromExternal) {
+                $list.find('ul').remove();
                 $list.html($ul);
-                this.wrap();
             }
 
-            $ul.show(); // show ul when it is hidden
-
             $image = $list.find('img');
+            this.wrap();
+
             imageLength = $image.length;
             $image
                 .one('load', function() {
@@ -3486,23 +3822,28 @@ $(function() {
                                 data[options.key] = {};
                             }
 
-                            data[options.key][sizeName] = emulateCropData;
+                            if (sizeName != 'original') {
+                                data[options.key][sizeName] = emulateCropData;
+                            }
                         }
                     } else {
                         _this.center($this);
                     }
 
                     // Crop, CropOptions and Delete should be BOOL type, if empty should delete,
-                    if (data.Crop === '') {
+                    if (data.Crop === '' || !fromExternal) {
                         delete data.Crop;
                     }
 
-                    if (data.CropOptions === '') {
-                        delete data.CropOptions;
+                    if (!fromExternal) {
+                        data.CropOptions = null;
+                        delete data.Sizes;
                     }
 
                     delete data.Delete;
+
                     _this.$output.val(JSON.stringify(data));
+                    _this.$formCropInput.val(JSON.stringify(data));
 
                     // callback after load complete
                     if (sizeName && data[options.key] && Object.keys(data[options.key]).length >= imageLength) {
@@ -3524,7 +3865,7 @@ $(function() {
                 sizeData = $target.data(),
                 sizeName = sizeData.sizeName || 'original',
                 sizeResolution = sizeData.sizeResolution,
-                $clone = $('<img>').attr('src', sizeData.originalUrl),
+                $clone = $(`<img src=${sizeData.originalUrl}>`),
                 data = this.data || {},
                 _this = this,
                 sizeAspectRatio = NaN,
@@ -3566,10 +3907,9 @@ $(function() {
                 zoomable: false,
                 scalable: false,
                 rotatable: false,
-                checkImageOrigin: false,
                 autoCropArea: 1,
 
-                built: function() {
+                ready: function() {
                     $modal
                         .find('.qor-cropper__options-toggle')
                         .on(EVENT_CLICK, function() {
@@ -3589,7 +3929,12 @@ $(function() {
                         _this.cropData = cropData;
 
                         if (croppedCanvas) {
-                            url = croppedCanvas.toDataURL();
+                            try {
+                                url = croppedCanvas.toDataURL();
+                            } catch (error) {
+                                console.log(error);
+                                console.log('Please check image Cross-origin setting');
+                            }
                         }
 
                         $modal.find(CLASS_OPTIONS + ' input').each(function() {
@@ -3642,18 +3987,18 @@ $(function() {
                         if (width / height === aspectRatio) {
                             list.push(
                                 '<label>' +
-                                    '<input class="qor-cropper__options-input" type="checkbox" name="' +
-                                    name +
-                                    '" checked> ' +
-                                    '<span>' +
-                                    name +
-                                    '<small>(' +
-                                    width +
-                                    '&times;' +
-                                    height +
-                                    ' px)</small>' +
-                                    '</span>' +
-                                    '</label>'
+                                '<input class="qor-cropper__options-input" type="checkbox" name="' +
+                                name +
+                                '" checked> ' +
+                                '<span>' +
+                                name +
+                                '<small>(' +
+                                width +
+                                '&times;' +
+                                height +
+                                ' px)</small>' +
+                                '</span>' +
+                                '</label>'
                             );
                         }
                     }
@@ -3676,6 +4021,7 @@ $(function() {
             }
 
             this.$output.val(JSON.stringify(this.data)).trigger(EVENT_CHANGE);
+            this.$formCropInput.val(JSON.stringify(this.data));
         },
 
         preview: function($target, emulateImageData, emulateCropData) {
@@ -3850,7 +4196,7 @@ $(function() {
     };
 
     $(function() {
-        let selector = '.qor-file__input',
+        let selector = ".qor-file__input:not([data-cropper='disabled'])",
             options = {
                 parent: '.qor-file',
                 output: '.qor-file__options',
@@ -4520,21 +4866,15 @@ $(function() {
 })(function($) {
     'use strict';
 
-    var location = window.location;
-    var NAMESPACE = 'qor.filter';
-    var EVENT_FILTER_CHANGE = 'filterChanged.' + NAMESPACE;
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
-    var EVENT_CLICK = 'click.' + NAMESPACE;
-    var EVENT_CHANGE = 'change.' + NAMESPACE;
-    var CLASS_IS_ACTIVE = 'is-active';
-    var CLASS_BOTTOMSHEETS = '.qor-bottomsheets';
-
-    function QorFilter(element, options) {
-        this.$element = $(element);
-        this.options = $.extend({}, QorFilter.DEFAULTS, $.isPlainObject(options) && options);
-        this.init();
-    }
+    let location = window.location,
+        NAMESPACE = 'qor.filter',
+        EVENT_FILTER_CHANGE = 'filterChanged.' + NAMESPACE,
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_CLICK = 'click.' + NAMESPACE,
+        EVENT_CHANGE = 'change.' + NAMESPACE,
+        CLASS_IS_ACTIVE = 'is-active',
+        CLASS_BOTTOMSHEETS = '.qor-bottomsheets';
 
     function encodeSearch(data, detached) {
         var search = decodeURI(location.search);
@@ -4563,7 +4903,7 @@ $(function() {
         var data = [];
 
         if (search && search.indexOf('?') > -1) {
-            search = search.split('?')[1];
+            search = search.replace(/\+/g, ' ').split('?')[1];
 
             if (search && search.indexOf('#') > -1) {
                 search = search.split('#')[0];
@@ -4598,6 +4938,12 @@ $(function() {
         return data;
     }
 
+    function QorFilter(element, options) {
+        this.$element = $(element);
+        this.options = $.extend({}, QorFilter.DEFAULTS, $.isPlainObject(options) && options);
+        this.init();
+    }
+
     QorFilter.prototype = {
         constructor: QorFilter,
 
@@ -4609,7 +4955,9 @@ $(function() {
         bind: function() {
             var options = this.options;
 
-            this.$element.on(EVENT_CLICK, options.label, $.proxy(this.toggle, this)).on(EVENT_CHANGE, options.group, $.proxy(this.toggle, this));
+            this.$element
+                .on(EVENT_CLICK, options.label, $.proxy(this.toggle, this))
+                .on(EVENT_CHANGE, options.group, $.proxy(this.toggle, this));
         },
 
         unbind: function() {
@@ -4617,19 +4965,20 @@ $(function() {
         },
 
         toggle: function(e) {
-            var $target = $(e.currentTarget);
-            var data = [];
-            var params;
-            var param;
-            var search;
-            var name;
-            var value;
-            var index;
-            var matched;
-            var paramName;
+            let $target = $(e.currentTarget),
+                data = [],
+                params,
+                param,
+                search,
+                name,
+                value,
+                index,
+                matched,
+                paramName;
 
             if ($target.is('select')) {
                 params = decodeSearch(decodeURI(location.search));
+
                 paramName = name = $target.attr('name');
                 value = $target.val();
                 param = [name];
@@ -6484,34 +6833,28 @@ $(function() {
     },
 
     click : function (e) {
-      var $target = $(e.target);
-      var data = $target.data();
+      let $target = $(e.target),
+        data = $target.data();
 
       if ($target.is(SEARCH_RESOURCE)){
-        var oldUrl = location.href.replace(/#/g, '');
-        var newUrl;
-        var newResourceName = data.resource;
-        var hasResource = /resource_name/.test(oldUrl);
-        var hasKeyword = /keyword/.test(oldUrl);
-        var resourceParam = 'resource_name=' + newResourceName;
-        var searchSymbol = hasKeyword ? '&' : '?keyword=&';
+        let url = QOR.Xurl(location.href, this.$element),
+          newUrl;
 
-        if (newResourceName){
-          if (hasResource){
-            newUrl = oldUrl.replace(/resource_name=\w+/g, resourceParam);
-          } else {
-            newUrl = oldUrl + searchSymbol + resourceParam;
-          }
+        if (data.resource) {
+          url.qset('resource_name', data.resource)
         } else {
-          newUrl = oldUrl.replace(/&resource_name=\w+/g, '');
+          url.qdel('resource_name')
         }
+
+        url.qdel('keyword');
+
+        newUrl = url.toString();
 
         if (history.pushState){
           this.fetchSearch(newUrl, $target);
         } else {
           location.href = newUrl;
         }
-
       }
     },
 
@@ -7154,7 +7497,11 @@ $(function() {
     return keys[0];
   }
 
-  var lock = {lock: false};
+  var lock = {
+    lock: false,
+    $parent: null,
+    $select: null,
+  };
 
   QorSelectOne.prototype = {
     constructor: QorSelectOne,
@@ -7208,26 +7555,32 @@ $(function() {
       lock.lock = true;
       setTimeout(function () {lock.lock = false}, 1000*3);
       var $this = $(e.target);
-      this.currentData = $this.data();
+      lock.currentData = $this.data();
 
-      this.BottomSheets = $body.data('qor.bottomsheets');
-      this.$parent = $this.closest(CLASS_PARENT);
+      lock.BottomSheets = $body.data('qor.bottomsheets');
+      lock.$parent = $this.closest(CLASS_PARENT);
+      lock.$select = lock.$parent.find('select');
 
-      this.currentData.url = this.currentData.selectoneUrl;
-      this.primaryField = this.currentData.remoteDataPrimaryKey;
-      this.displayField = this.currentData.remoteDataDisplayKey;
+      lock.currentData.url = lock.currentData.selectoneUrl;
+      lock.primaryField = lock.currentData.remoteDataPrimaryKey;
+      lock.displayField = lock.currentData.remoteDataDisplayKey;
+      lock.iconField = lock.currentData.remoteDataIconKey;
 
-      this.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
-      this.BottomSheets.open(this.currentData, this.handleSelectOne.bind(this));
+      lock.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
+      let data = $.extend({}, lock.currentData);
+      if (lock.$select.length) {
+        data.$element = lock.$select;
+      }
+      lock.BottomSheets.open(data, this.handleSelectOne.bind(this));
     },
 
     initItem: function() {
-      var $selectField = this.$parent.find(CLASS_SELECT_FIELD),
-          recordeUrl = this.currentData.remoteRecordeUrl,
+      var $selectField = lock.$parent.find(CLASS_SELECT_FIELD),
+          recordeUrl = lock.currentData.remoteRecordeUrl,
           selectedID;
 
       if (recordeUrl) {
-        this.$bottomsheets.find('tr[data-primary-key]').each(function () {
+        lock.$bottomsheets.find('tr[data-primary-key]').each(function () {
           var $this = $(this), data = $this.data();
           data.url = recordeUrl.replace("{ID}", data.primaryKey)
         })
@@ -7240,11 +7593,11 @@ $(function() {
       selectedID = $selectField.data().primaryKey;
 
       if (selectedID) {
-        this.$bottomsheets
+        lock.$bottomsheets
           .find('tr[data-primary-key="' + selectedID + '"]')
           .addClass(CLASS_SELECTED)
           .find('td:first')
-          .append(this.SELECT_ONE_SELECTED_ICON);
+          .append(lock.SELECT_ONE_SELECTED_ICON);
       }
     },
 
@@ -7263,7 +7616,7 @@ $(function() {
       };
 
       $bottomsheets.qorSelectCore(options).addClass(CLASS_ONE);
-      this.$bottomsheets = $bottomsheets;
+      lock.$bottomsheets = $bottomsheets;
       this.initItem();
     },
 
@@ -7277,15 +7630,22 @@ $(function() {
 
     handleResults: function(data) {
       var template,
-          $parent = this.$parent,
-          $select = $parent.find('select'),
+          $parent = lock.$parent,
           $selectFeild = $parent.find(CLASS_SELECT_FIELD);
 
-      data.displayName = this.displayField ? data[this.displayField] :
+      data.displayName = lock.displayField ? data[lock.displayField] :
           (data.Text || data.Name || data.Title || data.Code || firstTextKey(data));
-      data.selectoneValue = this.primaryField ? data[this.primaryField] : (data.primaryKey || data.ID);
+      data.selectoneValue = lock.primaryField ? data[lock.primaryField] : (data.primaryKey || data.ID);
 
-      if (!$select.length) {
+      if (lock.iconField) {
+          data.icon = data[lock.iconField];
+      }
+
+      if (data.icon && /\.svg/.test(data.icon)) {
+          data.iconSVG = true;
+      }
+
+      if (!lock.$select.length) {
         return;
       }
 
@@ -7298,12 +7658,12 @@ $(function() {
       $parent.prepend(template);
       $parent.find(CLASS_SELECT_TRIGGER).hide();
 
-      $select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
-      $select[0].value = data.primaryKey || data.ID;
+      lock.$select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
+      lock.$select[0].value = data.primaryKey || data.ID;
 
       $parent.trigger('qor.selectone.selected', [data]);
 
-      this.$bottomsheets.qorSelectCore('destroy').remove();
+      lock.$bottomsheets.qorSelectCore('destroy').remove();
       if (!$('.qor-bottomsheets').is(':visible')) {
         $('body').removeClass('qor-bottomsheets-open');
       }
@@ -7845,8 +8205,13 @@ $(function() {
 
             if (FormData) {
                 e.preventDefault();
+                let action = $form.prop('action'),
+                    continueEditing = /[?|&]continue_editing=true/.test(action);
 
-                $.ajax($form.prop('action'), {
+                if (continueEditing) {
+                    action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
+                }
+                $.ajax(action, {
                     method: $form.prop('method'),
                     data: new FormData(form),
                     dataType: 'html',
@@ -7856,23 +8221,29 @@ $(function() {
                         $submit.prop('disabled', true);
                         $.fn.qorSlideoutBeforeHide = null;
                     },
-                    success: function(html) {
-                        var returnUrl = $form.data('returnUrl');
-                        var refreshUrl = $form.data('refreshUrl');
-
+                    success: function(html, statusText, jqXHR) {
                         $slideout.trigger(EVENT_SLIDEOUT_SUBMIT_COMPLEMENT);
+                        let xLocation = jqXHR.getResponseHeader('X-Location');
+
+                        if (xLocation) {
+                            _this.load(xLocation);
+                            return
+                        }
+
+                        var returnUrl = $form.data('returnUrl'),
+                            refreshUrl = $form.data('refreshUrl');
 
                         if (refreshUrl) {
                             window.location.href = refreshUrl;
                             return;
                         }
 
-                        if (returnUrl == 'refresh') {
+                        if (returnUrl === 'refresh') {
                             _this.refresh();
                             return;
                         }
 
-                        if (returnUrl && returnUrl != 'refresh') {
+                        if (returnUrl && returnUrl !== 'refresh') {
                             _this.load(returnUrl);
                         } else {
                             var prefix = '/' + location.pathname.split('/')[1];

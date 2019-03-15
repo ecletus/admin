@@ -232,10 +232,10 @@
 
         search: function() {
             var $bottomsheets = this.$bottomsheets,
-                param = '?keyword=',
+                param = 'keyword=',
                 baseUrl = $bottomsheets.data().url,
-                searchValue = $.trim($bottomsheets.find(CLASS_BOTTOMSHEETS_INPUT).val()),
-                url = baseUrl + param + searchValue;
+                searchValue = $.trim($bottomsheets.find(CLASS_BOTTOMSHEETS_INPUT).val() || ''),
+                url = baseUrl + (baseUrl.indexOf('?') == -1 ? '?' : '&') + param + searchValue;
 
             this.reload(url);
         },
@@ -260,7 +260,7 @@
             var $bottomsheets = this.$bottomsheets,
                 _this = this;
 
-            $.get(url, function(response) {
+            $.get(url, $.proxy(function(response) {
                 var $response = $(response).find(CLASS_MAIN_CONTENT),
                     $responseHeader = $response.find(CLASS_BODY_HEAD),
                     $responseBody = $response.find(CLASS_BODY_CONTENT);
@@ -269,18 +269,18 @@
                     $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html());
 
                     if ($responseHeader.length) {
-                        _this.$body
+                        this.$body
                             .find(CLASS_BODY_HEAD)
                             .html($responseHeader.html())
                             .trigger('enable');
-                        _this.addHeaderClass();
+                        this.addHeaderClass();
                     }
                     // will trigger this event(relaod.qor.bottomsheets) when bottomsheets reload complete: like pagination, filter, action etc.
                     $bottomsheets.trigger(EVENT_RELOAD);
                 } else {
-                    _this.reload(url);
+                    this.reload(url);
                 }
-            }).fail(function() {
+            }, this)).fail(function() {
                 window.alert('server error, please try again later!');
             });
         },
@@ -478,6 +478,10 @@
                 return;
             }
 
+            if (data.$element) {
+                url = QOR.Xurl(url, data.$element).toString();
+            }
+
             this.show();
             this.addLoading($body);
 
@@ -546,13 +550,13 @@
                                     .data('selectId', resourseData.selectId)
                                     .data('loadInline', true);
                                 if (
-                                    selectModal != 'one' &&
+                                    selectModal !== 'one' &&
                                     !data.selectNohint &&
-                                    (typeof resourseData.maxItem === 'undefined' || resourseData.maxItem != '1')
+                                    (typeof resourseData.maxItem === 'undefined' || resourseData.maxItem !== '1')
                                 ) {
                                     $body.addClass('has-hint');
                                 }
-                                if (selectModal == 'mediabox' && !this.scriptAdded) {
+                                if (selectModal === 'mediabox' && !this.scriptAdded) {
                                     this.loadMedialibraryJS($response);
                                 }
                             }

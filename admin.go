@@ -2,34 +2,44 @@ package admin
 
 import (
 	"github.com/aghape/assets"
+	"github.com/aghape/core"
 	qorconfig "github.com/aghape/core/config"
 	"github.com/aghape/core/helpers"
+	"github.com/aghape/db"
 	"github.com/aghape/session"
+	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena-go/xroute"
 	"github.com/moisespsena/go-assetfs"
 	"github.com/moisespsena/go-edis"
 	"github.com/moisespsena/go-options"
-	"github.com/moisespsena/go-route"
 	"github.com/moisespsena/template/html/template"
 )
 
+const ROLE = "Admin"
+
 type AdminConfig struct {
 	*qorconfig.Config
-	MountPath  string
-	AssetFS    assetfs.Interface
-	TemplateFS assetfs.Interface
-	StaticFS   assetfs.Interface
-	Data       options.Options
+	MountPath       string
+	AssetFS         assetfs.Interface
+	TemplateFS      assetfs.Interface
+	StaticFS        assetfs.Interface
+	Data            options.Options
+	FakeDBDialect   string
+	ContextFactory  *core.ContextFactory
+	UserResourceUID string
 }
 
 func NewConfig(config *qorconfig.Config) *AdminConfig {
 	return &AdminConfig{Config: config}
 }
 
-type Router = route.Mux
+type Router = xroute.Mux
 
 // Admin is a struct that used to generate admin/api interface
 type Admin struct {
 	edis.EventDispatcher
+	Paged
+	Name           string
 	SiteName       string
 	SiteTitle      string
 	Config         *AdminConfig
@@ -45,13 +55,20 @@ type Admin struct {
 	ResourcesByParam    map[string]*Resource
 	ResourcesByUID      map[string]*Resource
 	searchResources     []*Resource
-	Router              *route.Mux
+	Router              *xroute.Mux
 	funcMaps            template.FuncMap
 	metaConfigorMaps    map[string]func(*Meta)
 	NewContextCallbacks []func(context *Context) *Context
 	ViewPaths           map[string]bool
 	Data                options.Options
 	Cache               helpers.SyncMap
+	SettingsResource    *Resource
+	FakeDB              *aorm.DB
+	ContextFactory      *core.ContextFactory
+
+	settings settings
+
+	onRouter []func(r xroute.Router)
 }
 
 // ResourceNamer is an interface for models that defined method `ResourceName`
@@ -64,7 +81,6 @@ func New(config *AdminConfig) *Admin {
 	admin := &Admin{
 		Config:           config,
 		funcMaps:         make(template.FuncMap),
-		Router:           route.NewMux(PKG),
 		metaConfigorMaps: metaConfigorMaps,
 		Transformer:      DefaultTransformer,
 		Resources:        make(map[string]*Resource),
@@ -74,11 +90,6 @@ func New(config *AdminConfig) *Admin {
 	}
 
 	admin.SetDispatcher(admin)
-
-	admin.Router.Intersept(&route.Middleware{
-		Name:    PKG,
-		Handler: admin.routeInterseptor,
-	})
 
 	if config.TemplateFS != nil {
 		admin.TemplateFS = config.TemplateFS
@@ -95,11 +106,21 @@ func New(config *AdminConfig) *Admin {
 		admin.Data = make(options.Options)
 	}
 
+	if admin.Config.FakeDBDialect == "" {
+		admin.Config.FakeDBDialect = db.DEFAULT_DIALECT
+	}
+	admin.FakeDB = aorm.FakeDB(admin.Config.FakeDBDialect)
+
 	cache := make(options.Options)
 	admin.Data.Set("cache", &cache)
 
-	admin.registerCompositePrimaryKeyCallback()
+	admin.OnRouter(admin.registerCompositePrimaryKeyCallback)
+
 	return admin
+}
+
+func (admin *Admin) OnRouter(f ...func(r xroute.Router)) {
+	admin.onRouter = append(admin.onRouter, f...)
 }
 
 func (admin *Admin) Init() {
@@ -149,13 +170,4 @@ func (admin *Admin) RegisterMetaConfigor(kind string, fc func(*Meta)) {
 // RegisterFuncMap register view funcs, it could be used in view templates
 func (admin *Admin) RegisterFuncMap(name string, fc interface{}) {
 	admin.funcMaps[name] = fc
-}
-
-func (admin *Admin) InitRoutes() *route.Mux {
-	for param, res := range admin.ResourcesByParam {
-		pattern := "/" + param
-		r := res.InitRoutes()
-		admin.Router.Mount(pattern, r)
-	}
-	return admin.Router
 }

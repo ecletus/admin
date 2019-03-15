@@ -92,7 +92,7 @@ func (url *ResourceURL) URL(context *Context) string {
 	}
 
 	for fname, fvalue := range url.Filters {
-		query = append(query, "filters["+fname+"].Value="+fvalue)
+		query = append(query, "filtersByName["+fname+"].Value="+fvalue)
 	}
 
 	if url.DynamicFilters != nil {
@@ -100,7 +100,7 @@ func (url *ResourceURL) URL(context *Context) string {
 		url.DynamicFilters(context, dynamicFilters)
 
 		for fname, fvalue := range dynamicFilters {
-			query = append(query, "filters["+fname+"].Value="+fvalue)
+			query = append(query, "filtersByName["+fname+"].Value="+fvalue)
 		}
 	}
 

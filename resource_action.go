@@ -127,7 +127,7 @@ type ActionArgument struct {
 type ActionType int
 
 const (
-	ActionDefault        ActionType = iota
+	ActionDefault ActionType = iota
 	ActionPrimary
 	ActionInfo
 	ActionDanger
@@ -142,21 +142,25 @@ var ActionTypeName = []string{
 
 // Action action definiation
 type Action struct {
-	Name        string
-	Label       string
-	Method      string
-	URL         func(record interface{}, context *Context, args ...interface{}) string
-	URLOpenType string
-	Available   func(context *Context) bool
-	Visible     func(record interface{}, context *Context) bool
-	Handler     func(argument *ActionArgument) error
-	Modes       []string
-	Resource    *Resource
-	Permission  *roles.Permission
-	Type       ActionType
+	Name           string
+	Label          string
+	Method         string
+	URL            func(record interface{}, context *Context, args ...interface{}) string
+	URLOpenType    string
+	Available      func(context *Context) bool
+	IndexVisible   func(context *Context) bool
+	Visible        func(record interface{}, context *Context) bool
+	Handler        func(argument *ActionArgument) error
+	Modes          []string
+	Resource       *Resource
+	Permission     *roles.Permission
+	Type           ActionType
+	PermissionMode *roles.PermissionMode
+	ReturnURL      func(record interface{}, context *Context) string
+	RefreshURL     func(record interface{}, context *Context) string
 }
 
-func (action *Action) TypeName() string{
+func (action *Action) TypeName() string {
 	return ActionTypeName[action.Type]
 }
 
@@ -167,7 +171,11 @@ func (action Action) ToParam() string {
 
 // IsAllowed check if current user has permission to view the action
 func (action Action) IsAllowed(mode roles.PermissionMode, context *Context, records ...interface{}) bool {
-	if action.Visible != nil {
+	if len(records) == 0 {
+		if action.IndexVisible != nil && !action.IndexVisible(context) {
+			return false
+		}
+	} else if action.Visible != nil {
 		for _, record := range records {
 			if !action.Visible(record, context) {
 				return false
@@ -176,26 +184,26 @@ func (action Action) IsAllowed(mode roles.PermissionMode, context *Context, reco
 	}
 
 	if action.Permission != nil {
-		return action.HasPermission(mode, context.Context)
+		return core.HasPermission(action, mode, context.Context)
 	}
 
 	if context.Resource != nil {
-		return context.Resource.HasPermission(mode, context.Context)
+		return core.HasPermission(context.Resource, mode, context.Context)
 	}
 	return true
 }
 
 // HasPermission check if current user has permission for the action
-func (action Action) HasPermission(mode roles.PermissionMode, context *core.Context) bool {
+func (action Action) HasPermissionE(mode roles.PermissionMode, context *core.Context) (bool, error) {
 	if action.Permission != nil {
-		var roles = []interface{}{}
+		var roles_ = []interface{}{}
 		for _, role := range context.Roles {
-			roles = append(roles, role)
+			roles_ = append(roles_, role)
 		}
-		return action.Permission.HasPermission(mode, roles...)
+		return roles.HasPermissionDefaultE(true, action.Permission, mode, roles_...)
 	}
 
-	return true
+	return true, roles.ErrDefaultPermission
 }
 
 // FindSelectedRecords find selected records when run bulk actions
@@ -214,7 +222,7 @@ func (actionArgument *ActionArgument) FindSelectedRecords() []interface{} {
 
 	clone := context.clone()
 	for _, primaryValue := range actionArgument.PrimaryValues {
-		primaryQuerySQL, primaryParams := resource.ToPrimaryQueryParams(primaryValue)
+		primaryQuerySQL, primaryParams := resource.PrimaryQuery(primaryValue)
 		sqls = append(sqls, primaryQuerySQL)
 		sqlParams = append(sqlParams, primaryParams...)
 	}

@@ -1,0 +1,27 @@
+<div class="qor-page__header"></div>
+<div class="qor-page__body qor-page__show" data-toggle="qor.inlineEdit"
+      data-button-save="{{t "github_com:aghape:admin.showpage.inlineedit.button.save" "save"}}"
+      data-button-cancel="{{t "github_com:aghape:admin.showpage.inlineedit.button.cancel_edit" "cancel edit"}}">
+  <div style="background-color: #FFF9C4; text-align: center; font-weight: bold; padding: 10px">
+    {{t "github_com:aghape:admin.alerts.recorde_deleted" "DELETED"}}
+  </div>
+  {{if not (qor_context).NotFound}}
+    <div class="qor-form-container">
+      {{if has_update_permission .Resource}}
+        <form action="{{join_url (url_for .Resource) "restore"}}" method="post" enctype="multipart/form-data">
+          <input type="hidden" name="_method" value="PUT">
+          <input type="hidden" name="primary_values[]" value="{{.Context.ResourceID}}">
+          <a href="javascript:void(0);" onclick="QOR.submitContinueEditing(this);" class="mdl-button mdl-button--fab mdl-button--primary mdl-js-button mdl-js-ripple-effect qor-button--edit">
+            <i class="material-icons">restore_from_trash</i>
+          </a>
+        </form>
+      {{end}}
+
+      <form class="qor-form" action="{{url_for .Result .Resource}}" method="POST" enctype="multipart/form-data">
+        <input name="_method" value="PUT" type="hidden">
+
+        {{render_form .Result (show_sections .Result)}}
+      </form>
+    </div>
+  {{end}}
+</div>

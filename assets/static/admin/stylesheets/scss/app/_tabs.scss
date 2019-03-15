@@ -197,14 +197,14 @@
     }
 }
 
-@media screen and (min-width:1025px) {
+@media screen and (min-width:513px) {
     .qor-layout--no-desktop-drawer-button .qor-layout__tab-bar {
         padding-left: 16px;
         width: calc(100% - 32px);
     }
 }
 
-@media screen and (max-width:1024px) {
+@media screen and (max-width:512px) {
     .qor-layout__tab {
         padding: 0 12px
     }

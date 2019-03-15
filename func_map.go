@@ -22,7 +22,9 @@ import (
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena/go-i18n-modular/i18nmod"
+	"github.com/moisespsena/go-path-helpers"
 	"github.com/moisespsena/template/funcs"
 	"github.com/moisespsena/template/html/template"
 )
@@ -120,7 +122,7 @@ func (context *Context) UseTheme(name string) {
 //     context.URLFor(productResource)
 func (context *Context) URLFor(value interface{}, resources ...*Resource) string {
 	if admin, ok := value.(*Admin); ok {
-		return context.GenURL(admin.Router.Prefix())
+		return context.GenURL(admin.Config.MountPath)
 	} else if urler, ok := value.(interface {
 		URL(*Context) string
 	}); ok {
@@ -137,15 +139,43 @@ func (context *Context) URLFor(value interface{}, resources ...*Resource) string
 			return res.GetIndexLink(context.Context, context.ParentResourceID)
 		}
 
-		return res.GetLink(value, context.Context, context.ParentResourceID)
+		uri := res.GetLink(value, context.Context, context.ParentResourceID)
+		return uri
 	}
 	return context.GenURL("")
+}
+
+// URLFor generate url for resource value
+//     context.URLFor(&Product{})
+//     context.URLFor(&Product{ID: 111})
+//     context.URLFor(productResource)
+func (context *Context) TopURLFor(value interface{}, resources ...*Resource) string {
+	var res *Resource
+	if len(resources) == 0 {
+		res = context.Resource
+	} else {
+		res = resources[0]
+	}
+	res = res.Top()
+
+	if value == nil {
+		return context.GenURL(res.GetIndexURI())
+	}
+	if vs, ok := value.(string); ok {
+		if vs == "" {
+			return context.GenURL(res.GetIndexURI())
+		}
+		return context.GenURL(res.GetURI(vs))
+	}
+	return context.GenURL(res.URLFor(value))
 }
 
 func (context *Context) linkTo(text interface{}, link interface{}) template.HTML {
 	text = reflect.Indirect(reflect.ValueOf(text)).Interface()
 	if linkStr, ok := link.(string); ok {
-		if linkStr[0:1] == "@" {
+		if linkStr == "" {
+			linkStr = "javascript:void(0)"
+		} else if linkStr[0:1] == "@" {
 			linkStr = context.GenURL(linkStr[1:])
 		}
 		return template.HTML(fmt.Sprintf(`<a href="%v">%v</a>`, linkStr, text))
@@ -183,7 +213,7 @@ func (context *Context) valueOf(valuer func(interface{}, *core.Context) interfac
 	}
 
 	if !meta.Virtual {
-		utils.ExitWithMsg(fmt.Sprintf("No valuer found for meta %v of resource %v", meta.Name, meta.baseResource.Name))
+		utils.ExitWithMsg(fmt.Sprintf("No valuer found for meta %v of resource %v", meta.Name, meta.BaseResource.Name))
 	}
 	return nil
 }
@@ -255,27 +285,21 @@ func (context *Context) renderSections(value interface{}, sections []*Section, p
 
 func (context *Context) renderFilter(filter *Filter) template.HTML {
 	var (
-		err    error
-		result = bytes.NewBufferString("")
+		err      error
+		executor *template.Executor
+		dir      = "filter"
+		result   = bytes.NewBufferString("")
 	)
 
-	defer func() {
-		if r := recover(); r != nil {
-			msg := fmt.Sprintf("Get error when render template for filter %v (%v): %v", filter.Name, filter.Type, r)
-			if et, ok := r.(template.ErrorWithTrace); ok {
-				et.Err = msg
-				panic(et)
-			}
-			debug.PrintStack()
-			result.WriteString(msg)
-		}
-	}()
+	if filter.advanced {
+		dir = "advanced_filter"
+	}
 
-	if executor, err := context.GetTemplate(fmt.Sprintf("metas/filter/%v", filter.Type)); err == nil {
+	if executor, err = context.GetTemplate(fmt.Sprintf("metas/%v/%v", dir, filter.Type)); err == nil {
 		var data = map[string]interface{}{
 			"Filter":          filter,
-			"Label":           filter.Label,
-			"InputNamePrefix": fmt.Sprintf("filters[%v]", filter.Name),
+			"Label":           filter.GetLabel(context.Context),
+			"InputNamePrefix": fmt.Sprintf("filtersByName[%v]", filter.Name),
 			"Context":         context,
 			"Resource":        context.Resource,
 		}
@@ -284,22 +308,25 @@ func (context *Context) renderFilter(filter *Filter) template.HTML {
 	}
 
 	if err != nil {
+		context.AddError(err)
 		result.WriteString(fmt.Sprintf("got error when render filter template for %v(%v):%v", filter.Name, filter.Type, err))
 	}
 
 	return template.HTML(result.String())
 }
 
+func (context *Context) savedFilters() (filters []SavedFilter) {
+	context.Admin.settings.Get("saved_filters", &filters, context)
+	return
+}
+
 func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []string, metaType string, writer *bytes.Buffer) {
-	if meta.Name == "Turma" {
-		println()
-	}
 	var (
 		err            error
 		funcsMap       = funcs.FuncMap{}
 		executor       *template.Executor
 		formattedValue = context.FormattedValueOf(value, meta)
-		show           = context.Type == SHOW
+		show           = context.Type.Has(SHOW) || context.Type.Has(INDEX)
 	)
 	if show && !meta.ForceShowZero && meta.IsZero(value, formattedValue) {
 		return
@@ -312,7 +339,7 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 	var generateNestedRenderSections = func(kind string) func(interface{}, *Meta, []*Section, int, ...string) template.HTML {
 		return func(value interface{}, meta *Meta, sections []*Section, index int, prefx ...string) template.HTML {
 			var result = bytes.NewBufferString("")
-			newPrefix := prefix
+			newPrefix := append([]string{}, prefix...)
 
 			if len(prefx) > 0 && prefx[0] != "" {
 				for prefx[0][0] == '.' {
@@ -387,7 +414,7 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 			others = append(others, fmt.Sprintf("metas/%v/%v", metaType, metaUserType))
 		}
 
-		if executor, err = context.GetTemplateOrDefault(fmt.Sprintf("%v/metas/%v/%v", meta.baseResource.ToParam(), metaType, meta.Name),
+		if executor, err = context.GetTemplateOrDefault(fmt.Sprintf("%v/metas/%v/%v", meta.BaseResource.ToParam(), metaType, meta.Name),
 			TemplateExecutorMetaValue, others...); err != nil {
 			err = fmt.Errorf("haven't found %v template for meta %v: %v", metaType, meta.Name, err)
 		}
@@ -398,7 +425,7 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 
 		var data = map[string]interface{}{
 			"Context":       context,
-			"BaseResource":  meta.baseResource,
+			"BaseResource":  meta.BaseResource,
 			"Meta":          meta,
 			"ResourceValue": value,
 			"Value":         formattedValue,
@@ -433,6 +460,10 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 }
 
 func (context *Context) isEqual(value interface{}, hasValue interface{}) bool {
+	if (value == nil && hasValue != nil) || (value != nil && hasValue == nil) {
+		return false
+	}
+
 	var result string
 
 	if reflect.Indirect(reflect.ValueOf(hasValue)).Kind() == reflect.Struct {
@@ -446,11 +477,12 @@ func (context *Context) isEqual(value interface{}, hasValue interface{}) bool {
 	if reflectValue.Kind() == reflect.Struct {
 		scope := &aorm.Scope{Value: value}
 		return fmt.Sprint(scope.PrimaryKeyValue()) == result
-	} else if reflectValue.Kind() == reflect.String {
-		return reflectValue.Interface().(string) == result
-	} else {
-		return fmt.Sprint(reflectValue.Interface()) == result
 	}
+
+	for reflectValue.Kind() == reflect.Ptr {
+		reflectValue = reflectValue.Elem()
+	}
+	return fmt.Sprint(reflectValue.Interface()) == result
 }
 
 func (context *Context) isIncluded(value interface{}, hasValue interface{}) bool {
@@ -516,27 +548,31 @@ func (context *Context) indexSections(resources ...*Resource) []*Section {
 	if scheme == nil {
 		scheme = res.Scheme
 	}
-	return res.allowedSections(nil, scheme.IndexAttrs(), context, roles.Read)
+	sections := scheme.IndexSections(context)
+	return sections
 }
 
-func (context *Context) editSections(res *Resource, record ...interface{}) []*Section {
-	if len(record) == 0 {
-		record = append(record, nil)
+func (context *Context) editSections(res *Resource, recorde ...interface{}) []*Section {
+	if len(recorde) == 0 {
+		recorde = append(recorde, nil)
 	}
-	return res.allowedSections(record[0], res.EditAttrs(), context, roles.Read)
+	return res.Scheme.EditSections(context, recorde[0])
 }
 
 func (context *Context) newSections(resources ...*Resource) []*Section {
 	res := context.getResource(resources...)
-	return res.allowedSections(nil, res.NewAttrs(), context, roles.Create)
+	return res.Scheme.NewSections(context)
 }
 
-func (context *Context) showSections(record interface{}, resources ...*Resource) []*Section {
+func (context *Context) showSections(recorde interface{}, resources ...*Resource) []*Section {
 	res := context.getResource(resources...)
-	return res.allowedSections(record, res.ShowAttrs(), context, roles.Read)
+	return res.ShowSections(context, recorde)
 }
 
 func (context *Context) editMetaSections(meta *Meta, record interface{}) []*Section {
+	if meta.Resource == nil {
+		panic("admin.func_map.editMetaSections: meta.Resource is nil")
+	}
 	context = context.CreateChild(meta.Resource, record)
 	res := meta.Resource
 	var attrs []*Section
@@ -552,6 +588,9 @@ func (context *Context) editMetaSections(meta *Meta, record interface{}) []*Sect
 }
 
 func (context *Context) newMetaSections(meta *Meta, record interface{}) []*Section {
+	if meta.Resource == nil {
+		panic("admin.func_map.newMetaSections: meta.Resource is nil")
+	}
 	context = context.CreateChild(meta.Resource, record)
 	res := meta.Resource
 	var attrs []*Section
@@ -567,6 +606,9 @@ func (context *Context) newMetaSections(meta *Meta, record interface{}) []*Secti
 }
 
 func (context *Context) showMetaSections(meta *Meta, record interface{}) []*Section {
+	if meta.Resource == nil {
+		panic("admin.func_map.showMetaSections: meta.Resource is nil")
+	}
 	context = context.CreateChild(meta.Resource, record)
 	res := meta.Resource
 	var attrs []*Section
@@ -585,6 +627,7 @@ type menu struct {
 	*Menu
 	Active   bool
 	SubMenus []*menu
+	URL      string
 }
 
 func (context *Context) getMenus() (menus []*menu) {
@@ -603,7 +646,7 @@ func (context *Context) getMenus() (menus []*menu) {
 					continue
 				}
 			}
-			if m.HasPermission(roles.Read, context.Context) {
+			if core.HasPermission(m, roles.Read, context.Context) {
 				var menu = &menu{Menu: m}
 				url := m.RelativePath
 
@@ -611,6 +654,8 @@ func (context *Context) getMenus() (menus []*menu) {
 					mostMatchedMenu = menu
 					mostMatchedLength = len(url)
 				}
+
+				menu.URL = m.URL(context)
 
 				addMenu(menu, menu.GetSubMenus())
 				parent.SubMenus = append(parent.SubMenus, menu)
@@ -633,6 +678,15 @@ func (context *Context) getResourceMenus() (menus []*menu) {
 		addMenu    func(*menu, []*Menu)
 	)
 
+	var parents []interface{}
+	for _, parentID := range context.ParentResourceID {
+		parents = append(parents, parentID)
+	}
+
+	if context.ResourceID != "" {
+		parents = append(parents, context.ResourceID)
+	}
+
 	addMenu = func(parent *menu, menus []*Menu) {
 		for _, m := range menus {
 			if m.Enabled != nil {
@@ -640,21 +694,16 @@ func (context *Context) getResourceMenus() (menus []*menu) {
 					continue
 				}
 			}
-			if m.HasPermission(roles.Read, context.Context) {
+			if core.HasPermission(m, roles.Read, context.Context) {
 				var menu = &menu{Menu: m}
-				url := m.URL(context)
-
-				if url[0:1] == "@" {
-					url = url[1:]
-				}
-
+				menu.URL = m.URL(context, parents...)
 				addMenu(menu, menu.GetSubMenus())
 				parent.SubMenus = append(parent.SubMenus, menu)
 			}
 		}
 	}
 
-	if context.Resource != nil && context.ResourceID != "" {
+	if context.Resource != nil && (context.Resource.Config.Singleton || context.ResourceID != "") {
 		addMenu(globalMenu, context.Resource.GetMenus())
 	}
 
@@ -691,8 +740,9 @@ func (context *Context) GetScopes() (menus []*scopeMenu) {
 	}
 
 	scopes := context.Request.URL.Query()["scopes"]
+
 OUT:
-	for _, s := range context.Resource.scopes {
+	for _, s := range context.Scheme.scopes {
 		if s.Visible != nil && !s.Visible(context) {
 			continue
 		}
@@ -722,25 +772,20 @@ OUT:
 	return menus
 }
 
-// HasPermissioner has permission interface
-type HasPermissioner interface {
-	HasPermission(roles.PermissionMode, *core.Context) bool
+func (context *Context) hasCreatePermission(permissioner core.Permissioner) bool {
+	return core.HasPermission(permissioner, roles.Create, context.Context)
 }
 
-func (context *Context) hasCreatePermission(permissioner HasPermissioner) bool {
-	return permissioner.HasPermission(roles.Create, context.Context)
+func (context *Context) hasReadPermission(permissioner core.Permissioner) bool {
+	return core.HasPermission(permissioner, roles.Read, context.Context)
 }
 
-func (context *Context) hasReadPermission(permissioner HasPermissioner) bool {
-	return permissioner.HasPermission(roles.Read, context.Context)
+func (context *Context) hasUpdatePermission(permissioner core.Permissioner) bool {
+	return core.HasPermission(permissioner, roles.Update, context.Context)
 }
 
-func (context *Context) hasUpdatePermission(permissioner HasPermissioner) bool {
-	return permissioner.HasPermission(roles.Update, context.Context)
-}
-
-func (context *Context) hasDeletePermission(permissioner HasPermissioner) bool {
-	return permissioner.HasPermission(roles.Delete, context.Context)
+func (context *Context) hasDeletePermission(permissioner core.Permissioner) bool {
+	return core.HasPermission(permissioner, roles.Delete, context.Context)
 }
 
 // Page contain pagination information
@@ -922,8 +967,8 @@ func (context *Context) loadAdminStyleSheets() template.HTML {
 func (context *Context) loadActions(action string) template.HTML {
 	var (
 		actionKeys     []string
-		actionFiles    []api.FileInfo
-		actions        = map[string]api.FileInfo{}
+		actionFiles    []assetfsapi.FileInfo
+		actions        = map[string]assetfsapi.FileInfo{}
 		actionPatterns []assetfs.GlobPatter
 	)
 
@@ -1026,19 +1071,11 @@ func (context *Context) profileURL() string {
 }
 
 func (context *Context) t(key string, defaul ...interface{}) template.HTML {
-	var defauls []string
-	for _, value := range defaul {
-		defauls = append(defauls, fmt.Sprint(value))
-	}
-	return context.T(key, defauls...)
+	return context.T(key, defaul...)
 }
 
 func (context *Context) tt(key string, data interface{}, defaul ...interface{}) template.HTML {
-	var defauls []string
-	for _, value := range defaul {
-		defauls = append(defauls, fmt.Sprint(value))
-	}
-	return context.TT(key, data, defauls...)
+	return context.TT(key, data, defaul...)
 }
 
 func (context *Context) isSortableMeta(meta *Meta) bool {
@@ -1116,14 +1153,14 @@ func (context *Context) pageTitle() template.HTML {
 		return title.(template.HTML)
 	}
 	if context.Action == "search_center" {
-		return context.t(PKG + ".search_center.title")
+		return context.t(I18NGROUP + ".search_center.title")
 	}
 
 	if context.Resource == nil {
 		if context.PageTitle != "" {
 			return context.t(context.PageTitle)
 		}
-		return context.t(PKG + ".layout.title")
+		return context.t(I18NGROUP + ".layout.title")
 	}
 
 	if context.Action == "action" {
@@ -1142,7 +1179,7 @@ func (context *Context) pageTitle() template.HTML {
 
 	var (
 		defaultValue = context.GetActionLabel()
-		titleKey     = fmt.Sprintf(PKG+".form.%v.title", context.Action)
+		titleKey     = fmt.Sprintf(I18NGROUP+".form.%v.title", context.Action)
 		usePlural    bool
 	)
 
@@ -1171,6 +1208,40 @@ func (context *Context) FuncValues() *funcs.FuncValues {
 	return context.funcValues
 }
 
+func (context *Context) javaScriptTagSlice(names []string) template.HTML {
+	return context.javaScriptTag(names...)
+}
+
+func (context *Context) styleSheetTagSlice(names []string) template.HTML {
+	return context.styleSheetTag(names...)
+}
+
+func (context *Context) globalJavaScriptTag(names ...string) template.HTML {
+	var results []string
+	prefix := context.GenGlobalStaticURL("javascripts")
+	for _, name := range names {
+		results = append(results, fmt.Sprintf(`<script src="%s"></script>`, prefix+"/"+name))
+	}
+	return template.HTML(strings.Join(results, ""))
+}
+
+func (context *Context) globalStyleSheetTag(names ...string) template.HTML {
+	var results []string
+	prefix := context.GenGlobalStaticURL("stylesheets")
+	for _, name := range names {
+		results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s/%s">`, prefix, name))
+	}
+	return template.HTML(strings.Join(results, ""))
+}
+
+func (context *Context) globalJavaScriptTagSlice(names []string) template.HTML {
+	return context.globalJavaScriptTag(names...)
+}
+
+func (context *Context) globalStyleSheetTagSlice(names []string) template.HTML {
+	return context.globalStyleSheetTag(names...)
+}
+
 // FuncMap return funcs map
 func (context *Context) FuncMaps() []funcs.FuncMap {
 	funcMaps := []template.FuncMap{
@@ -1185,7 +1256,7 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 			"public_urlf":   func(args ...interface{}) string { return context.Context.Site.PublicURLf(args...) },
 			"admin_context": func() *Context { return context },
 			"current_user": func() common.User {
-				return context.CurrentUser
+				return context.CurrentUser()
 			},
 			"get_resource":         context.Admin.GetResourceByID,
 			"new_resource_context": context.NewResourceContext,
@@ -1200,6 +1271,7 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 				return context.Result
 			},
 			"t":          context.t,
+			"ts":         context.Ts,
 			"tt":         context.tt,
 			"flashes":    func() []session.Message { return context.SessionManager().Flashes() },
 			"pagination": context.Pagination,
@@ -1247,10 +1319,27 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 				return template.HTML(result.String())
 			},
 			"render_filter": context.renderFilter,
-			"page_title":    context.pageTitle,
+			"saved_filters": context.savedFilters,
+			"has_filter": func() bool {
+				query := context.Request.URL.Query()
+				for key := range query {
+					if regexp.MustCompile("filter[(\\w+)]").MatchString(key) && query.Get(key) != "" {
+						return true
+					}
+				}
+				return false
+			},
+			"page_title": context.pageTitle,
 			"meta_label": func(meta *Meta) template.HTML {
 				key, defaul := meta.GetLabelPair()
 				return context.Admin.T(context.Context, key, defaul)
+			},
+			"meta_description": func(meta *Meta) template.HTML {
+				key, defaul := meta.GetDescriptionPair()
+				if key != "" {
+					return context.Admin.T(context.Context, key, defaul)
+				}
+				return ""
 			},
 			"meta_placeholder": func(meta *Meta, context *Context, placeholder string) template.HTML {
 				if getPlaceholder, ok := meta.Config.(interface {
@@ -1261,11 +1350,21 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 					}
 				}
 
-				key := fmt.Sprintf("%v.attributes.%v.placeholder", meta.baseResource.I18nPrefix, meta.Name)
-				return context.Admin.T(context.Context, key, placeholder)
+				key := fmt.Sprintf("%v.attributes.%v.placeholder", meta.BaseResource.I18nPrefix, meta.Name)
+				return context.Admin.T(context.Context, key, func() string {
+					var key string
+					if meta.Config != nil {
+						key = i18nmod.PkgToGroup(path_helpers.PkgPathOf(meta)) + ".metas." + meta.Type + ".placeholder"
+					} else {
+						key = I18NGROUP + ".metas." + meta.Type + ".placeholder"
+					}
+					t := context.GetI18nContext().T(key).Default(placeholder)
+					return t.Get()
+				})
 			},
 
 			"url_for":            context.URLFor,
+			"top_url_for":        context.TopURLFor,
 			"link_to":            context.linkTo,
 			"patch_current_url":  context.PatchCurrentURL,
 			"patch_url":          context.PatchURL,
@@ -1277,8 +1376,8 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 			"new_resource_path":  context.newResourcePath,
 			"defined_resource_show_page": func(res *Resource) bool {
 				if res != nil {
-					if r := context.Admin.GetResourceByID(res.ID); r != nil {
-						return r.isSetShowAttrs
+					if res.Top().isSetShowAttrs {
+						return true
 					}
 				}
 
@@ -1306,9 +1405,18 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 			"has_update_permission": context.hasUpdatePermission,
 			"has_delete_permission": context.hasDeletePermission,
 
-			"qor_theme_class":        context.themesClass,
-			"javascript_tag":         context.javaScriptTag,
-			"stylesheet_tag":         context.styleSheetTag,
+			"qor_theme_class": context.themesClass,
+
+			"javascript_tag":              context.javaScriptTag,
+			"javascript_tag_slice":        context.javaScriptTagSlice,
+			"global_javascript_tag":       context.globalJavaScriptTag,
+			"global_javascript_tag_slice": context.globalJavaScriptTagSlice,
+
+			"stylesheet_tag":              context.styleSheetTag,
+			"stylesheet_tag_slice":        context.styleSheetTagSlice,
+			"global_stylesheet_tag":       context.globalStyleSheetTag,
+			"global_stylesheet_tag_slice": context.globalStyleSheetTagSlice,
+
 			"load_theme_stylesheets": context.loadThemeStyleSheets,
 			"load_theme_javascripts": context.loadThemeJavaScripts,
 			"load_admin_stylesheets": context.loadAdminStyleSheets,
@@ -1336,6 +1444,14 @@ func (context *Context) FuncMaps() []funcs.FuncMap {
 
 			"htmlify":       context.Htmlify,
 			"htmlify_items": context.HtmlifyItems,
+			"has_prefix": func(str interface{}, prefix string) bool {
+				return strings.HasPrefix(fmt.Sprint(str), prefix)
+			},
+			"has_sufix": func(str interface{}, sufix string) bool {
+				return strings.HasSuffix(fmt.Sprint(str), sufix)
+			},
+
+			"sprintf": fmt.Sprintf,
 		},
 		context.Admin.funcMaps,
 	}

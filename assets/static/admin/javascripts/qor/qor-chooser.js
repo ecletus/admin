@@ -33,12 +33,39 @@
                 option = {
                     minimumResultsForSearch: 8,
                     dropdownParent: $this.parent()
+                },
+                dataOptions = {
+                    displayKey: select2Data.remoteDataDisplayKey,
+                    iconKey: select2Data.remoteDataIconKey,
+                    getKey: function (data, key, defaul) {
+                        if (key) {
+                            let tmp = data, keys = key.split('.');
+                            for (let i = 0; (typeof tmp !== 'undefined') && i < keys.length; i++) {
+                                tmp = tmp[i]
+                            }
+                            if (typeof tmp !== 'undefined') {
+                                return tmp;
+                            }
+                        }
+                        return defaul
+                    }
                 };
 
             if (select2Data.remoteData) {
                 option.ajax = $.fn.select2.ajaxCommonOptions(select2Data);
+                let xurl = QOR.Xurl(select2Data["ajax-Url"], $this);
+
+                delete select2Data["ajax-Url"];
+                option.ajax.url = function (params) {
+                    xurl.query.keyword = [params.term];
+                    xurl.query.page = params.page;
+                    xurl.query.per_page = 20;
+                    let url = xurl.toString();
+                    return url
+                };
 
                 option.templateResult = function(data) {
+                    data.QorChooserOptions = dataOptions;
                     let tmpl = $this.parents('.qor-field').find('[name="select2-result-template"]');
                     if (tmpl.length > 0 && tmpl.data("raw")) {
                         var f = tmpl.data("func");
@@ -53,6 +80,7 @@
 
                 option.templateSelection = function(data) {
                     if (data.loading) return data.text;
+                    data.QorChooserOptions = dataOptions;
                     let tmpl = $this.parents('.qor-field').find('[name="select2-selection-template"]');
                     if (tmpl.length > 0 && tmpl.data("raw")) {
                         var f = tmpl.data("func");

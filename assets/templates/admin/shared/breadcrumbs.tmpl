@@ -2,8 +2,7 @@
     <nav>
 {{t "github_com:aghape:admin:layout.breadcrumb.you_are_here"}}
 {{range crumbs}}
-    {{$icon := .Icon}}
-    <a href="{{.URI qor_context}}">{{if $icon}}<i class="material-icons"{{if (contains $icon "/")}} style="background-position-y:bottom;background-image: url('{{$icon}}');background-repeat:no-repeat;background-size:contain"> {{else}}>{{$icon}}{{end}}</i> {{end}}{{t .Label}}</a>
+    <a href="{{.URI qor_context}}">{{t .Label}}</a>
 {{end}}
     <a class="active">{{page_title}}</a>
     </nav>

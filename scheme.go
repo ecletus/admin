@@ -3,6 +3,8 @@ package admin
 import (
 	"strings"
 
+	"github.com/moisespsena-go/xroute"
+
 	"github.com/aghape/core/utils"
 
 	"github.com/aghape/core/resource"
@@ -13,7 +15,10 @@ import (
 	"github.com/moisespsena/go-edis"
 )
 
-const E_SCHEME_ADDED = "schemeAdded"
+const (
+	E_SCHEME_ADDED = "schemeAdded"
+	AttrFragmentEnabled = "FragmentEnabled"
+)
 
 type SchemeDispatcher struct {
 	edis.EventDispatcher
@@ -22,11 +27,11 @@ type SchemeDispatcher struct {
 
 type SchemeConfig struct {
 	Visible bool
-	Setup func(scheme *Scheme)
+	Setup   func(scheme *Scheme)
 }
 
 type Scheme struct {
-	SchemeConfig SchemeConfig
+	SchemeConfig    SchemeConfig
 	EventDispatcher *SchemeDispatcher
 	SchemeName      string
 	SchemeParam     string
@@ -42,7 +47,8 @@ type Scheme struct {
 	SearchHandler func(keyword string, context *core.Context) *aorm.DB
 
 	scopes             []*Scope
-	filters            map[string]*Filter
+	filters            []*Filter
+	filtersByName      map[string]*Filter
 	Categories         []string
 	parentScheme       *Scheme
 	Children           map[string]*Scheme
@@ -53,6 +59,91 @@ type Scheme struct {
 	handler            *RouteHandler
 	PrepareContextFunc func(ctx *core.Context)
 	defaultMenu        *Menu
+
+	menus              *[]*Menu
+
+	orders []interface{}
+}
+
+func NewScheme(res *Resource, name string) *Scheme {
+	s := &Scheme{
+		Resource:      res,
+		SchemeName:    name,
+		filtersByName: make(map[string]*Filter),
+		SchemeParam:   utils.ToParamString(name),
+	}
+
+	s.Filter(&Filter{
+		Name:   "exclude",
+		Hidden: true,
+		Handler: func(db *aorm.DB, argument *FilterArgument) *aorm.DB {
+			var keys []string
+			for _, v := range argument.Value.Values {
+				if str := strings.TrimSpace(utils.ToString(v.Value)); str != "" {
+					for _, s := range strings.Split(str, " ") {
+						keys = append(keys, s)
+					}
+				}
+			}
+			if keys == nil {
+				return db
+			}
+			if len(keys) == 1 {
+				if sql, args := s.Resource.PrimaryQuery(keys[0], true); sql != "" {
+					return db.Where(sql, args...)
+				}
+				return db
+			}
+
+			if len(s.Resource.PrimaryFields) == 1 {
+				var pkeys []interface{}
+				for _, key := range keys {
+					for _, pkey := range strings.Split(key, ",") {
+						pkeys = append(pkeys, pkey)
+					}
+				}
+				if sql, args := s.Resource.ValuesToPrimaryQuery(true, pkeys...); sql != "" {
+					return db.Where(sql, args...)
+				}
+				return db
+			} else {
+				panic("Not implemented!")
+			}
+
+			return db
+		},
+	})
+
+	s.EventDispatcher = &SchemeDispatcher{Scheme: s}
+	return s
+}
+
+func (s *Scheme) Order(order ...interface{}) *Scheme {
+	s.orders = append(s.orders, order...)
+	return s
+}
+
+func (s *Scheme) SetOrder(order ...interface{}) *Scheme {
+	s.orders = order
+	return s
+}
+
+func (s *Scheme) Orders() []interface{} {
+	return s.orders
+}
+
+func (s *Scheme) CurrentOrders() []interface{} {
+	if s.orders == nil {
+		return s.Resource.Scheme.orders
+	}
+	return s.orders
+}
+
+func (s *Scheme) CurrentSearchHandler() func(keyword string, context *core.Context) *aorm.DB {
+	if s.SearchHandler == nil {
+		return s.Resource.Scheme.SearchHandler
+	}
+	return s.SearchHandler
 }
 
 func (s *Scheme) DefaultMenu() *Menu {
@@ -61,11 +152,11 @@ func (s *Scheme) DefaultMenu() *Menu {
 			s.defaultMenu = s.Resource.CreateMenu(!s.Resource.Config.Singleton)
 		} else {
 			s.defaultMenu = s.parentScheme.AddDefaultMenuChild(&Menu{
-				Name:s.SchemeName,
+				Name: s.SchemeName,
 				LabelFunc: func() string {
 					return s.I18nKey()
 				},
-				RelativePath:"/" + s.Resource.Param + s.Path(),
+				RelativePath: "/" + s.Resource.Param + s.Path(),
 			})
 		}
 	}
@@ -74,13 +165,6 @@ func (s *Scheme) DefaultMenu() *Menu {
 
 func (s *Scheme) AddDefaultMenuChild(child *Menu) *Menu {
 	m := s.DefaultMenu()
-	if len(m.subMenus) == 0 {
-		c := *m
-		m.Resource = nil
-		m.Permissioner = nil
-		c.Name += "All"
-		m.subMenus = appendMenu(m.subMenus, m.Ancestors, &c)
-	}
 	m.subMenus = appendMenu(m.subMenus, m.Ancestors, child)
 	return child
 }
@@ -180,17 +264,6 @@ func (s *Scheme) GetSchemeOk(param string) (child *Scheme, ok bool) {
 		}
 	}
 	return s, true
-}
-
-func NewScheme(res *Resource, name string) *Scheme {
-	s := &Scheme{
-		Resource:    res,
-		SchemeName:  name,
-		filters:     make(map[string]*Filter),
-		SchemeParam: utils.ToParamString(name),
-	}
-	s.EventDispatcher = &SchemeDispatcher{Scheme: s}
-	return s
 }
 
 func (s *Scheme) OnDBActionE(cb func(e *resource.DBEvent) error, action ...resource.DBActionEvent) (err error) {
@@ -304,7 +377,7 @@ func (s *Scheme) SortableAttrs(columns ...string) []string {
 			columns = s.Resource.ConvertSectionToStrings(s.indexSections)
 		}
 		s.sortableAttrs = &[]string{}
-		scope := core.FakeDB.NewScope(s.Resource.Value)
+		scope := s.Resource.FakeScope
 		for _, column := range columns {
 			if field, ok := scope.FieldByName(column); ok && field.DBName != "" {
 				attrs := append(*s.sortableAttrs, column)
@@ -329,11 +402,15 @@ func (s *Scheme) SearchAttrs(columns ...string) []string {
 		}
 
 		if len(columns) > 0 {
-			s.SearchHandler = func(keyword string, context *core.Context) *aorm.DB {
-				var filterFields []filterField
-				for _, column := range columns {
-					filterFields = append(filterFields, filterField{FieldName: column})
+			var filterFields []filterField
+			for _, column := range columns {
+				f := NewFieldFilter(s.Resource, column)
+				if f != nil {
+					filterFields = append(filterFields, filterField{Field: f})
 				}
+			}
+
+			s.SearchHandler = func(keyword string, context *core.Context) *aorm.DB {
 				return filterResourceByFields(s.Resource, filterFields, keyword, context.DB, context)
 			}
 		}
@@ -391,48 +468,76 @@ func (s *Scheme) CustomAttrs(name string, values ...interface{}) []*Section {
 }
 
 func (s *Scheme) IndexSections(context *Context) []*Section {
-	if len(s.indexSections) == 0 && s.Resource.Scheme != s {
-		return s.Resource.Scheme.IndexSections(context)
+	if len(s.indexSections) == 0 {
+		if s.parentScheme != nil {
+			return s.parentScheme.IndexSections(context)
+		}
+		if s.Resource.Scheme != s {
+			return s.Resource.Scheme.IndexSections(context)
+		}
 	}
-	return s.Resource.allowedSections(nil, s.IndexAttrs(), context, roles.Read)
+	sections := s.Resource.allowedSections(nil, s.IndexAttrs(), context, roles.Read)
+	return sections
 }
 
-func (s *Scheme) EditSections(context *Context, record interface{}) []*Section {
-	if len(s.editSections) == 0 && s.Resource.Scheme != s {
-		return s.Resource.Scheme.EditSections(context, record)
+func (s *Scheme) EditSections(context *Context, record interface{}) (sections []*Section) {
+	if len(s.editSections) == 0 {
+		if s.parentScheme != nil {
+			return s.parentScheme.EditSections(context, record)
+		}
+		if s.Resource.Scheme != s {
+			return s.Resource.Scheme.EditSections(context, record)
+		}
 	}
-	return s.Resource.allowedSections(record, s.EditAttrs(), context, roles.Read)
+	if s == s.Resource.Scheme && s.Resource.Fragment != nil {
+		sections = append(sections, &Section{Resource:s.Resource, Rows:[][]string{{AttrFragmentEnabled}}})
+	}
+	sections = append(sections, s.Resource.allowedSections(record, s.EditAttrs(), context, roles.Update)...)
+	return sections
 }
 
 func (s *Scheme) NewSections(context *Context) []*Section {
-	if len(s.newSections) == 0 && s.Resource.Scheme != s {
-		return s.Resource.Scheme.NewSections(context)
+	if len(s.newSections) == 0 {
+		if s.parentScheme != nil {
+			return s.parentScheme.NewSections(context)
+		}
+		if s.Resource.Scheme != s {
+			return s.Resource.Scheme.NewSections(context)
+		}
 	}
 	return s.Resource.allowedSections(nil, s.NewAttrs(), context, roles.Create)
 }
 
 func (s *Scheme) ShowSections(context *Context, record interface{}) []*Section {
-	if len(s.showSections) == 0 && s.Resource.Scheme != s {
-		return s.Resource.Scheme.ShowSections(context, record)
+	if len(s.showSections) == 0 {
+		if s.parentScheme != nil {
+			return s.parentScheme.ShowSections(context, record)
+		}
+		if s.Resource.Scheme != s {
+			return s.Resource.Scheme.ShowSections(context, record)
+		}
 	}
 	return s.Resource.allowedSections(record, s.ShowAttrs(), context, roles.Read)
 }
 
 func (s *Scheme) ContextSections(context *Context, recorde interface{}, action ...string) []*Section {
-	var actio ContextType
+	var b ContextType
 	if len(action) > 0 && action[0] != "" {
-		actio = ContextType(action[0])
+		b = ParseContextType(action[0])
 	} else {
-		actio = context.Type
+		b = context.Type
 	}
-	switch actio {
-	case NEW:
+
+	if b.Has(NEW) {
 		return s.NewSections(context)
-	case SHOW:
+	}
+	if b.Has(SHOW) {
 		return s.ShowSections(context, recorde)
-	case EDIT:
+	}
+	if b.Has(EDIT) {
 		return s.EditSections(context, recorde)
-	case INDEX:
+	}
+	if b.Has(INDEX) {
 		return s.IndexSections(context)
 	}
 	return nil
@@ -481,8 +586,17 @@ func (s *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
 	}
 
 	if !child.NotMount {
-		child.handler = s.Resource.IndexHandler().Child()
+		if s.Resource.Controller.Indexable() {
+			child.handler = s.Resource.Controller.ViewController.IndexHandler().Child()
+		} else {
+			child.handler = s.Resource.Controller.ViewController.ReadHandler().Child()
+		}
 		child.Resource.Router.Get(child.Path(), child.handler)
+		child.Resource.Router.Api(func(r xroute.Router) {
+			r.Overrides(func(r xroute.Router) {
+				r.Get(child.Path(), child.handler)
+			})
+		})
 
 		if c.Visible {
 			child.DefaultMenu()
@@ -494,8 +608,43 @@ func (s *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
 	return child
 }
 
-func (s *Scheme) IndexIntersept(interseptor func(chain *Chain)) {
-	s.Resource.IndexHandler().Intercept(interseptor)
+// GetMenus get all sidebar menus for admin
+func (s *Scheme) GetMenus() (menus []*Menu) {
+	if s.menus == nil {
+		if s.Resource.menus != nil {
+			return *s.Resource.menus
+		}
+		return
+	}
+	return *s.menus
+}
+
+// AddMenu add a menu to admin sidebar
+func (s *Scheme) AddMenu(menu ...*Menu) *Menu {
+	if s.menus == nil {
+		var menus []*Menu
+		s.menus = &menus
+	}
+	var m *Menu
+	for _, m = range menu {
+		m.prefix = s.Resource.Param
+		menus := appendMenu(*s.menus, m.Ancestors, m)
+		s.menus = &menus
+	}
+	return m
+}
+
+// GetMenu get sidebar menu with name
+func (s *Scheme) GetMenu(name string) *Menu {
+	var menus = s.menus
+	if menus == nil {
+		menus = s.Resource.menus
+	}
+	if menus == nil {
+		return nil
+	}
+
+	return getMenu(*menus, name)
 }
 
 type SchemeEvent struct {

@@ -38,6 +38,21 @@ func (admin *Admin) LoadCrumbs(rh *RouteHandler, ctx *Context, patterns ...strin
 					resCrumber.ID = key
 					ctx.RouteContext.URLParams.Add(res.ParamIDName(), key)
 				}
+			} else {
+				for _, m := range *res.menus {
+					switch p {
+					case m.RelativePath[1:], m.RelativePath[1:] + "/*":
+						if subRes := m.Resource; subRes != nil {
+							if subRes.Config.Singleton && subRes.HasKey() {
+								resCrumber = &ResourceCrumber{Resource: subRes, ParentID: append(resCrumber.ParentID, resCrumber.ID), ID: resCrumber.ID}
+							} else {
+								resCrumber = &ResourceCrumber{Resource: subRes, ParentID: append(resCrumber.ParentID, resCrumber.ID)}
+							}
+							res = subRes
+							crubers = append(crubers, resCrumber)
+						}
+					}
+				}
 			}
 		} else {
 			// id pattern

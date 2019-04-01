@@ -279,11 +279,15 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 		if !res.Config.Invisible {
 			menu := res.ParentResource.AddMenu(res.DefaultMenu())
 			menu.Enabled = func(menu *Menu, context *Context) bool {
-				if !context.NotFound && res.GetKey(context.Result) != "" {
-					if res.Config.MenuEnabled != nil {
-						return res.Config.MenuEnabled(menu, context)
+				if !context.NotFound {
+					if !context.IsResultSlice() {
+						if res.GetKey(context.Result) != "" {
+							if res.Config.MenuEnabled != nil {
+								return res.Config.MenuEnabled(menu, context)
+							}
+							return true
+						}
 					}
-					return true
 				}
 				return false
 			}

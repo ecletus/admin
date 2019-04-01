@@ -24,6 +24,10 @@ func (res *Resource) allowedSections(record interface{}, sections []*Section, co
 			for _, column := range row {
 				meta := section.Resource.GetMeta(column)
 				if meta != nil {
+					if meta.SectionNotAllowed {
+						continue
+					}
+					
 					if meta.Enabled != nil && !meta.Enabled(record, context, meta) {
 						continue
 					}
@@ -46,6 +50,7 @@ func (res *Resource) allowedSections(record interface{}, sections []*Section, co
 			newSections = append(newSections, newSection)
 		}
 	}
+
 	return newSections
 }
 

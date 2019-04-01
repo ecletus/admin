@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/ecletus/core/resource"
@@ -185,6 +186,14 @@ func (admin *Admin) NewContext(args ...interface{}) (c *Context) {
 	}
 
 	return
+}
+
+func (context *Context) IsResultSlice() bool {
+	if context.Result != nil {
+		value := reflect.ValueOf(context.Result)
+		return value.Kind() == reflect.Slice || value.Kind() == reflect.Ptr && value.Elem().Kind() == reflect.Slice
+	}
+	return false
 }
 
 func (context *Context) WithResource(res *Resource, value interface{}) func() {

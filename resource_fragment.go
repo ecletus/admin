@@ -6,7 +6,7 @@ import (
 	"github.com/ecletus/fragment"
 	"github.com/ecletus/helpers"
 	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena/go-error-wrap"
+	errwrap "github.com/moisespsena/go-error-wrap"
 )
 
 func (res *Resource) AddFragment(value fragment.FragmentModelInterface) *Resource {
@@ -43,7 +43,8 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 		}}, true)
 		if isForm {
 			meta := &Meta{
-				Name: AttrFragmentEnabled,
+				Name:              AttrFragmentEnabled,
+				SectionNotAllowed: true,
 			}
 			if cfg.Is {
 				meta.SkipDefaultLabel = true
@@ -96,8 +97,6 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 				}
 				return old(menu, ctx)
 			}
-		} else {
-
 		}
 	}
 

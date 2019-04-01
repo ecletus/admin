@@ -102,6 +102,8 @@ type Meta struct {
 	DefaultValueFunc      MetaValuer
 	proxyPath             []ProxyPath
 	Virtual               bool
+
+	SectionNotAllowed bool
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -242,6 +244,16 @@ func (meta *Meta) GetLabelPair() (string, string) {
 	}
 
 	return key, defaul
+}
+
+func (meta *Meta) GetLabelKey() (string) {
+	key := meta.Name
+
+	if meta.FieldLabel && meta.FieldName != "" {
+		key = meta.FieldName
+	}
+
+	return meta.BaseResource.I18nPrefix + ".attributes." + key
 }
 
 // metaConfig meta config
@@ -773,6 +785,10 @@ func (meta *Meta) IsZero(recorde, value interface{}) bool {
 		if vt == 0.0 {
 			return true
 		}
+	case time.Time:
+		return vt.IsZero()
+	case *time.Time:
+		return vt == nil || vt.IsZero()
 	}
 	return false
 }

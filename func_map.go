@@ -711,7 +711,7 @@ func (context *Context) getResourceMenus() (menus []*menu) {
 }
 
 func (context *Context) getResourceMenuActions() interface{} {
-	if context.Resource != nil && context.ResourceID != "" && context.Resource.GetKey(context.Result) != "" {
+	if context.Resource != nil && context.ResourceID != "" && !context.IsResultSlice() && context.Resource.GetKey(context.Result) != "" {
 		actions := context.AllowedActions(context.Resource.Actions, "menu_item", context.Result)
 		return &struct {
 			Context  *Context

@@ -124,7 +124,7 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 			param = append(param, utils.ToParamString(super.PluralName))
 			super = super.ParentResource
 		}
-		vf := res.ParentResource.FakeScope.SetVirtualField(res.Name, res.Value)
+		vf := res.ParentResource.FakeScope.SetVirtualField(fr.ID, res.Value)
 		vf.Setter = func(_ *aorm.VirtualField, recorde, value interface{}) {
 			r := recorde.(fragment.FragmentedModelInterface)
 			r.SetFormFragment(r, fr.ID, value.(fragment.FormFragmentModelInterface))
@@ -144,7 +144,7 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 				s.SetI18nKey(res.PluralLabelKey())
 				s.SchemeParam = utils.ToParamString(res.PluralName)
 				s.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
-					db = db.InlinePreload(res.Name, &aorm.InlinePreloadOptions{Join: aorm.JoinInner})
+					db = db.InlinePreload(fr.ID, &aorm.InlinePreloadOptions{Join: aorm.JoinInner})
 					return fr.Filter(db)
 				})
 				fr.scheme = s
@@ -154,7 +154,7 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 			},
 		})
 	} else if isForm {
-		vf := res.ParentResource.FakeScope.SetVirtualField(res.Name, res.Value)
+		vf := res.ParentResource.FakeScope.SetVirtualField(fr.ID, res.Value)
 		vf.Setter = func(_ *aorm.VirtualField, recorde, value interface{}) {
 			r := recorde.(fragment.FragmentedModelInterface)
 			r.SetFormFragment(r, fr.ID, value.(fragment.FormFragmentModelInterface))
@@ -164,7 +164,7 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 			return v, v != nil
 		}
 	} else {
-		vf := res.ParentResource.FakeScope.SetVirtualField(res.Name, res.Value)
+		vf := res.ParentResource.FakeScope.SetVirtualField(fr.ID, res.Value)
 		vf.Setter = func(_ *aorm.VirtualField, recorde, value interface{}) {
 			r := recorde.(fragment.FragmentedModelInterface)
 			r.SetFragment(r, fr.ID, value.(fragment.FragmentModelInterface))
@@ -176,7 +176,7 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 	}
 
 	_ = res.ParentResource.OnDBAction(func(e *resource.DBEvent) {
-		e.SetDB(e.DB().InlinePreload(res.Name))
+		e.SetDB(e.DB().InlinePreload(fr.ID))
 	}, resource.E_DB_ACTION_FIND_ONE.Before())
 
 	return fr
@@ -253,17 +253,20 @@ type FormFragmentRecordState struct {
 }
 
 func (f *FormFragmentRecordState) EditSections(context *Context) (sections []*Section) {
-	sections = append(sections, &Section{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
 	if !f.Config.NotInline && (f.Value != nil && f.Value.Enabled()) {
 		sections = append(sections, f.Resource.EditAttrs()...)
 	}
-	return f.Resource.allowedSections(f.Value, sections, context, roles.Update)
+	sections = f.Resource.allowedSections(f.Value, sections, context, roles.Update)
+
+	return append([]*Section{{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}}}, sections...)
 }
-func (f *FormFragmentRecordState) ShowSections(context *Context) []*Section {
+func (f *FormFragmentRecordState) ShowSections(context *Context) (sections []*Section) {
 	if f.Config.NotInline {
-		return f.Resource.allowedSections(f.Value, []*Section{{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}}}, context, roles.Read)
+		sections = append(sections, &Section{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
+	} else {
+		sections = f.Resource.allowedSections(f.Value, f.Resource.ShowAttrs(), context, roles.Read)
 	}
-	return f.Resource.allowedSections(f.Value, f.Resource.ShowAttrs(), context, roles.Read)
+	return 
 }
 func (f *FormFragmentRecordState) OnlyEnabledField(context *Context) bool {
 	if f.Config.NotInline {

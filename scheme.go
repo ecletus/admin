@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	E_SCHEME_ADDED = "schemeAdded"
+	E_SCHEME_ADDED      = "schemeAdded"
 	AttrFragmentEnabled = "FragmentEnabled"
 )
 
@@ -60,7 +60,7 @@ type Scheme struct {
 	PrepareContextFunc func(ctx *core.Context)
 	defaultMenu        *Menu
 
-	menus              *[]*Menu
+	menus *[]*Menu
 
 	orders []interface{}
 }
@@ -370,6 +370,13 @@ func (s *Scheme) ShowAttrs(values ...interface{}) []*Section {
 	return s.showSections
 }
 
+func (s *Scheme) NIESAttrs(values ...interface{}) {
+	s.NewAttrs(values...)
+	s.IndexAttrs(values...)
+	s.EditAttrs(values...)
+	s.ShowAttrs(values...)
+}
+
 // SortableAttrs set sortable attributes, sortable attributes could be click to order in qor table
 func (s *Scheme) SortableAttrs(columns ...string) []string {
 	if len(columns) != 0 || s.sortableAttrs == nil {
@@ -490,7 +497,7 @@ func (s *Scheme) EditSections(context *Context, record interface{}) (sections []
 		}
 	}
 	if s == s.Resource.Scheme && s.Resource.Fragment != nil {
-		sections = append(sections, &Section{Resource:s.Resource, Rows:[][]string{{AttrFragmentEnabled}}})
+		sections = append(sections, &Section{Resource: s.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
 	}
 	sections = append(sections, s.Resource.allowedSections(record, s.EditAttrs(), context, roles.Update)...)
 	return sections

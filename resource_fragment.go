@@ -6,7 +6,7 @@ import (
 	"github.com/ecletus/fragment"
 	"github.com/ecletus/helpers"
 	"github.com/moisespsena-go/aorm"
-	errwrap "github.com/moisespsena/go-error-wrap"
+	errwrap "github.com/moisespsena-go/error-wrap"
 )
 
 func (res *Resource) AddFragment(value fragment.FragmentModelInterface) *Resource {

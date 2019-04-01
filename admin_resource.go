@@ -13,7 +13,7 @@ import (
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena-go/xroute"
 	"github.com/moisespsena/go-edis"
-	"github.com/moisespsena/go-error-wrap"
+	"github.com/moisespsena-go/error-wrap"
 )
 
 func (admin *Admin) newResource(value interface{}, config *Config, onUid func(uid string)) *Resource {

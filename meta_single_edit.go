@@ -2,7 +2,7 @@ package admin
 
 import (
 	"errors"
-	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena-go/assetfs"
 	"github.com/ecletus/core/resource"
 )
 

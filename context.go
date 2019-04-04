@@ -17,8 +17,8 @@ import (
 	"github.com/ecletus/roles"
 	"github.com/ecletus/session"
 	"github.com/moisespsena-go/xroute"
-	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs"
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 	"github.com/moisespsena/template/cache"
 	"github.com/moisespsena/template/html/template"
 )

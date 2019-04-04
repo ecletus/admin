@@ -9,9 +9,9 @@ import (
 	"github.com/ecletus/session"
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/xroute"
-	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-edis"
-	"github.com/moisespsena/go-options"
+	"github.com/moisespsena-go/assetfs"
+	"github.com/moisespsena-go/edis"
+	"github.com/moisespsena-go/options"
 	"github.com/moisespsena/template/html/template"
 )
 

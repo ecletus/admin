@@ -3,8 +3,8 @@ package admin
 import (
 	"os"
 
-	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs"
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
 var (

@@ -13,15 +13,15 @@ import (
 
 	"github.com/ecletus/core/helpers"
 
-	"github.com/moisespsena/go-options"
+	"github.com/moisespsena-go/options"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/core/utils"
 	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena/go-assetfs"
-	"github.com/moisespsena/go-edis"
+	"github.com/moisespsena-go/assetfs"
+	"github.com/moisespsena-go/edis"
 )
 
 const (

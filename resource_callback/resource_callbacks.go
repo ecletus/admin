@@ -3,7 +3,7 @@ package resource_callback
 import (
 	"fmt"
 	"strings"
-	"github.com/moisespsena/go-topsort"
+	"github.com/moisespsena-go/topsort"
 	"github.com/ecletus/admin"
 )
 

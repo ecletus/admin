@@ -4,7 +4,7 @@ import (
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/utils"
 	"github.com/ecletus/plug"
-	"github.com/moisespsena/go-edis"
+	"github.com/moisespsena-go/edis"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"html/template"
 	"reflect"
 
-	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena-go/assetfs"
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/core/utils"

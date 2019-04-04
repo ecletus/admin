@@ -5,7 +5,7 @@ package admin
 import (
 	"strings"
 
-	assetfs "github.com/moisespsena/go-assetfs"
+	assetfs "github.com/moisespsena-go/assetfs"
 )
 
 func (context *Context) getAsset(fs assetfs.Interface, layouts ...string) (asset assetfs.AssetInterface, err error) {

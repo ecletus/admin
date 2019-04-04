@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moisespsena/go-edis"
+	"github.com/moisespsena-go/edis"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"

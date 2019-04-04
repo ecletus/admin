@@ -3,7 +3,7 @@ package admin
 import (
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
-	"github.com/moisespsena/go-edis"
+	"github.com/moisespsena-go/edis"
 )
 
 const (

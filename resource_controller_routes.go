@@ -4,11 +4,11 @@ import (
 	"github.com/moisespsena-go/xroute"
 )
 
-func (rc *ResourceController) RegisterDefaultSingletonRouters() {
-	vc := rc.ViewController
-	res := rc.Resource
+func (this *ResourceControllerBuilder) RegisterDefaultSingletonRouters() {
+	vc := this.ViewController
+	res := this.Resource
 
-	if rc.Readable() {
+	if this.Readable() {
 		var readHandler = vc.Handlers.Require(VA_READ)
 
 		readHandler.Path = P_SINGLETON_READ
@@ -17,7 +17,7 @@ func (rc *ResourceController) RegisterDefaultSingletonRouters() {
 			router.Get(P_SINGLETON_READ, readHandler)
 		})
 
-		if rc.Updatable() {
+		if this.Updatable() {
 			var (
 				updateForm    = vc.Handlers.Require(VA_UPDATE_FORM)
 				updateHandler = vc.Handlers.Require(VA_UPDATE)
@@ -26,12 +26,19 @@ func (rc *ResourceController) RegisterDefaultSingletonRouters() {
 			updateForm.Path = P_SINGLETON_UPDATE_FORM
 			updateHandler.Path = P_SINGLETON_UPDATE
 
+
 			res.Router.Api(func(router xroute.Router) {
 				router.Get(P_SINGLETON_UPDATE_FORM, updateForm)
 				router.Put(P_SINGLETON_UPDATE, updateHandler)
+
+				if this.Creatable() {
+					createHandler := vc.Handlers.Require(VA_CREATE)
+					createHandler.Path = P_SINGLETON_UPDATE
+					router.Post(P_SINGLETON_UPDATE, createHandler)
+				}
 			})
 		}
-	} else if rc.Updatable() {
+	} else if this.Updatable() {
 		var (
 			updateForm    = vc.Handlers.Require(VA_UPDATE_FORM)
 			updateHandler = vc.Handlers.Require(VA_UPDATE)
@@ -44,7 +51,7 @@ func (rc *ResourceController) RegisterDefaultSingletonRouters() {
 			router.Get(P_SINGLETON_READ, updateForm)
 			router.Put(P_SINGLETON_READ, updateHandler)
 		})
-	} else if rc.Creatable() {
+	} else if this.Creatable() {
 		var (
 			createForm    = vc.Handlers.Require(VA_CREATE_FROM)
 			createHandler = vc.Handlers.Require(VA_CREATE)
@@ -60,11 +67,11 @@ func (rc *ResourceController) RegisterDefaultSingletonRouters() {
 	}
 }
 
-func (rc *ResourceController) RegisterDefaultNormalRouters() {
-	vc := rc.ViewController
-	res := rc.Resource
+func (this *ResourceControllerBuilder) RegisterDefaultNormalRouters() {
+	vc := this.ViewController
+	res := this.Resource
 
-	if rc.Creatable() {
+	if this.Creatable() {
 		var (
 			createForm    = vc.Handlers.Require(VA_CREATE_FROM)
 			createHandler = vc.Handlers.Require(VA_CREATE)
@@ -79,17 +86,17 @@ func (rc *ResourceController) RegisterDefaultNormalRouters() {
 		})
 	}
 
-	if rc.Readable() {
+	if this.Readable() {
 		var readHandler = vc.Handlers.Require(VA_READ)
 
 		readHandler.Path = P_OBJ_READ
 
-		res.ObjectRouter.Api(func(router xroute.Router) {
+		res.ItemRouter.Api(func(router xroute.Router) {
 			router.Get(P_OBJ_READ, readHandler)
 		})
 	}
 
-	if rc.Updatable() {
+	if this.Updatable() {
 		var (
 			updateForm    = vc.Handlers.Require(VA_UPDATE_FORM)
 			updateHandler = vc.Handlers.Require(VA_UPDATE)
@@ -98,26 +105,26 @@ func (rc *ResourceController) RegisterDefaultNormalRouters() {
 		updateForm.Path = P_OBJ_UPDATE_FORM
 		updateHandler.Path = P_OBJ_UPDATE
 
-		res.ObjectRouter.Api(func(router xroute.Router) {
+		res.ItemRouter.Api(func(router xroute.Router) {
 			router.Get(P_OBJ_UPDATE_FORM, updateForm)
 			router.Put(P_OBJ_UPDATE, updateHandler)
 		})
 	}
 
-	if rc.Deletable() {
-		res.ObjectRouter.Delete(P_OBJ_DELETE, vc.Handlers.Require(VA_DELETE))
+	if this.Deletable() {
+		res.ItemRouter.Delete(P_OBJ_DELETE, vc.Handlers.Require(VA_DELETE))
 	}
 
-	if rc.BulkDeletable() {
+	if this.BulkDeletable() {
 		res.Router.Post(P_BULK_DELETE, vc.Handlers.Require(VA_BULK_DELETE))
 	}
 
-	if rc.Restorable() {
+	if this.Restorable() {
 		res.Router.Put(P_RESTORE, vc.Handlers.Require(VA_RESTORE))
 		res.Router.Get(P_DELETED_INDEX, vc.Handlers.Require(VA_DELETED_INDEX))
 	}
 
-	if rc.Indexable() {
+	if this.Indexable() {
 		var indexHandler = vc.Handlers.Require(VA_INDEX)
 
 		indexHandler.Path = P_INDEX
@@ -127,7 +134,7 @@ func (rc *ResourceController) RegisterDefaultNormalRouters() {
 		})
 	}
 
-	if rc.Searchable() {
+	if this.Searchable() {
 		var searchHandler = vc.Handlers.Require(VA_SEARCH)
 
 		searchHandler.Path = P_SEARCH

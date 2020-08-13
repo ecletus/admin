@@ -1,0 +1,20 @@
+<div class="qor-field">
+  <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
+    <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
+      {{meta_record_label .Meta .Record}}{{if not .ReadOnly}} <i class="required-asterisk">*</i>{{end}}
+    </label>
+    {{$help := meta_record_help .Meta .Record}}
+    {{if $help}}
+      <div class="qor-field__help">{{$help}}</div>
+    {{end}}
+
+    {{if .ReadOnly}}
+      <div class="qor-field__value">{{.Value}}</div>
+    {{else}}
+      <div class="qor-field__show">{{.Value}}</div>
+      <div class="qor-field__edit">
+        <input class="mdl-textfield__input" type="email" id="{{.InputId}}" name="{{.InputName}}" value="{{.Value}}">
+      </div>
+    {{end}}
+  </div>
+</div>

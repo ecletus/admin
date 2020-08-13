@@ -11,13 +11,13 @@ type SubSliceFieldConfig struct {
 	Meta    *Meta
 }
 
-func (res *Resource) AddSliceField(fieldName string, config ...*SubSliceFieldConfig) *Resource {
-	sliceField, ok := reflect.TypeOf(res.Value).Elem().FieldByName(fieldName)
+func (this *Resource) AddSliceField(fieldName string, config ...*SubSliceFieldConfig) *Resource {
+	sliceField, ok := reflect.TypeOf(this.Value).Elem().FieldByName(fieldName)
 	if !ok {
-		panic(fmt.Errorf("%T does not have field %q", res.Value, fieldName))
+		panic(fmt.Errorf("%T does not have field %q", this.Value, fieldName))
 	}
 	if sliceField.Type.Kind() != reflect.Slice {
-		panic(fmt.Errorf("%T.%s is not slice", res.Value, fieldName))
+		panic(fmt.Errorf("%T.%s is not slice", this.Value, fieldName))
 	}
 	fieldItemType := sliceField.Type.Elem()
 	for fieldItemType.Kind() == reflect.Ptr {
@@ -50,22 +50,22 @@ func (res *Resource) AddSliceField(fieldName string, config ...*SubSliceFieldCon
 	oldSetup := cfg.Setup
 	cfg.Setup = func(sub *Resource) {
 		if meta != nil {
-			res.SetMeta(meta)
+			this.SetMeta(meta)
 		}
 		if oldSetup != nil {
 			oldSetup(sub)
 		}
 	}
 	if cfg.LabelKey == "" {
-		cfg.LabelKey = res.ChildrenLabelKey(fieldName)
+		cfg.LabelKey = this.ChildrenLabelKey(fieldName)
 	}
 
-	if !res.registered {
-		res.afterRegister = append(res.afterRegister, func() {
-			res.AddResource(&SubConfig{FieldName: fieldName}, fieldItemValue, cfg)
+	if !this.registered {
+		this.afterRegister = append(this.afterRegister, func() {
+			this.AddResource(&SubConfig{FieldName: fieldName}, fieldItemValue, cfg)
 		})
 		return nil
 	}
 
-	return res.AddResource(&SubConfig{FieldName: fieldName}, fieldItemValue, cfg)
+	return this.AddResource(&SubConfig{FieldName: fieldName}, fieldItemValue, cfg)
 }

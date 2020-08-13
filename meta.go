@@ -1,42 +1,50 @@
 package admin
 
 import (
-	"database/sql"
-	"errors"
+	"fmt"
 	"reflect"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
-	errors2 "github.com/pkg/errors"
+	"github.com/moisespsena-go/i18n-modular/i18nmod"
+
+	"github.com/moisespsena-go/maps"
+
+	"github.com/pkg/errors"
 
 	"github.com/ecletus/core/helpers"
 
-	"github.com/moisespsena-go/options"
+	"github.com/ecletus/roles"
+	"github.com/moisespsena-go/assetfs"
+	"github.com/moisespsena-go/edis"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
-	"github.com/ecletus/core/utils"
-	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena-go/assetfs"
-	"github.com/moisespsena-go/edis"
 )
 
 const (
-	BASIC_LAYOUT                = "basic"
-	BASIC_LAYOUT_WITH_ICON      = "basic_with_icon"
-	BASIC_LAYOUT_HTML           = "basic_html"
-	BASIC_LAYOUT_HTML_WITH_ICON = "basic_html_with_icon"
-	BASIC_META_ID               = "_BasicID"
-	BASIC_META_LABEL            = "_BasicLabel"
-	BASIC_META_HTML             = "_BasicHTML"
-	BASIC_META_ICON             = "_BasicIcon"
+	BASIC_LAYOUT                            = "basic"
+	BASIC_LAYOUT_DESCRIPTION                = "basic_help"
+	BASIC_LAYOUT_WITH_ICON                  = "basic_with_icon"
+	BASIC_LAYOUT_DESCRIPTION_WITH_ICON      = "basic_help_with_icon"
+	BASIC_LAYOUT_HTML                       = "basic_html"
+	BASIC_LAYOUT_HTML_WITH_ICON             = "basic_html_with_icon"
+	BASIC_LAYOUT_HTML_DESCRIPTION           = "basic_html_help"
+	BASIC_LAYOUT_HTML_DESCRIPTION_WITH_ICON = "basic_html_help_with_icon"
+
+	BASIC_META_ID    = "_BasicID"
+	BASIC_META_LABEL = "_BasicLabel"
+	BASIC_META_HTML  = "_BasicHTML"
+	BASIC_META_ICON  = "_BasicIcon"
+
+	META_DESCRIPTIFY = "Descriptify"
+	META_STRINGIFY   = "Stringify"
 )
 
 type DependencyParent struct {
-	Meta *Meta
+	Meta  *Meta
+	Value aorm.ID
 }
 
 type DependencyPath struct {
@@ -46,6 +54,11 @@ type DependencyPath struct {
 type DependencyQuery struct {
 	Meta  *Meta
 	Param string
+}
+
+type DependencyValue struct {
+	Param string
+	Value interface{}
 }
 
 type MetaOutputValuer func(context *core.Context, recorde, value interface{}) interface{}
@@ -60,14 +73,28 @@ type MetaPostFormatted interface {
 // Meta meta struct definition
 type Meta struct {
 	edis.EventDispatcher
-	Name              string
-	DB                *aorm.Alias
-	Type              string
-	TypeHandler       func(recorde interface{}, context *Context, meta *Meta) string
-	Enabled           MetaEnabled
-	DefaultLabel      string
-	Label             string
-	SkipDefaultLabel  bool
+
+	*resource.Meta
+
+	Name        string
+	DB          *aorm.Alias
+	Type        string
+	TypeHandler func(recorde interface{}, context *Context, meta *Meta) string
+	Enabled     MetaEnabled
+
+	SkipDefaultLabel     bool
+	DefaultLabel         string
+	Label                string
+	recordLabelPairFuncs []func(ctx *Context, record interface{}) (key string, defaul string, ok bool)
+
+	Help        string
+	HelpKey     string
+	ShowHelp    string
+	ShowHelpKey string
+
+	recordHelpPairFuncs,
+	recordShowHelpPairFuncs []func(ctx *Context, record interface{}) (key string, defaul string, ok bool)
+
 	FieldName         string
 	FieldLabel        bool
 	EncodedName       string
@@ -80,14 +107,12 @@ type Meta struct {
 	Resource          *Resource
 	Permission        *roles.Permission
 	Config            MetaConfigInterface
-
-	Description    string
-	DescriptionKey string
+	Icon              bool
 
 	Metas        []resource.Metaor
 	GetMetasFunc func() []resource.Metaor
 	Collection   interface{}
-	*resource.Meta
+
 	BaseResource          *Resource
 	TemplateData          map[string]interface{}
 	i18nGroup             string
@@ -97,13 +122,29 @@ type Meta struct {
 	ForceShowZero         bool
 	IsZeroFunc            func(recorde, value interface{}) bool
 	Fragment              *Fragment
-	Options               options.Options
+	Options               maps.Map
 	OutputFormattedValuer MetaOutputValuer
 	DefaultValueFunc      MetaValuer
 	proxyPath             []ProxyPath
 	Virtual               bool
 
 	SectionNotAllowed bool
+	ReadOnly          bool
+	ReadOnlyFunc      func(ctx *Context, recorde interface{}) bool
+
+	URIForFunc func(meta *Meta, ctx *Context, recorde interface{}) string
+	URLForFunc func(meta *Meta, ctx *Context, recorde interface{}) string
+
+	Required   bool
+	mustValuer bool
+
+	ForceEmptyFormattedRender bool
+
+	// if require specify to show
+	DefaultInvisible bool
+
+	Tags      MetaTags
+	NilAsZero bool
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -118,142 +159,268 @@ func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
 	return m
 }
 
-func (meta *Meta) I18nGroup(defaul ...bool) string {
-	if len(defaul) > 0 && meta.i18nGroup == "" {
+func (this *Meta) IsReadOnly(ctx *Context, recorde interface{}) bool {
+	if this.ReadOnly {
+		return true
+	}
+	if this.ReadOnlyFunc != nil {
+		return this.ReadOnlyFunc(ctx, recorde)
+	}
+	switch this.Type {
+	case "single_edit", "collection_edit", "select_one", "select_many":
+		return false
+	}
+	return this.GetSetter() == nil
+}
+
+func (this *Meta) I18nGroup(defaul ...bool) string {
+	if len(defaul) > 0 && this.i18nGroup == "" {
 		return I18NGROUP
 	}
-	return meta.i18nGroup
+	return this.i18nGroup
 }
 
-func (meta *Meta) SetI18nGroup(group string) *Meta {
-	meta.i18nGroup = group
-	return meta
+func (this *Meta) SetI18nGroup(group string) *Meta {
+	this.i18nGroup = group
+	return this
 }
 
-func (meta *Meta) TKey(key string) string {
-	return meta.I18nGroup(true) + ":meta." + meta.Type + "." + key
+func (this *Meta) TKey(key string) string {
+	return this.I18nGroup(true) + ":meta." + this.Type + "." + key
 }
 
-func (meta *Meta) Namer() *resource.MetaName {
-	if name, ok := meta.BaseResource.MetaAliases[meta.Name]; ok {
+func (this *Meta) Namer() *resource.MetaName {
+	if name, ok := this.BaseResource.MetaAliases[this.Name]; ok {
 		return name
 	}
-	return meta.Meta.Namer()
+	return this.Meta.Namer()
 }
 
-func (meta *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, ctx *core.Context) error) *Meta {
-	old := meta.Setter
-	meta.Setter = func(recorde interface{}, metaValue *resource.MetaValue, ctx *core.Context) error {
-		return f(meta, old, recorde, metaValue, ctx)
+func (this *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, ctx *core.Context) error) *Meta {
+	old := this.Setter
+	this.Setter = func(recorde interface{}, metaValue *resource.MetaValue, ctx *core.Context) error {
+		return f(this, old, recorde, metaValue, ctx)
 	}
-	return meta
+	return this
 }
 
-func (meta *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
-	old := meta.Valuer
-	meta.Valuer = func(recorde interface{}, context *core.Context) interface{} {
-		return f(meta, old, recorde, context)
+func (this *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
+	old := this.Valuer
+	this.Valuer = func(recorde interface{}, context *core.Context) interface{} {
+		return f(this, old, recorde, context)
 	}
-	return meta
+	return this
 }
 
-func (meta *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
-	old := meta.FormattedValuer
-	meta.FormattedValuer = func(recorde interface{}, ctx *core.Context) interface{} {
-		return f(meta, old, recorde, ctx)
+func (this *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
+	old := this.FormattedValuer
+	this.FormattedValuer = func(recorde interface{}, ctx *core.Context) interface{} {
+		return f(this, old, recorde, ctx)
 	}
-	return meta
+	return this
 }
 
-func (meta *Meta) NewOutputFormattedValuer(f func(meta *Meta, old MetaOutputValuer, ctx *core.Context, recorde, value interface{}) interface{}) *Meta {
-	old := meta.OutputFormattedValuer
-	meta.OutputFormattedValuer = func(ctx *core.Context, recorde, value interface{}) interface{} {
-		return f(meta, old, ctx, recorde, value)
+func (this *Meta) NewOutputFormattedValuer(f func(meta *Meta, old MetaOutputValuer, ctx *core.Context, recorde, value interface{}) interface{}) *Meta {
+	old := this.OutputFormattedValuer
+	this.OutputFormattedValuer = func(ctx *core.Context, recorde, value interface{}) interface{} {
+		return f(this, old, ctx, recorde, value)
 	}
-	return meta
+	return this
 }
 
-func (meta *Meta) SetValuer(f func(recorde interface{}, ctx *core.Context) interface{}) {
-	meta.Valuer = f
-	meta.Meta.SetValuer(f)
+func (this *Meta) SetValuer(f func(recorde interface{}, ctx *core.Context) interface{}) {
+	this.Valuer = f
+	this.Meta.SetValuer(f)
 }
 
-func (meta *Meta) SetFormattedValuer(f func(recorde interface{}, ctx *core.Context) interface{}) {
-	meta.FormattedValuer = f
-	meta.Meta.SetFormattedValuer(f)
+func (this *Meta) SetFormattedValuer(f func(recorde interface{}, ctx *core.Context) interface{}) {
+	this.FormattedValuer = f
+	this.Meta.SetFormattedValuer(f)
 }
 
-func (meta *Meta) NewEnabled(f func(old MetaEnabled, recorde interface{}, ctx *Context, meta *Meta) bool) *Meta {
-	old := meta.Enabled
-	meta.Enabled = func(recorde interface{}, ctx *Context, meta *Meta) bool {
+func (this *Meta) NewEnabled(f func(old MetaEnabled, recorde interface{}, ctx *Context, meta *Meta) bool) *Meta {
+	old := this.Enabled
+	this.Enabled = func(recorde interface{}, ctx *Context, meta *Meta) bool {
 		return f(old, recorde, ctx, meta)
 	}
-	return meta
+	return this
 }
 
-func (meta *Meta) GetType(record interface{}, context *Context) string {
-	if meta.TypeHandler != nil {
-		return meta.TypeHandler(record, context, meta)
+func (this *Meta) GetType(record interface{}, context *Context) string {
+	if this.TypeHandler != nil {
+		return this.TypeHandler(record, context, this)
 	}
-	return meta.Type
+	return this.Type
 }
 
-func (meta *Meta) GetDescriptionPair() (string, string) {
-	var (
-		key    = meta.DescriptionKey
-		defaul string
-	)
+func (this *Meta) GetHelpPair() (key string, defaul string) {
+	if this.Help == "-" {
+		return "", ""
+	}
+	key = this.HelpKey
 
-	if key == "" && meta.Description != "" {
-		if meta.Description == "@" {
-			key, _ = meta.GetLabelPair()
-			key += "_description"
-		} else if strings.ContainsRune(key, '.') {
-			key = meta.Description
-		} else {
-			defaul = meta.Description
-		}
+	if key == "" {
+		key, _ = this.GetLabelPair()
+		key += "_help"
+		defaul = this.Help
+	}
+
+	if defaul == "" && this.Resource != nil {
+		defaul = this.Resource.Tags.GetString("HELP")
 	}
 
 	return key, defaul
 }
 
-func (meta *Meta) GetLabelPair() (string, string) {
-	name := meta.Name
+func (this *Meta) GetShowHelpPair() (key string, defaul string) {
+	if this.ShowHelp == "-" {
+		return "", ""
+	}
+	key = this.ShowHelpKey
 
-	if meta.FieldLabel && meta.FieldName != "" {
-		name = meta.FieldName
+	if key == "" {
+		key, _ = this.GetLabelPair()
+		key += "_show_help"
+		defaul = this.ShowHelp
+	}
+
+	if defaul == "" && this.Resource != nil {
+		defaul = this.Resource.Tags.GetString("RO_HELP")
+	}
+
+	return key, defaul
+}
+
+func (this *Meta) RecordHelpPair(f ...func(ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
+	this.recordHelpPairFuncs = append(this.recordHelpPairFuncs, f...)
+	return this
+}
+
+func (this *Meta) GetRecordHelpPair(ctx *Context, record interface{}) (key string, defaul string) {
+	var ok bool
+	for _, f := range this.recordHelpPairFuncs {
+		if key, defaul, ok = f(ctx, record); ok {
+			return
+		}
+	}
+	return this.GetHelpPair()
+}
+
+func (this *Meta) RecordShowHelpPair(f ...func(ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
+	this.recordShowHelpPairFuncs = append(this.recordShowHelpPairFuncs, f...)
+	return this
+}
+
+func (this *Meta) GetRecordShowHelpPair(ctx *Context, record interface{}) (key string, defaul string) {
+	var ok bool
+	for _, f := range this.recordShowHelpPairFuncs {
+		if key, defaul, ok = f(ctx, record); ok {
+			return
+		}
+	}
+	return this.GetShowHelpPair()
+}
+
+func (this *Meta) I18nKey(sub ...string) string {
+	return this.GetLabelKey() + "_" + strings.Join(sub, ".")
+}
+
+func (this *Meta) TranslateLabel(ctx i18nmod.Context) string {
+	key, defaul := this.GetLabelPair()
+	return ctx.T(key).Default(defaul).Get()
+}
+
+func (this *Meta) GetLabelPair() (string, string) {
+	name := this.Name
+
+	if this.FieldLabel && this.FieldName != "" {
+		name = this.FieldName
 	}
 
 	var (
 		key    = name
-		defaul = meta.DefaultLabel
+		defaul = this.DefaultLabel
 	)
 
-	if meta.Label != "" {
-		key = meta.Label
+	if this.Label != "" {
+		key = this.Label
 		if !strings.ContainsRune(key, '.') {
-			defaul = meta.Label
+			defaul = this.Label
 		}
 	} else if !strings.ContainsRune(key, '.') {
-		key = meta.BaseResource.I18nPrefix + ".attributes." + key
+		key = this.getLabelKey(key)
 	}
 
-	if meta.SkipDefaultLabel {
+	if this.SkipDefaultLabel {
 		defaul = ""
 	}
 
 	return key, defaul
 }
 
-func (meta *Meta) GetLabelKey() (string) {
-	key := meta.Name
+func (this *Meta) RecordLabelPair(f ...func(ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
+	this.recordLabelPairFuncs = append(this.recordLabelPairFuncs, f...)
+	return this
+}
 
-	if meta.FieldLabel && meta.FieldName != "" {
-		key = meta.FieldName
+func (this *Meta) GetRecordLabelPair(ctx *Context, record interface{}) (key string, defaul string) {
+	var ok bool
+	for _, f := range this.recordLabelPairFuncs {
+		if key, defaul, ok = f(ctx, record); ok {
+			return
+		}
+	}
+	return this.GetLabelPair()
+}
+
+func (this *Meta) GetRecordLabel(ctx *Context, record interface{}) string {
+	if key, defaul := this.GetRecordLabelPair(ctx, record); key != "" {
+		return ctx.Ts(key, defaul)
+	} else {
+		return defaul
+	}
+}
+
+func (this *Meta) GetRecordLabelC(ctx *core.Context, record interface{}) string {
+	return this.GetRecordLabel(ContextFromCoreContext(ctx), record)
+}
+
+func (this *Meta) GetLabelC(ctx *core.Context) string {
+	if key, defaul := this.GetLabelPair(); key != "" {
+		return ctx.Ts(key, defaul)
+	} else {
+		return defaul
+	}
+}
+
+func (this *Meta) getLabelKey(key string) string {
+	if key == "" {
+		key = this.Name
+
+		if this.FieldLabel && this.FieldName != "" {
+			key = this.FieldName
+		}
 	}
 
-	return meta.BaseResource.I18nPrefix + ".attributes." + key
+	return this.BaseResource.I18nPrefix + ".attributes." + key
+}
+
+func (this *Meta) GetLabelKey() string {
+	return this.getLabelKey("")
+}
+
+func (this *Meta) URIFor(ctx *Context, record interface{}) string {
+	if this.URIForFunc != nil {
+		return this.URIForFunc(this, ctx, record)
+	}
+	return this.Resource.GetContextURI(ctx.Context, this.Resource.GetKey(record))
+}
+
+func (this *Meta) URLFor(ctx *Context, record interface{}) string {
+	if this.URLForFunc != nil {
+		return this.URLForFunc(this, ctx, record)
+	}
+	return this.URIFor(ctx, record)
 }
 
 // metaConfig meta config
@@ -261,7 +428,7 @@ type metaConfig struct {
 }
 
 // GetTemplate get customized template for meta
-func (metaConfig) GetTemplate(context *Context, metaType string) (*assetfs.Asset, error) {
+func (metaConfig) GetTemplate(context *Context, metaType string) (*assetfs.AssetInterface, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -271,95 +438,90 @@ type MetaConfigInterface interface {
 }
 
 // GetMetas get sub metas
-func (meta *Meta) GetMetas() []resource.Metaor {
-	if len(meta.Metas) > 0 {
-		return meta.Metas
-	} else if meta.Resource == nil {
+func (this *Meta) GetMetas() []resource.Metaor {
+	if len(this.Metas) > 0 {
+		return this.Metas
+	} else if this.Resource == nil {
 		return []resource.Metaor{}
-	} else if meta.GetMetasFunc != nil {
-		return meta.GetMetasFunc()
+	} else if this.GetMetasFunc != nil {
+		return this.GetMetasFunc()
 	} else {
-		return meta.Resource.GetMetas([]string{})
+		return this.Resource.GetMetas([]string{})
 	}
 }
 
-func (meta *Meta) GetContextMetas(recorde interface{}, context *core.Context) []resource.Metaor {
-	if meta.ContextMetas != nil {
-		metas := meta.ContextMetas(recorde, context.Data().Get(CONTEXT_KEY).(*Context))
+func (this *Meta) GetContextMetas(recorde interface{}, context *core.Context) []resource.Metaor {
+	if this.ContextMetas != nil {
+		metas := this.ContextMetas(recorde, GetContext(context))
 		r := make([]resource.Metaor, len(metas))
 		for i, m := range metas {
 			r[i] = m
 		}
 		return r
 	}
-	if meta.ContextResourcer != nil {
-		res := meta.ContextResourcer(meta, context)
+	if this.ContextResourcer != nil {
+		res := this.ContextResourcer(this, context)
 		if res != nil {
 			return res.GetMetas([]string{})
 		}
 	}
-	return meta.GetMetas()
+	if this.Resource != nil {
+		return this.Resource.GetContextMetas(context)
+	}
+	return this.GetMetas()
 }
 
 // GetResourceByID get resource from meta
-func (meta *Meta) GetResource() resource.Resourcer {
-	if meta.Resource == nil {
-		return nil
-	}
-	return meta.Resource
+func (this *Meta) GetResource() resource.Resourcer {
+	return this.Resource
+}
+
+// GetResourceByID get resource from meta
+func (this *Meta) GetBaseResource() resource.Resourcer {
+	return this.BaseResource
 }
 
 // GetContextResource get resource from meta
-func (meta *Meta) GetContextResourcer() func(meta resource.Metaor, context *core.Context) resource.Resourcer {
-	if meta.ContextResourcer != nil {
-		return meta.ContextResourcer
+func (this *Meta) GetContextResourcer() func(meta resource.Metaor, context *core.Context) resource.Resourcer {
+	if this.ContextResourcer != nil {
+		return this.ContextResourcer
 	}
-	return meta.Meta.ContextResourcer
+	return this.Meta.ContextResourcer
 }
 
-func (meta *Meta) GetContextResource(context *core.Context) resource.Resourcer {
-	getter := meta.GetContextResourcer()
+func (this *Meta) GetContextResource(context *core.Context) resource.Resourcer {
+	getter := this.GetContextResourcer()
 	if getter != nil {
-		return getter(meta, context)
+		return getter(this, context)
 	}
-	return meta.GetResource()
-}
-
-// DBName get meta's db name
-func (meta *Meta) DBName() string {
-	if meta.FieldStruct != nil {
-		return meta.FieldStruct.DBName
-	}
-	return ""
+	return this.GetResource()
 }
 
 // SetPermission set meta's permission
-func (meta *Meta) SetPermission(permission *roles.Permission) {
-	meta.Permission = permission
-	meta.Meta.Permission = permission
-	if meta.Resource != nil {
-		meta.Resource.Permission = permission
+func (this *Meta) SetPermission(permission *roles.Permission) {
+	this.Permission = permission
+	this.Meta.Permission = permission
+	if this.Resource != nil {
+		this.Resource.Permission = permission
 	}
 }
 
-// HasPermission check has permission or not
-func (meta Meta) HasPermissionE(mode roles.PermissionMode, context *core.Context) (ok bool, err error) {
-	var roles_ = []interface{}{}
-	for _, role := range context.Roles {
-		roles_ = append(roles_, role)
-	}
-	if meta.Permission != nil && !roles.HasPermission(meta.Permission, mode, roles_...) {
-		return false, nil
+// HasContextPermission check has permission or not
+func (this *Meta) HasPermission(mode roles.PermissionMode, context *core.Context) (perm roles.Perm) {
+	if this.Permission != nil {
+		if perm = this.Permission.HasPermission(context, mode, context.Roles.Interfaces()...); perm != roles.UNDEF {
+			return
+		}
 	}
 
-	if meta.BaseResource != nil {
-		return core.HasPermissionDefaultE(true, meta.BaseResource, mode, context)
+	if this.BaseResource != nil {
+		return this.BaseResource.HasPermission(mode, context)
 	}
 
-	return true, roles.ErrDefaultPermission
+	return
 }
 
-func (meta *Meta) TriggerValuerEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer, value ...interface{}) interface{} {
+func (this *Meta) TriggerValuerEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer, value ...interface{}) (result interface{}, err error) {
 	var v interface{}
 	if len(value) > 0 {
 		v = value[0]
@@ -368,28 +530,38 @@ func (meta *Meta) TriggerValuerEvent(ename string, recorde interface{}, ctx *cor
 		MetaRecordeEvent{
 			MetaEvent{
 				edis.NewEvent(ename),
-				meta,
-				meta.BaseResource,
+				this,
+				this.BaseResource,
 				ctx,
 			},
 			recorde,
 		}, valuer, v, v, false}
-	meta.Trigger(e)
+	if err = this.Trigger(e); err != nil {
+		return
+	}
 	if valuer != nil {
 		if e.Value == nil && !e.originalValueCalled {
-			return valuer(recorde, ctx)
+			return valuer(recorde, ctx), nil
 		}
 	}
-	return e.Value
+	return e.Value, nil
 }
 
-func (meta *Meta) TriggerSetEvent(ename string, recorde interface{}, ctx *core.Context, setter MetaSetter, metaValue *resource.MetaValue) error {
+func (this *Meta) MustTriggerValuerEvent(ename string, recorde interface{}, ctx *core.Context, valuer MetaValuer, value ...interface{}) (result interface{}) {
+	if i, err := this.TriggerValuerEvent(ename, recorde, ctx, valuer, value...); err == nil {
+		return i.(string)
+	} else {
+		panic(MetaEventError{this, ename, err})
+	}
+}
+
+func (this *Meta) TriggerSetEvent(ename string, recorde interface{}, ctx *core.Context, setter MetaSetter, metaValue *resource.MetaValue) (err error) {
 	e := &MetaSetEvent{
 		MetaRecordeEvent: MetaRecordeEvent{
 			MetaEvent{
 				edis.NewEvent(ename),
-				meta,
-				meta.BaseResource,
+				this,
+				this.BaseResource,
 				ctx,
 			},
 			recorde,
@@ -397,17 +569,19 @@ func (meta *Meta) TriggerSetEvent(ename string, recorde interface{}, ctx *core.C
 		Setter:    setter,
 		MetaValue: metaValue,
 	}
-	meta.Trigger(e)
+	if err = this.Trigger(e); err != nil {
+		return
+	}
 	return setter(recorde, metaValue, ctx)
 }
 
-func (meta *Meta) TriggerValueChangedEvent(ename string, recorde interface{}, ctx *core.Context, oldValue interface{}, valuer MetaValuer) error {
+func (this *Meta) TriggerValueChangedEvent(ename string, recorde interface{}, ctx *core.Context, oldValue interface{}, valuer MetaValuer) error {
 	e := &MetaValueChangedEvent{
 		MetaRecordeEvent: MetaRecordeEvent{
 			MetaEvent{
 				edis.NewEvent(ename),
-				meta,
-				meta.BaseResource,
+				this,
+				this.BaseResource,
 				ctx,
 			},
 			recorde,
@@ -415,389 +589,117 @@ func (meta *Meta) TriggerValueChangedEvent(ename string, recorde interface{}, ct
 		Old:    oldValue,
 		valuer: valuer,
 	}
-	return meta.Trigger(e)
+	return this.Trigger(e)
 }
 
 // GetValuer get valuer from meta
-func (meta *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
-	if valuer := meta.Meta.GetValuer(); valuer != nil {
-		return func(i interface{}, context *core.Context) interface{} {
-			return meta.TriggerValuerEvent(E_META_VALUE, i, context, valuer)
+func (this *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
+	if valuer := this.Meta.GetValuer(); valuer != nil {
+		if this.mustValuer {
+			return valuer
+		}
+		return func(i interface{}, context *core.Context) (v interface{}) {
+			var err error
+			if v, err = this.TriggerValuerEvent(E_META_VALUE, i, context, valuer); err != nil {
+				panic(MetaEventError{this, E_META_VALUE, err})
+			}
+			return
 		}
 	}
 	return nil
 }
 
 // GetFormattedValuer get formatted valuer from meta
-func (meta *Meta) GetFormattedValuer() func(interface{}, *core.Context) interface{} {
+func (this *Meta) GetFormattedValuer() func(interface{}, *core.Context) interface{} {
 	var valuer MetaValuer
-	if meta.FormattedValuer != nil {
-		valuer = meta.FormattedValuer
+	if this.FormattedValuer != nil {
+		valuer = this.FormattedValuer
 	} else {
-		valuer = meta.GetValuer()
+		valuer = this.GetValuer()
 	}
-	return func(i interface{}, context *core.Context) interface{} {
-		v := meta.TriggerValuerEvent(E_META_FORMATTED_VALUE, i, context, valuer)
-		v = meta.TriggerValuerEvent(E_META_POST_FORMATTED_VALUE, i, context, nil, v)
-		return v
+	if this.mustValuer {
+		return valuer
+	}
+	return func(i interface{}, context *core.Context) (v interface{}) {
+		var err error
+		if v, err = this.TriggerValuerEvent(E_META_FORMATTED_VALUE, i, context, valuer); err != nil {
+			panic(MetaEventError{this, E_META_FORMATTED_VALUE, err})
+		}
+		if v, err = this.TriggerValuerEvent(E_META_POST_FORMATTED_VALUE, i, context, nil, v); err != nil {
+			panic(MetaEventError{this, E_META_POST_FORMATTED_VALUE, err})
+		}
+		return
 	}
 }
 
 // FormattedValue get formatted valuer from meta
-func (meta *Meta) Value(ctx *core.Context, recorde interface{}) interface{} {
-	if valuer := meta.GetValuer(); valuer != nil {
+func (this *Meta) Value(ctx *core.Context, recorde interface{}) interface{} {
+	if valuer := this.GetValuer(); valuer != nil {
 		return valuer(recorde, ctx)
 	}
 	return nil
 }
 
 // FormattedValue get formatted valuer from meta
-func (meta *Meta) FormattedValue(ctx *core.Context, recorde interface{}) interface{} {
-	if formattedValuer := meta.GetFormattedValuer(); formattedValuer != nil {
+func (this *Meta) FormattedValue(ctx *core.Context, recorde interface{}) interface{} {
+	if formattedValuer := this.GetFormattedValuer(); formattedValuer != nil {
 		return formattedValuer(recorde, ctx)
 	}
 	return ""
 }
 
 // FormattedValue get formatted valuer from meta
-func (meta *Meta) GetDefaultValue(ctx *core.Context, recorde interface{}) interface{} {
+func (this *Meta) GetDefaultValue(ctx *core.Context, recorde interface{}) (v interface{}) {
 	var zero interface{}
-	if meta.DefaultValueFunc != nil {
-		zero = meta.DefaultValueFunc(recorde, ctx)
-	} else if meta.FieldStruct != nil {
-		z := reflect.New(meta.FieldStruct.Struct.Type).Elem()
-		if meta.FieldStruct.Struct.Type.Kind() == reflect.Struct {
+	if this.DefaultValueFunc != nil {
+		zero = this.DefaultValueFunc(recorde, ctx)
+	} else if this.FieldStruct != nil {
+		z := reflect.New(this.FieldStruct.Struct.Type).Elem()
+		if this.FieldStruct.Struct.Type.Kind() == reflect.Struct {
 			zero = z.Addr().Interface()
 		} else {
 			zero = z.Interface()
 		}
 	}
-	return meta.TriggerValuerEvent(E_META_DEFAULT_VALUE, recorde, ctx, nil, zero)
+	var err error
+	if v, err = this.TriggerValuerEvent(E_META_DEFAULT_VALUE, recorde, ctx, nil, zero); err != nil {
+		panic(MetaEventError{this, E_META_DEFAULT_VALUE, err})
+	}
+	return
 }
 
-func (meta *Meta) updateMeta() {
-	if meta.Meta == nil {
-		meta.Meta = &resource.Meta{
-			MetaName:         &resource.MetaName{meta.Name, meta.EncodedName},
-			FieldName:        meta.FieldName,
-			Setter:           meta.Setter,
-			Valuer:           meta.Valuer,
-			FormattedValuer:  meta.FormattedValuer,
-			BaseResource:     meta.BaseResource,
-			ContextResourcer: meta.ContextResourcer,
-			Resource:         meta.Resource,
-			Permission:       meta.Permission,
-			Config:           meta.Config,
-		}
-	} else {
-		meta.Meta.Alias = meta.Alias
-		meta.Meta.Name = meta.Name
-		meta.Meta.FieldName = meta.FieldName
-		meta.Meta.EncodedName = meta.EncodedName
-		meta.Meta.Setter = meta.Setter
-		meta.Meta.Valuer = meta.Valuer
-		meta.Meta.FormattedValuer = meta.FormattedValuer
-		meta.Meta.BaseResource = meta.BaseResource
-		meta.Meta.Resource = meta.Resource
-		meta.Meta.Permission = meta.Permission
-		meta.Meta.Config = meta.Config
-		meta.Meta.ContextResourcer = meta.ContextResourcer
-	}
-
-	if meta.Options == nil {
-		meta.Options = make(options.Options)
-	}
-
-	if meta.EventDispatcher.GetDefinedDispatcher() == nil {
-		meta.EventDispatcher.SetDispatcher(meta)
-	}
-
-	meta.PreInitialize()
-
-	if meta.FieldStruct != nil {
-		if injector, ok := reflect.New(meta.FieldStruct.Struct.Type).Interface().(resource.ConfigureMetaBeforeInitializeInterface); ok {
-			injector.ConfigureQorMetaBeforeInitialize(meta)
-		}
-	}
-
-	if meta.Virtual {
-		if meta.Valuer == nil {
-			meta.Valuer = func(i interface{}, context *core.Context) interface{} {
-				return nil
-			}
-		}
-		if meta.Setter == nil {
-			meta.Setter = func(interface{}, *resource.MetaValue, *core.Context) error {
-				return nil
-			}
-		}
-	}
-
-	meta.Initialize()
-
-	if meta.Label != "" && meta.DefaultLabel == "" && !strings.ContainsRune(meta.Label, '.') {
-		meta.DefaultLabel = meta.Label
-	} else if meta.DefaultLabel == "" {
-		meta.DefaultLabel = utils.HumanizeString(meta.Name)
-	}
-
-	var fieldType reflect.Type
-	var hasColumn = meta.FieldStruct != nil
-	var isPtr bool
-
-	if hasColumn {
-		fieldType = meta.FieldStruct.Struct.Type
-		for fieldType.Kind() == reflect.Ptr {
-			isPtr = true
-			fieldType = fieldType.Elem()
-		}
-	}
-
-	// Set Meta Type
-	if hasColumn {
-		if meta.Type == "" {
-			if _, ok := reflect.New(fieldType).Interface().(sql.Scanner); ok {
-				if fieldType.Kind() == reflect.Struct {
-					fieldType = reflect.Indirect(reflect.New(fieldType)).Field(0).Type()
-				}
-			}
-
-			if relationship := meta.FieldStruct.Relationship; relationship != nil {
-				if relationship.Kind == "has_one" {
-					meta.Type = "single_edit"
-				} else if relationship.Kind == "has_many" {
-					meta.Type = "collection_edit"
-				} else if relationship.Kind == "belongs_to" {
-					meta.Type = "select_one"
-				} else if relationship.Kind == "many_to_many" {
-					meta.Type = "select_many"
-				}
-			} else {
-				switch fieldType.Kind() {
-				case reflect.String:
-					var tags = meta.FieldStruct.TagSettings
-					if size, ok := tags["SIZE"]; ok {
-						if i, _ := strconv.Atoi(size); i > 255 {
-							meta.Type = "text"
-						} else {
-							meta.Type = "string"
-						}
-					} else if text, ok := tags["TYPE"]; ok && text == "text" {
-						meta.Type = "text"
-					} else {
-						meta.Type = "string"
-					}
-				case reflect.Bool:
-					if isPtr {
-						meta.Type = "select_one"
-						meta.Config = &SelectOneConfig{
-							AllowBlank: true,
-							Collection: func(ctx *core.Context) [][]string {
-								p := I18NGROUP + ".form.bool."
-								return [][]string{
-									{"true", ctx.Ts(p+"true", "Yes")},
-									{"false", ctx.Ts(p+"false", "No")},
-								}
-							},
-						}
-						meta.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) interface{} {
-							value := meta.Value(ctx, recorde)
-							if value == nil {
-								return ""
-							}
-							p := I18NGROUP + ".form.bool."
-							b := value.(*bool)
-							if b == nil {
-								return ""
-							}
-							if *b {
-								return ctx.Ts(p+"true", "Yes")
-							}
-							return ctx.Ts(p+"false", "No")
-						})
-						meta.IsZeroFunc = func(recorde, value interface{}) bool {
-							if value == nil {
-								return true
-							}
-							return false
-						}
-					} else {
-						meta.Type = "switch"
-					}
-				default:
-					if regexp.MustCompile(`^(.*)?(u)?(int)(\d+)?`).MatchString(fieldType.Kind().String()) {
-						meta.Type = "number"
-					} else if regexp.MustCompile(`^(.*)?(float)(\d+)?`).MatchString(fieldType.Kind().String()) {
-						meta.Type = "float"
-					} else if _, ok := reflect.New(fieldType).Interface().(*time.Time); ok {
-						meta.Type = "datetime"
-					} else {
-						if fieldType.Kind() == reflect.Struct {
-							meta.Type = "single_edit"
-						} else if fieldType.Kind() == reflect.Slice {
-							refelectType := fieldType.Elem()
-							for refelectType.Kind() == reflect.Ptr {
-								refelectType = refelectType.Elem()
-							}
-							if refelectType.Kind() == reflect.Struct {
-								meta.Type = "collection_edit"
-							}
-						}
-					}
-				}
-			}
-		} else {
-			if relationship := meta.FieldStruct.Relationship; relationship != nil {
-				if (relationship.Kind == "has_one" || relationship.Kind == "has_many") && meta.Meta.Setter == nil && (meta.Type == "select_one" || meta.Type == "select_many") {
-					meta.SetSetter(func(resource interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-						scope := &aorm.Scope{Value: resource}
-						reflectValue := reflect.Indirect(reflect.ValueOf(resource))
-						field := reflectValue.FieldByName(meta.FieldName)
-
-						if field.Kind() == reflect.Ptr {
-							if field.IsNil() {
-								field.Set(utils.NewValue(field.Type()).Elem())
-							}
-
-							for field.Kind() == reflect.Ptr {
-								field = field.Elem()
-							}
-						}
-
-						primaryKeys := utils.ToArray(metaValue.Value)
-						if len(primaryKeys) > 0 {
-							// set current field value to blank and replace it with new value
-							field.Set(reflect.Zero(field.Type()))
-							context.DB.Where(primaryKeys).Find(field.Addr().Interface())
-						}
-
-						if !scope.PrimaryKeyZero() {
-							context.DB.Model(resource).Association(meta.FieldName).Replace(field.Interface())
-							field.Set(reflect.Zero(field.Type()))
-						}
-						return nil
-					})
-				}
-			}
-		}
-	}
-
-	{ // Set Meta Resource
-		if hasColumn {
-			if meta.Resource == nil {
-				var result interface{}
-
-				if fieldType.Kind() == reflect.Struct {
-					result = reflect.New(fieldType).Interface()
-				} else if fieldType.Kind() == reflect.Slice {
-					refelectType := fieldType.Elem()
-					for refelectType.Kind() == reflect.Ptr {
-						refelectType = refelectType.Elem()
-					}
-					if refelectType.Kind() == reflect.Struct {
-						result = reflect.New(refelectType).Interface()
-					}
-				}
-
-				if result != nil {
-					res := meta.BaseResource.NewResource(&SubConfig{FieldName: meta.FieldStruct.Name}, result)
-					meta.Resource = res
-					meta.Meta.Permission = meta.Meta.Permission.Concat(res.Config.Permission)
-				}
-			} else if meta.Config == nil && meta.Resource.mounted {
-				switch meta.Type {
-				case "select_one", "select_many":
-					cfg := &SelectOneConfig{RemoteDataResource: &DataResource{}}
-					cfg.Layout = BASIC_LAYOUT
-					meta.Config = cfg
-				}
-			}
-
-			if meta.Resource != nil && meta.Resource != meta.BaseResource {
-				permission := meta.Resource.Permission.Concat(meta.Meta.Permission)
-				meta.Meta.Resource = meta.Resource
-				meta.SetPermission(permission)
-			}
-		}
-	}
-
-	meta.FieldName = meta.GetFieldName()
-
-	if meta.BaseResource.SingleEditMetas == nil {
-		meta.BaseResource.SingleEditMetas = make(map[string]*Meta)
-	}
-
-	if _, ok := meta.BaseResource.SingleEditMetas[meta.Name]; ok {
-		if meta.Type != "single_edit" {
-			delete(meta.BaseResource.SingleEditMetas, meta.Name)
-			meta.Inline = false
-		}
-	} else if meta.Type == "single_edit" {
-		meta.BaseResource.SingleEditMetas[meta.Name] = meta
-		meta.Inline = true
-	}
-
-	// call meta config's ConfigureMetaInterface
-	if meta.Config != nil {
-		meta.Config.ConfigureQorMeta(meta)
-	}
-
-	// call field's ConfigureMetaInterface
-	if meta.FieldStruct != nil {
-		if injector, ok := reflect.New(meta.FieldStruct.Struct.Type).Interface().(resource.ConfigureMetaInterface); ok {
-			injector.ConfigureQorMeta(meta)
-		}
-	}
-
-	// run meta configors
-	if baseResource := meta.BaseResource; baseResource != nil {
-		for key, fc := range baseResource.GetAdmin().metaConfigorMaps {
-			if key == meta.Type {
-				fc(meta)
-			}
-		}
-	}
-}
-
-func (meta *Meta) IsZero(recorde, value interface{}) bool {
+func (this *Meta) IsZero(recorde, value interface{}) (zero bool) {
 	if value == nil {
+		if this.FieldStruct != nil && this.FieldStruct.Relationship != nil && indirectType(this.FieldStruct.Struct.Type).Kind() == reflect.Struct {
+			return this.FieldStruct.Relationship.GetRelatedID(recorde).IsZero()
+		}
 		return true
 	}
-	if meta.IsZeroFunc != nil {
-		return meta.IsZeroFunc(recorde, value)
+	if this.NilAsZero {
+		return value == nil
+	}
+	if this.IsZeroFunc != nil {
+		return this.IsZeroFunc(recorde, value)
 	}
 	switch vt := value.(type) {
 	case helpers.Zeroer:
 		return vt.IsZero()
-	case string:
-		if vt == "" {
-			return true
-		}
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		if vt == 0 {
-			return true
-		}
-	case float32:
-		if vt == 0.0 {
-			return true
-		}
-	case float64:
-		if vt == 0.0 {
-			return true
-		}
 	case time.Time:
 		return vt.IsZero()
 	case *time.Time:
 		return vt == nil || vt.IsZero()
+	case interface{ PrimaryGoValue() interface{} }:
+		return this.IsZero(recorde, vt.PrimaryGoValue())
+	default:
+		return aorm.IsBlank(reflect.ValueOf(value))
 	}
-	return false
 }
 
 // GetSetter get setter from meta
-func (meta *Meta) GetSetter() func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-	if setter := meta.Meta.GetSetter(); setter != nil {
+func (this *Meta) GetSetter() func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+	if setter := this.Meta.GetSetter(); setter != nil {
 		return func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) (err error) {
-			valuer := meta.Meta.GetValuer()
+			valuer := this.Meta.GetValuer()
 			var old interface{}
 			if valuer != nil {
 				old = valuer(recorde, context)
@@ -810,8 +712,12 @@ func (meta *Meta) GetSetter() func(recorde interface{}, metaValue *resource.Meta
 					}
 				}
 			}
-			if err = meta.TriggerSetEvent(E_META_SET, recorde, context, setter, metaValue); err == nil {
-				err = errors2.Wrap(meta.TriggerValueChangedEvent(E_META_CHANGED, recorde, context, old, valuer), "Trigger POST_SET")
+			if err = this.TriggerSetEvent(E_META_SET, recorde, context, setter, metaValue); err == nil {
+				if err = this.TriggerValueChangedEvent(E_META_CHANGED, recorde, context, old, valuer); err != nil {
+					err = MetaEventError{this, E_META_CHANGED, err}
+				}
+			} else {
+				err = MetaEventError{this, E_META_SET, err}
 			}
 			return
 		}
@@ -819,9 +725,40 @@ func (meta *Meta) GetSetter() func(recorde interface{}, metaValue *resource.Meta
 	return nil
 }
 
-func (meta *Meta) Set(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-	if setter := meta.GetSetter(); setter != nil {
+func (this *Meta) Set(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+	if setter := this.GetSetter(); setter != nil {
 		return setter(recorde, metaValue, context)
 	}
 	return nil
+}
+
+func (this *Meta) Proxier() bool {
+	return this.ProxyTo != nil
+}
+
+func (this *Meta) ID() string {
+	return this.BaseResource.FullID() + "#" + this.Name
+}
+
+type MetaEventError struct {
+	Meta  *Meta
+	Event string
+	Err   error
+}
+
+func (this MetaEventError) Translate(ctx i18nmod.Context) string {
+	err := this.Err
+	return fmt.Sprintf("%s: %s: %s %s: %s",
+		this.Meta.BaseResource.TranslateLabel(ctx),
+		this.Meta.TranslateLabel(ctx),
+		ctx.T(I18NGROUP+".event").String(),
+		this.Event, err)
+}
+
+func (this MetaEventError) Error() string {
+	return fmt.Sprintf("%s: %s [event %s]: %s", this.Meta.BaseResource.ID, this.Meta.Name, this.Event, this.Err)
+}
+
+func (this MetaEventError) Cause() error {
+	return this.Err
 }

@@ -54,7 +54,7 @@
       }
 
       if (/order_by/.test(search)) {
-        search = search.replace(/order_by(=\w+)?/, function () {
+        search = search.replace(/order_by(=[.\w:]+)?/, function () {
           return param;
         });
       } else {

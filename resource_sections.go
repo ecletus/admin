@@ -4,49 +4,71 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ecletus/core"
-	"github.com/ecletus/core/utils"
 	"github.com/ecletus/roles"
 )
 
-func (res *Resource) SectionsList(values ...interface{}) (dest []*Section) {
-	res.setSections(&dest, values...)
+func (this *Resource) SectionsList(values ...interface{}) (dest []*Section) {
+	this.setSections(&dest, values...)
 	return
 }
 
-func (res *Resource) allowedSections(record interface{}, sections []*Section, context *Context, roles ...roles.PermissionMode) []*Section {
+func (this *Resource) allowedSections(record interface{}, sections []*Section, context *Context, roles ...roles.PermissionMode) []*Section {
 	var newSections []*Section
 	for _, section := range sections {
 		newSection := &Section{Resource: section.Resource, Title: section.Title}
-		var editableRows [][]string
 		for _, row := range section.Rows {
-			var editableColumns []string
-			for _, column := range row {
-				meta := section.Resource.GetMeta(column)
-				if meta != nil {
-					if meta.SectionNotAllowed {
-						continue
-					}
-					
-					if meta.Enabled != nil && !meta.Enabled(record, context, meta) {
-						continue
-					}
+			func() {
+				var columns []string
+				for _, column := range row {
+					meta := section.Resource.GetMeta(column)
+					if meta != nil {
+						if meta.SectionNotAllowed {
+							continue
+						}
 
-					for _, role := range roles {
-						if core.HasPermission(meta, role, context.Context) {
-							editableColumns = append(editableColumns, column)
-							break
+						if meta.Enabled != nil && !meta.Enabled(record, context, meta) {
+							continue
+						}
+
+						if context.HasAnyPermission(meta, roles...) {
+							if len(columns) == 0 {
+								if sec := meta.Tags.Section(); sec != nil {
+									var add = func() {
+										// add current
+										newSections = append(newSections, &Section{
+											Resource:     section.Resource,
+											Title:        sec.Title,
+											Help:         sec.Help,
+											ReadOnlyHelp: sec.ReadOnlyHelp,
+											Rows:         [][]string{{column}},
+										})
+									}
+									if newSection.Title != "" {
+										defer add()
+									} else {
+										// split section
+										if len(newSection.Rows) > 0 {
+											// add previous
+											newSections = append(newSections, newSection)
+										}
+										add()
+										// create new empty section
+										newSection = &Section{Resource: section.Resource, Title: section.Title}
+									}
+									continue
+								}
+							}
+							columns = append(columns, column)
 						}
 					}
 				}
-			}
-			if len(editableColumns) > 0 {
-				editableRows = append(editableRows, editableColumns)
-			}
+				if len(columns) > 0 {
+					newSection.Rows = append(newSection.Rows, columns)
+				}
+			}()
 		}
 
-		if len(editableRows) > 0 {
-			newSection.Rows = editableRows
+		if len(newSection.Rows) > 0 {
 			newSections = append(newSections, newSection)
 		}
 	}
@@ -54,7 +76,7 @@ func (res *Resource) allowedSections(record interface{}, sections []*Section, co
 	return newSections
 }
 
-func (res *Resource) generateSections(values ...interface{}) []*Section {
+func (this *Resource) generateSections(values ...interface{}) []*Section {
 	var sections []*Section
 	var hasColumns, excludedColumns []string
 
@@ -78,26 +100,34 @@ func (res *Resource) generateSections(values ...interface{}) []*Section {
 				hasColumns = append(hasColumns, column)
 			}
 		} else {
-			utils.ExitWithMsg(fmt.Sprintf("Qor Resource: attributes should be Section or String, but it is %+v", value))
+			panic(fmt.Errorf("Qor Resource: attributes should be Section or String, but it is %+v", value))
 		}
 	}
 
 	sections = reverseSections(sections)
 	for _, section := range sections {
 		if section.Resource == nil {
-			section.Resource = res
+			section.Resource = this
 		}
 	}
 	return sections
 }
 
 // ConvertSectionToMetas convert section to metas
-func (res *Resource) ConvertSectionToMetas(sections []*Section) []*Meta {
+func (this *Resource) ConvertSectionToMetas(sections []*Section, metaGetter ...func(name string) *Meta) []*Meta {
+	var mg func(name string) *Meta
+	for _, mg = range metaGetter {
+	}
+	if mg == nil {
+		mg = func(name string) *Meta {
+			return this.GetMeta(name)
+		}
+	}
 	var metas []*Meta
 	for _, section := range sections {
 		for _, row := range section.Rows {
 			for _, col := range row {
-				meta := res.GetMeta(col)
+				meta := mg(col)
 				if meta != nil && meta.Type != "-" {
 					metas = append(metas, meta)
 				}
@@ -108,7 +138,7 @@ func (res *Resource) ConvertSectionToMetas(sections []*Section) []*Meta {
 }
 
 // ConvertSectionToStrings convert section to strings
-func (res *Resource) ConvertSectionToStrings(sections []*Section) []string {
+func (this *Resource) ConvertSectionToStrings(sections []*Section) []string {
 	var columns []string
 	for _, section := range sections {
 		for _, row := range section.Rows {
@@ -120,10 +150,12 @@ func (res *Resource) ConvertSectionToStrings(sections []*Section) []string {
 	return columns
 }
 
-func (res *Resource) setSections(sections *[]*Section, values ...interface{}) {
+func (this *Resource) setSections(sections *[]*Section, values ...interface{}) {
+	var replaces [][]string
+
 	if len(values) == 0 {
 		if len(*sections) == 0 {
-			*sections = res.generateSections(res.allAttrs())
+			*sections = this.generateSections(this.allAttrs())
 		}
 	} else {
 		var flattenValues []interface{}
@@ -140,18 +172,22 @@ func (res *Resource) setSections(sections *[]*Section, values ...interface{}) {
 			} else if section, ok := value.(*Section); ok {
 				flattenValues = append(flattenValues, section)
 			} else if column, ok := value.(string); ok {
+				if column[0] == '~' {
+					replaces = append(replaces, strings.Split(column[1:], ":"))
+					continue
+				}
 				flattenValues = append(flattenValues, column)
 			} else if columns, ok := value.([]string); ok {
-				flattenValues = append(flattenValues, &Section{Resource: res, Rows: [][]string{columns}})
+				flattenValues = append(flattenValues, &Section{Resource: this, Rows: [][]string{columns}})
 			} else if column, ok := value.([][]string); ok {
-				flattenValues = append(flattenValues, &Section{Resource: res, Rows: column})
+				flattenValues = append(flattenValues, &Section{Resource: this, Rows: column})
 			} else {
-				utils.ExitWithMsg(fmt.Sprintf("Qor Resource: attributes should be Section or String, but it is %+v", value))
+				panic(fmt.Errorf("Resource: attributes should be Section or String, but it is %+v", value))
 			}
 		}
 
 		if containsPositiveValue(flattenValues...) {
-			*sections = res.generateSections(flattenValues...)
+			*sections = this.generateSections(flattenValues...)
 		} else {
 			var columns, availbleColumns []string
 			for _, value := range flattenValues {
@@ -160,12 +196,27 @@ func (res *Resource) setSections(sections *[]*Section, values ...interface{}) {
 				}
 			}
 
-			for _, column := range res.allAttrs() {
+			for _, column := range this.allAttrs() {
 				if !isContainsColumn(columns, column) {
 					availbleColumns = append(availbleColumns, column)
 				}
 			}
-			*sections = res.generateSections(availbleColumns)
+			*sections = this.generateSections(availbleColumns)
+		}
+
+	replLoop:
+		for _, rpl := range replaces {
+			from, to := rpl[0], rpl[1]
+			for _, sec := range *sections {
+				for _, row := range sec.Rows {
+					for i, col := range row {
+						if col == from {
+							row[i] = to
+							continue replLoop
+						}
+					}
+				}
+			}
 		}
 	}
 }

@@ -1,94 +1,23 @@
 package admin
 
 import (
-	"time"
-
-	"github.com/ecletus/core"
-	"github.com/ecletus/core/utils"
+	"fmt"
 )
 
 var metaConfigorMaps = map[string]func(*Meta){
 	"date": func(meta *Meta) {
-		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
-				switch date := meta.GetValuer()(value, context).(type) {
-				case *time.Time:
-					if date == nil {
-						return ""
-					}
-					if date.IsZero() {
-						return ""
-					}
-					return utils.FormatTime(*date, "2006-01-02", context)
-				case time.Time:
-					if date.IsZero() {
-						return ""
-					}
-					return utils.FormatTime(date, "2006-01-02", context)
-				default:
-					return date
-				}
-			})
+		if meta.Config == nil {
+			cfg := &DateConfig{}
+			meta.Config = cfg
+			cfg.ConfigureQorMeta(meta)
 		}
 	},
 
-	"datetime": func(meta *Meta) {
-		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
-				switch date := meta.GetValuer()(value, context).(type) {
-				case *time.Time:
-					if date == nil {
-						return ""
-					}
-					if date.IsZero() {
-						return ""
-					}
-					return utils.FormatTime(*date, "2006-01-02 15:04", context)
-				case time.Time:
-					if date.IsZero() {
-						return ""
-					}
-					return utils.FormatTime(date, "2006-01-02 15:04", context)
-				default:
-					return date
-				}
-			})
-		}
-	},
-
-	"string": func(meta *Meta) {
-		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
-				switch str := meta.GetValuer()(value, context).(type) {
-				case *string:
-					if str != nil {
-						return *str
-					}
-					return ""
-				case string:
-					return str
-				default:
-					return str
-				}
-			})
-		}
-	},
-
-	"text": func(meta *Meta) {
-		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
-				switch str := meta.GetValuer()(value, context).(type) {
-				case *string:
-					if str != nil {
-						return *str
-					}
-					return ""
-				case string:
-					return str
-				default:
-					return str
-				}
-			})
+	"time": func(meta *Meta) {
+		if meta.Config == nil {
+			cfg := &TimeConfig{}
+			meta.Config = cfg
+			cfg.ConfigureQorMeta(meta)
 		}
 	},
 
@@ -132,4 +61,11 @@ var metaConfigorMaps = map[string]func(*Meta){
 			meta.Config.ConfigureQorMeta(meta)
 		}
 	},
+}
+
+func RegisterMetaConfigor(name string, configor func(meta *Meta)) {
+	if _, ok := metaConfigorMaps[name]; ok {
+		panic(fmt.Errorf("duplicate meta configor %q", name))
+	}
+	metaConfigorMaps[name] = configor
 }

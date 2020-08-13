@@ -1,33 +1,43 @@
-{{$actions := load_actions "show"}}
-
-<div class="qor-page__header">
-  {{$actions}}
-</div>
-<div class="qor-page__body qor-page__show" data-toggle="qor.inlineEdit"
+<div class="qor-page__body qor-page__show"
+     {{if not .Resource.ReadOnly}}
+      data-toggle="qor.inlineEdit"
       data-button-save="{{t "github_com:ecletus:admin.showpage.inlineedit.button.save" "save"}}"
-      data-button-cancel="{{t "github_com:ecletus:admin.showpage.inlineedit.button.cancel_edit" "cancel edit"}}">
-  {{render "shared/flashes"}}
-  {{render "shared/errors"}}
+      data-button-cancel="{{t "github_com:ecletus:admin.showpage.inlineedit.button.cancel_edit" "cancel edit"}}"
+     {{end}}>
+  {{record_frame .Resource .Result "show_page/start"}}
+  {{include "shared/alerts"}}
+  {{$help := resource_help .Resource}}
+  {{if $help}}
+    <div class="qor-help">
+      {{$help}}
+    </div>
+  {{end}}
+  {{include "shared/flashes"}}
+  {{include "shared/errors"}}
   {{if not (qor_context).NotFound}}
+    {{record_frame .Resource .Result "common/start"}}
+    {{record_frame .Resource .Result "show/start"}}
     <div class="qor-form-container">
-      {{if has_update_permission .Resource}}
+      {{if and (not (show_config).EditDisabled) (not .Resource.ReadOnly) (has_update_permission .Resource)}}
         <a href="{{join_url (url_for .Result .Resource) "edit"}}" class="mdl-button mdl-button--fab mdl-button--primary mdl-js-button mdl-js-ripple-effect qor-button--edit" data-url="{{join_url (url_for .Result .Resource) "edit"}}">
           <i class="material-icons">edit</i>
         </a>
-      {{end}}
-
-      <form class="qor-form" action="{{url_for .Result .Resource}}" method="POST" enctype="multipart/form-data">
-        <input name="_method" value="PUT" type="hidden">
-
-        {{render_form .Result (show_sections .Result)}}
-
-        {{if has_update_permission .Resource}}
+        <form class="qor-form" action="{{url_for .Result .Resource}}" method="POST" enctype="multipart/form-data">
+          <input name="_method" value="PUT" type="hidden">
+          {{record_frame .Resource .Result "show/form/start"}}
+          {{render_form .Result (show_sections .Result)}}
+          {{record_frame .Resource .Result "show/form/end"}}
           <div class="qor-form__actions qor-field__edit">
             <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{t "github_com:ecletus:admin.form.save_changes"}}</button>
             <a class="mdl-button mdl-button--primary mdl-js-button mdl-js-ripple-effect qor-button--cancel" href="javascript:history.back();">{{t "github_com:ecletus:admin.form.cancel_edit"}}</a>
           </div>
-        {{end}}
-      </form>
+        </form>
+      {{else}}
+          {{render_form .Result (show_sections .Result)}}
+      {{end}}
     </div>
+    {{record_frame .Resource .Result "show/end"}}
+    {{record_frame .Resource .Result "common/end"}}
   {{end}}
+  {{record_frame .Resource .Result "show_page/page"}}
 </div>

@@ -21,7 +21,7 @@
             data-allow-clear="true"
     {{if .Filter.Config.IsRemote -}}
             data-remote-data="true"
-            data-ajax--url="{{url_for .Filter.Config}}"
+            data-ajax-url="{{url_for .Filter.Config}}"
             {{if .Filter.Config.PrimaryField}}data-remote-data-primary-key="{{.Filter.Config.PrimaryField}}"{{end}}
             {{if .Filter.Config.DisplayField}}data-remote-data-display-key="{{.Filter.Config.DisplayField}}"{{end}}
             {{if .Filter.Config.IconField}}data-remote-data-icon-key="{{.Filter.Config.IconField}}"{{end}}

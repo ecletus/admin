@@ -22,6 +22,7 @@ type CrudSearchController struct {
 type CrudSearchIndexController struct {
 	CrudSearchController
 	IndexController
+	restorable bool
 }
 
 func NewCrudSearchIndexController() *CrudSearchIndexController {

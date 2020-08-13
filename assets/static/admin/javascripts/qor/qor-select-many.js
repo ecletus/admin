@@ -271,9 +271,9 @@
                     return keys[1];
                 }
                 return keys[0];
-            }
+            };
 
-            data.displayName = data.Text || data.Name || data.Title || data.Code || data[firstKey()];
+            data.displayName = data.Text || data.Name || data.Title || data.Code || data.Value || data[firstKey()];
 
             if (isNewData) {
                 this.addItem(data, true);

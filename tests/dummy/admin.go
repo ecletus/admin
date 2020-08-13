@@ -37,7 +37,7 @@ func NewDummyAdmin(keepData ...bool) *admin.Admin {
 		Name: "Languages",
 		Type: "select_many",
 		Collection: func(resource interface{}, context *core.Context) (results [][]string) {
-			if languages := []Language{}; !context.GetDB().Find(&languages).RecordNotFound() {
+			if languages := []Language{}; !context.DB().Find(&languages).RecordNotFound() {
 				for _, language := range languages {
 					results = append(results, []string{fmt.Sprint(language.ID), language.Name})
 				}

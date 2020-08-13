@@ -33,6 +33,7 @@
   function QorSelectOne(element, options) {
     this.$element = $(element);
     this.options = $.extend({}, QorSelectOne.DEFAULTS, $.isPlainObject(options) && options);
+    this.selectedRender = null;
     this.init();
   }
 
@@ -54,6 +55,10 @@
     constructor: QorSelectOne,
 
     init: function() {
+      let selectedRender = this.$element.data().selectedRender;
+      if (selectedRender) {
+        eval('this.selectedRender = function(data){'+atob(selectedRender)+'};');
+      }
       this.$selectOneSelectedTemplate = this.$element.find('[name="select-one-selected-template"]');
       this.$selectOneSelectedIconTemplate = this.$element.find('[name="select-one-selected-icon"]');
       this.bind();
@@ -181,7 +186,7 @@
           $selectFeild = $parent.find(CLASS_SELECT_FIELD);
 
       data.displayName = lock.displayField ? data[lock.displayField] :
-          (data.Text || data.Name || data.Title || data.Code || firstTextKey(data));
+          (data.Text || data.Name || data.Title || data.Value || data.Code || firstTextKey(data));
       data.selectoneValue = lock.primaryField ? data[lock.primaryField] : (data.primaryKey || data.ID);
 
       if (lock.iconField) {
@@ -196,6 +201,9 @@
         return;
       }
 
+      if (this.selectedRender) {
+        data.displayText = this.selectedRender(data)
+      }
       template = this.renderSelectOne(data);
 
       if ($selectFeild.length) {
@@ -225,10 +233,11 @@
   QorSelectOne.SELECT_ONE_OPTION_TEMPLATE = '<option value="[[ selectoneValue ]]" selected>[[ displayName ]]</option>';
 
   QorSelectOne.plugin = function(options) {
+    let args = Array.prototype.slice.call(arguments, 1);
     return this.each(function() {
-      var $this = $(this);
-      var data = $this.data(NAMESPACE);
-      var fn;
+      let $this = $(this),
+        data = $this.data(NAMESPACE),
+        fn;
 
       if (!data) {
         if (/destroy/.test(options)) {
@@ -239,7 +248,7 @@
       }
 
       if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
-        fn.apply(data);
+        fn.apply(data, args);
       }
     });
   };

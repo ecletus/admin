@@ -72,16 +72,16 @@ func OnMetaValue(meta *Meta, eventName string, cb func(e *MetaValuerEvent)) *Met
 	return meta
 }
 
-func (meta *Meta) OnValue(cb func(e *MetaValuerEvent)) *Meta {
-	return OnMetaValue(meta, E_META_VALUE, cb)
+func (this *Meta) OnValue(cb func(e *MetaValuerEvent)) *Meta {
+	return OnMetaValue(this, E_META_VALUE, cb)
 }
 
-func (meta *Meta) OnFormattedValue(cb func(e *MetaValuerEvent)) *Meta {
-	return OnMetaValue(meta, E_META_FORMATTED_VALUE, cb)
+func (this *Meta) OnFormattedValue(cb func(e *MetaValuerEvent)) *Meta {
+	return OnMetaValue(this, E_META_FORMATTED_VALUE, cb)
 }
 
-func (meta *Meta) OnPostFormattedValue(cb func(e *MetaValuerEvent)) *Meta {
-	return OnMetaValue(meta, E_META_POST_FORMATTED_VALUE, cb)
+func (this *Meta) OnPostFormattedValue(cb func(e *MetaValuerEvent)) *Meta {
+	return OnMetaValue(this, E_META_POST_FORMATTED_VALUE, cb)
 }
 
 type MetaSetEvent struct {
@@ -92,32 +92,39 @@ type MetaSetEvent struct {
 	currentValueCalled bool
 }
 
-func (mse *MetaSetEvent) CurrentValue() interface{} {
-	if !mse.currentValueCalled {
-		mse.currentValueCalled = true
-		mse.currentValue = mse.Meta.Value(mse.Context, mse.Recorde)
+func (this *MetaSetEvent) CurrentValue() interface{} {
+	if !this.currentValueCalled {
+		this.currentValueCalled = true
+		this.currentValue = this.Meta.Value(this.Context, this.Recorde)
 	}
-	return mse.currentValue
+	return this.currentValue
 }
 
-func (mse *MetaSetEvent) SetValue(value interface{}) {
-	mse.MetaValue.Value = value
+func (this *MetaSetEvent) SetValue(value interface{}) {
+	this.MetaValue.Value = value
 }
 
-func (mse *MetaSetEvent) Value() interface{} {
-	return mse.MetaValue.Value
+func (this *MetaSetEvent) Value() interface{} {
+	return this.MetaValue.Value
 }
 
-func (meta *Meta) OnSet(cb func(e *MetaSetEvent)) *Meta {
-	meta.On(E_META_SET, func(e edis.EventInterface) {
-		cb(e.(*MetaSetEvent))
+func (this *MetaSetEvent) FirstStringValue() (value string) {
+	if v := this.Value(); v != nil {
+		return v.([]string)[0]
+	}
+	return
+}
+
+func (this *Meta) OnSet(cb func(e *MetaSetEvent) error) *Meta {
+	this.On(E_META_SET, func(e edis.EventInterface) error {
+		return cb(e.(*MetaSetEvent))
 	})
-	return meta
+	return this
 }
 
-func (meta *Meta) OnChanged(cb func(e *MetaValueChangedEvent)) *Meta {
-	meta.On(E_META_CHANGED, func(e edis.EventInterface) {
-		cb(e.(*MetaValueChangedEvent))
+func (this *Meta) OnChanged(cb func(e *MetaValueChangedEvent) error) *Meta {
+	this.On(E_META_CHANGED, func(e edis.EventInterface) error {
+		return cb(e.(*MetaValueChangedEvent))
 	})
-	return meta
+	return this
 }

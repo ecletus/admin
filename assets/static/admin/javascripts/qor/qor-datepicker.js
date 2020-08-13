@@ -1,4 +1,4 @@
-(function(factory) {
+(function (factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -9,7 +9,7 @@
         // Browser globals.
         factory(jQuery);
     }
-})(function($) {
+})(function ($) {
     'use strict';
 
     var NAMESPACE = 'qor.datepicker';
@@ -25,7 +25,7 @@
     function replaceText(str, data) {
         if (typeof str === 'string') {
             if (typeof data === 'object') {
-                $.each(data, function(key, val) {
+                $.each(data, function (key, val) {
                     str = str.replace('$[' + String(key).toLowerCase() + ']', val);
                 });
             }
@@ -34,9 +34,23 @@
         return str;
     }
 
+    $.extend(true, QOR.messages, {
+        datepicker: {
+            datepicker: {
+                title: 'Pick a date',
+                ok: 'OK',
+                cancel: 'Cancel'
+            }
+        }
+    });
+
     function QorDatepicker(element, options) {
         this.$element = $(element);
-        this.options = $.extend(true, {}, QorDatepicker.DEFAULTS, $.isPlainObject(options) && options);
+        this.options = $.extend(true, {}, {
+                text: QOR.messages.datepicker.datepicker
+            },
+            ($.isPlainObject(options) && options)
+        );
         this.date = null;
         this.formatDate = null;
         this.built = false;
@@ -45,19 +59,19 @@
     }
 
     QorDatepicker.prototype = {
-        init: function() {
+        init: function () {
             this.bind();
         },
 
-        bind: function() {
+        bind: function () {
             this.$element.on(EVENT_CLICK, $.proxy(this.show, this));
         },
 
-        unbind: function() {
+        unbind: function () {
             this.$element.off(EVENT_CLICK, this.show);
         },
 
-        build: function() {
+        build: function () {
             let $modal,
                 $ele = this.$element,
                 data = this.pickerData,
@@ -66,8 +80,12 @@
                     date: date,
                     inline: true
                 },
-                parent = $ele.closest(CLASS_PARENT),
-                $targetInput = parent.find(data.targetInput);
+                parent = $ele.closest(CLASS_PARENT);
+            if (data.format) {
+                datepickerOptions.format = data.format
+            }
+
+            let $targetInput = parent.find(data.targetInput);
 
             if (this.built) {
                 return;
@@ -76,7 +94,12 @@
             this.$modal = $modal = $(replaceText(QorDatepicker.TEMPLATE, this.options.text)).appendTo('body');
 
             if ($targetInput.length) {
-                datepickerOptions.date = $targetInput.val() ? new Date($targetInput.val()) : new Date();
+                let val = $targetInput.val(), date;
+                if (val.length) {
+                    datepickerOptions.date = datepickerOptions.format ? $.fn.qorDatepicker.parseDate(datepickerOptions.format, val): new Date(val);
+                } else {
+                    datepickerOptions.date = new Date();
+                }
             }
 
             if (data.targetInput && $targetInput.data('start-date')) {
@@ -90,7 +113,7 @@
             this.built = true;
         },
 
-        unbuild: function() {
+        unbuild: function () {
             if (!this.built) {
                 return;
             }
@@ -98,7 +121,7 @@
             this.$modal.find(CLASS_EMBEDDED).off(EVENT_CHANGE, this.change).qorDatepicker('destroy').end().find(CLASS_SAVE).off(EVENT_CLICK, this.pick).end().remove();
         },
 
-        change: function(e) {
+        change: function (e) {
             var $modal = this.$modal;
             var $target = $(e.target);
             var date;
@@ -114,7 +137,7 @@
                 );
         },
 
-        show: function() {
+        show: function () {
             if (!this.built) {
                 this.build();
             }
@@ -122,7 +145,7 @@
             this.$modal.qorModal('show');
         },
 
-        pick: function() {
+        pick: function () {
             let targetInputClass = this.pickerData.targetInput,
                 $element = this.$element,
                 $parent = $element.closest(CLASS_PARENT),
@@ -141,23 +164,14 @@
                     newValue = newValue + ' 00:00';
                 }
             }
-
             $targetInput.val(newValue).trigger('change');
             this.$modal.qorModal('hide');
         },
 
-        destroy: function() {
+        destroy: function () {
             this.unbind();
             this.unbuild();
             this.$element.removeData(NAMESPACE);
-        }
-    };
-
-    QorDatepicker.DEFAULTS = {
-        text: {
-            title: 'Pick a date',
-            ok: 'OK',
-            cancel: 'Cancel'
         }
     };
 
@@ -180,8 +194,8 @@
             </div>
         </div>`;
 
-    QorDatepicker.plugin = function(option) {
-        return this.each(function() {
+    QorDatepicker.plugin = function (option) {
+        return this.each(function () {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var options;
@@ -206,14 +220,20 @@
         });
     };
 
-    $(function() {
+    let $document = $(document);
+
+    $document.data('qor.datepicker', function (cb) {
+        return cb.call(QorDatepicker);
+    });
+
+    $(function () {
         var selector = '[data-toggle="qor.datepicker"]';
 
-        $(document)
-            .on(EVENT_DISABLE, function(e) {
+        $document
+            .on(EVENT_DISABLE, function (e) {
                 QorDatepicker.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function(e) {
+            .on(EVENT_ENABLE, function (e) {
                 QorDatepicker.plugin.call($(selector, e.target));
             })
             .triggerHandler(EVENT_ENABLE);

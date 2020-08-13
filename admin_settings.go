@@ -16,7 +16,7 @@ type SettingsStorageInterface interface {
 
 // AdminSetting admin settings
 type AdminSetting struct {
-	aorm.KeyStringSerial
+	aorm.Model
 	Key      string
 	Resource string
 	UserID   string
@@ -57,7 +57,7 @@ func (settings) Get(key string, value interface{}, context *Context) error {
 // Save save admin settings
 func (settings) Save(key string, value interface{}, res *Resource, user common.User, context *Context) error {
 	var (
-		tx          = context.GetDB().New()
+		tx          = context.DB().New()
 		result, err = json.Marshal(value)
 		resParams   = ""
 		userID      = ""
@@ -84,6 +84,6 @@ func (settings) Save(key string, value interface{}, res *Resource, user common.U
 	return err
 }
 
-func (admin *Admin) Settings() SettingsStorageInterface {
-	return &admin.settings
+func (this *Admin) Settings() SettingsStorageInterface {
+	return &this.settings
 }

@@ -49,7 +49,8 @@
                 options = this.options,
                 onSelect = options.onSelect;
 
-            data = $.extend({}, data, $this.data());
+            data = $this.data();
+            data = $.extend({}, {}, data);
             data.$clickElement = $this;
 
             url = data.mediaLibraryUrl || data.url;

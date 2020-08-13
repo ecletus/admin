@@ -1,27 +1,26 @@
 package admin
 
 import (
-	"path"
+	"github.com/ecletus/roles"
 
 	"github.com/ecletus/core"
-	"github.com/ecletus/roles"
 )
 
-// GetMenus get all sidebar menus for admin
-func (admin Admin) GetMenus() []*Menu {
-	return admin.menus
+// GetMenus get all sidebar itemMenus for admin
+func (this Admin) GetMenus() []*Menu {
+	return this.menus
 }
 
-// AddMenu add a menu to admin sidebar
-func (admin *Admin) AddMenu(menu *Menu) *Menu {
-	menu.prefix = admin.Config.MountPath
-	admin.menus = appendMenu(admin.menus, menu.Ancestors, menu)
+// AddItemMenu add a menu to admin sidebar
+func (this *Admin) AddMenu(menu *Menu) *Menu {
+	menu.prefix = this.Config.MountPath
+	this.menus = appendMenu(this.menus, menu.Ancestors, menu)
 	return menu
 }
 
-// GetMenu get sidebar menu with name
-func (admin Admin) GetMenu(name string) *Menu {
-	return getMenu(admin.menus, name)
+// GetItemMenu get sidebar menu with name
+func (this Admin) GetMenu(name string) *Menu {
+	return getMenu(this.menus, name)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -32,10 +31,11 @@ func (admin Admin) GetMenu(name string) *Menu {
 type Menu struct {
 	Name         string
 	Label        string
+	LabelKey     string
 	LabelFunc    func() string
-	Link         string
+	URI          string
 	Icon         string
-	RelativePath string
+	MdlIcon      string
 	Priority     int
 	Ancestors    []string
 	Permissioner core.Permissioner
@@ -43,21 +43,35 @@ type Menu struct {
 	Class        string
 	Enabled      func(menu *Menu, context *Context) bool
 	Resource     *Resource
+	BaseResource *Resource
 
 	subMenus []*Menu
 	prefix   string
 	MakeLink func(context *Context, args ...interface{}) string
+	AjaxLoad bool
 }
 
-// GetLabel return menu's Label
-func (menu Menu) GetLabel() string {
+func (menu Menu) GetLabelPair() (keys []string, value string) {
 	if menu.LabelFunc != nil {
-		return menu.LabelFunc()
+		return []string{menu.LabelFunc()}, menu.Label
 	}
+	if menu.LabelKey != "" {
+		return []string{menu.LabelKey}, menu.Label
+	}
+	res := menu.Resource
+	if res == nil {
+		res = menu.BaseResource
+	}
+	if res != nil {
+		keys = append(keys, res.I18nPrefix+".itemMenus."+menu.Name)
+	}
+	keys = append(keys, I18NGROUP+".itemMenus."+menu.Name)
 	if menu.Label != "" {
-		return menu.Label
+		value = menu.Label
+	} else {
+		value = menu.Name
 	}
-	return I18NGROUP + ".menus." + menu.Name
+	return
 }
 
 // GetLabel return menu's Label
@@ -69,46 +83,31 @@ func (menu Menu) GetIcon() string {
 }
 
 // URL return menu's URL
-func (menu Menu) RealURL() string {
-	if menu.Link != "" {
-		return menu.Link
-	}
-
-	if (menu.prefix != "") && (menu.RelativePath != "") {
-		return path.Join(menu.prefix, menu.RelativePath)
-	}
-
-	return menu.RelativePath
-}
-
-// URL return menu's URL
-func (menu Menu) URL(context *Context, args ...interface{}) string {
+func (menu *Menu) URL(context *Context, args ...interface{}) string {
 	if menu.MakeLink != nil {
 		return menu.MakeLink(context, args...)
 	}
 
-	if menu.Link != "" {
-		return menu.Link
+	if menu.URI != "" {
+		if menu.URI[0] == '/' {
+			return context.Path(menu.URI)
+		}
+		return menu.URI
 	}
-
-	return context.GenURL(menu.RelativePath)
+	return ""
 }
 
-// HasPermission check menu has permission or not
-func (menu Menu) HasPermissionE(mode roles.PermissionMode, context *core.Context) (bool, error) {
-	if menu.Permission != nil {
-		var roles_ = []interface{}{}
-		for _, role := range context.Roles {
-			roles_ = append(roles_, role)
-		}
-		return roles.HasPermissionDefaultE(true, menu.Permission, mode, roles_...)
-	}
-
+// HasContextPermission check menu has permission or not
+func (menu Menu) HasPermission(mode roles.PermissionMode, context *core.Context) (perm roles.Perm) {
 	if menu.Permissioner != nil {
-		return core.HasPermissionDefaultE(true, menu.Permissioner, mode, context)
+		return menu.Permissioner.HasPermission(mode, context)
 	}
 
-	return true, roles.ErrDefaultPermission
+	if menu.Permission != nil {
+		return menu.Permission.HasPermission(context, mode, context.Roles.Interfaces()...)
+	}
+
+	return
 }
 
 // GetSubMenus get submenus for a menu
@@ -135,7 +134,10 @@ func getMenu(menus []*Menu, name string) *Menu {
 func generateMenu(menus []string, menu *Menu) *Menu {
 	menuCount := len(menus)
 	for index := range menus {
-		menu = &Menu{Name: menus[menuCount-index-1], subMenus: []*Menu{menu}}
+		menu = &Menu{
+			Name:     menus[menuCount-index-1],
+			subMenus: []*Menu{menu},
+		}
 	}
 
 	return menu

@@ -67,7 +67,7 @@ func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, 
 		if getter, ok := value.(valuesmap.Getter); ok {
 			return convertObjectToJSONMap(res, context, getter.Get(), layout)
 		}
-		metas, metaNames := res.MetasFromLayoutContext(layout, context, value, roles.Read)
+		metas, metaNames := res.MetasFromLayoutNameContext(layout, context, value, roles.Read)
 		values := map[string]interface{}{}
 		for i, meta := range metas {
 			// has_one, has_many checker to avoid dead loop

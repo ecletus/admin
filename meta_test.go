@@ -170,10 +170,10 @@ func TestManyToManyMetaSetter(t *testing.T) {
 	// 	Meta:  meta,
 	// 	Value: []int{en.Id, cn.Id},
 	// }
-	// meta.Setter(userRecord, metaValue, &qor.Context{Config: &qor.Config{DB: db}})
+	// meta.GenericSetter(userRecord, metaValue, &qor.Context{Config: &qor.Config{DB: db}})
 
 	// if len(userRecord.Languages) != 2 {
-	// 	t.Error("many to many resource's value doesn't set")
+	// 	t.error("many to many resource's value doesn't set")
 	// }
 }
 

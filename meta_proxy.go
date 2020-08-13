@@ -17,6 +17,12 @@ func indirectType(r reflect.Type) reflect.Type {
 	}
 	return r
 }
+func IndirectRealType(r reflect.Type) reflect.Type {
+	for r.Kind() == reflect.Ptr || r.Kind() == reflect.Interface {
+		r = r.Elem()
+	}
+	return r
+}
 func indirectValuePtr(v reflect.Value) *reflect.Value {
 	v = reflect.Indirect(v)
 	return &v

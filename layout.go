@@ -5,6 +5,7 @@ import (
 	"github.com/ecletus/core/utils"
 	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/aorm"
+	"github.com/pkg/errors"
 )
 
 type Layout struct {
@@ -18,6 +19,13 @@ type Layout struct {
 	MetaAliases      map[string]*resource.MetaName
 	NotIndexRenderID bool
 	MetaID           string
+}
+
+func (l *Layout) GetMetas(res *Resource, context *Context, recorde interface{}) []string {
+	if l.MetaNamesFunc != nil {
+		return l.MetaNamesFunc(res, context, recorde)
+	}
+	return l.Metas
 }
 
 func (l *Layout) MetaNameDiscovery(key string) *resource.MetaName {
@@ -49,17 +57,24 @@ func (l *Layout) SetMetaNames(names ...interface{}) *Layout {
 		}
 	}
 
-	l.MetaNames = mnames
 	res := l.Resource
-	ms := res.FakeScope.GetModelStruct()
 	var columns []interface{}
 
-	for _, f := range ms.PrimaryFields {
+	for _, f := range res.ModelStruct.PrimaryFields {
 		columns = append(columns, aorm.IQ("{}."+f.DBName))
 	}
 
+	if mnames != nil && len(mnames) != len(l.Metas) {
+		panic(errors.New("names len isn't equals to defined metas"))
+	}
+
+	l.MetaNames = mnames
+
 	for _, metaName := range l.MetaNames {
 		meta := res.GetMeta(metaName.Name)
+		if meta.FieldStruct != nil && meta.FieldStruct.IsPrimaryKey {
+			continue
+		}
 		if meta.DB != nil {
 			dbName := &aorm.Alias{Expr: "(" + meta.DB.Expr + ")"}
 			if meta.DB.Name != "" {
@@ -71,7 +86,7 @@ func (l *Layout) SetMetaNames(names ...interface{}) *Layout {
 			}
 			columns = append(columns, dbName)
 		} else if meta.FieldName != "" {
-			dbName := ms.StructFieldsByName[meta.FieldName].DBName
+			dbName := res.ModelStruct.FieldsByName[meta.FieldName].DBName
 			columns = append(columns, aorm.IQ("{}."+dbName))
 		}
 	}
@@ -83,20 +98,20 @@ func (l *Layout) Prepare(crud *resource.CRUD) *resource.CRUD {
 	return l.Layout.Prepare(crud)
 }
 
-func (res *Resource) Layout(name string, layout resource.LayoutInterface) {
-	if res.registered {
+func (this *Resource) Layout(name string, layout resource.LayoutInterface) {
+	if this.registered {
 		if l, ok := layout.(*Layout); ok {
-			l.Resource = res
+			l.Resource = this
 			l.SetMetaNames(l.MetaNames)
 		}
 	}
-	res.Resource.Layout(name, layout)
+	this.Resource.Layout(name, layout)
 }
 
-func (res *Resource) initializeLayouts() {
-	for _, l := range res.Layouts {
+func (this *Resource) initializeLayouts() {
+	for _, l := range this.Layouts {
 		if l, ok := l.(*Layout); ok {
-			l.Resource = res
+			l.Resource = this
 			if l.MetaNames != nil {
 				l.SetMetaNames(l.MetaNames)
 			}

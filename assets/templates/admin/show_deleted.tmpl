@@ -1,10 +1,10 @@
-<div class="qor-page__header"></div>
+{{arg | alert -}}
+     {{t "github_com:ecletus:admin.alerts.recorde_deleted"}}
+{{- end}}
 <div class="qor-page__body qor-page__show" data-toggle="qor.inlineEdit"
       data-button-save="{{t "github_com:ecletus:admin.showpage.inlineedit.button.save" "save"}}"
       data-button-cancel="{{t "github_com:ecletus:admin.showpage.inlineedit.button.cancel_edit" "cancel edit"}}">
-  <div style="background-color: #FFF9C4; text-align: center; font-weight: bold; padding: 10px">
-    {{t "github_com:ecletus:admin.alerts.recorde_deleted" "DELETED"}}
-  </div>
+   {{render "shared/alerts"}}
   {{if not (qor_context).NotFound}}
     <div class="qor-form-container">
       {{if has_update_permission .Resource}}

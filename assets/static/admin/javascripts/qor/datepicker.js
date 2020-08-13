@@ -125,20 +125,20 @@
 
         for (i = 0; i < length; i++) {
             switch (parts[i]) {
-            case 'dd':
-            case 'd':
-                format.hasDay = true;
-                break;
+                case 'dd':
+                case 'd':
+                    format.hasDay = true;
+                    break;
 
-            case 'mm':
-            case 'm':
-                format.hasMonth = true;
-                break;
+                case 'mm':
+                case 'm':
+                    format.hasMonth = true;
+                    break;
 
-            case 'yyyy':
-            case 'yy':
-                format.hasYear = true;
-                break;
+                case 'yyyy':
+                case 'yy':
+                    format.hasYear = true;
+                    break;
 
                 // No default
             }
@@ -147,15 +147,84 @@
         return format;
     }
 
-    function Datepicker(element, options) {
-        options = $.isPlainObject(options) ? options : {};
+    function parseDate(format, date) {
+        var parts = [];
+        var length;
+        var year;
+        var day;
+        var month;
+        var val;
+        var i;
 
-        if (options.language) {
-            options = $.extend({}, Datepicker.LANGUAGES[options.language], options);
+        if (isDate(date)) {
+            return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        } else if (isString(date)) {
+            parts = date.match(REGEXP_DIGITS) || [];
         }
 
+        date = new Date();
+        year = date.getFullYear();
+        day = date.getDate();
+        month = date.getMonth();
+        length = format.parts.length;
+
+        if (parts.length === length) {
+            for (i = 0; i < length; i++) {
+                val = parseInt(parts[i], 10) || 1;
+
+                switch (format.parts[i]) {
+                    case 'dd':
+                    case 'd':
+                        day = val;
+                        break;
+
+                    case 'mm':
+                    case 'm':
+                        month = val - 1;
+                        break;
+
+                    case 'yy':
+                        year = 2000 + val;
+                        break;
+
+                    case 'yyyy':
+                        year = val;
+                        break;
+
+                    // No default
+                }
+            }
+        }
+
+        return new Date(year, month, day);
+    }
+
+    $.extend(true, QOR.messages, {
+        datepicker: {
+            // The date string format
+            format: 'yyyy-mm-dd',
+
+            // Days' name of the week.
+            days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+
+            // Shorter days' name
+            daysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+
+            // Shortest days' name
+            daysMin: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+
+            // Months' name
+            months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+
+            // Shorter months' name
+            monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        }
+    });
+
+    function Datepicker(element, options) {
+        options = $.isPlainObject(options) ? options : {};
         this.$element = $(element);
-        this.options = $.extend({}, Datepicker.DEFAULTS, options);
+        this.options = $.extend({}, Datepicker.DEFAULTS, QOR.messages.datepicker, options);
         this.isBuilt = false;
         this.isShown = false;
         this.isInput = false;
@@ -166,6 +235,43 @@
         this.endDate = null;
         this.init();
     }
+
+    Datepicker.formatDate = function (date, format) {
+        if (!format) {
+            format = QOR.messages.datepicker.format
+        }
+        if (isString(format)) {
+            format = parseFormat(format)
+        }
+        var formated = '';
+        var length;
+        var year;
+        var part;
+        var val;
+        var i;
+
+        if (isDate(date)) {
+            formated = format.source;
+            year = date.getFullYear();
+            val = {
+                d: date.getDate(),
+                m: date.getMonth() + 1,
+                yy: year.toString().substring(2),
+                yyyy: year
+            };
+
+            val.dd = (val.d < 10 ? '0' : '') + val.d;
+            val.mm = (val.m < 10 ? '0' : '') + val.m;
+            length = format.parts.length;
+
+            for (i = 0; i < length; i++) {
+                part = format.parts[i];
+                formated = formated.replace(part, val[part]);
+            }
+        }
+
+        return formated;
+    };
 
     Datepicker.prototype = {
         constructor: Datepicker,
@@ -339,46 +445,46 @@
 
             if (format.hasYear || format.hasMonth || format.hasDay) {
                 switch (Number(view)) {
-                case 2:
-                case 'years':
-                    $monthsPicker.addClass(CLASS_HIDE);
-                    $daysPicker.addClass(CLASS_HIDE);
+                    case 2:
+                    case 'years':
+                        $monthsPicker.addClass(CLASS_HIDE);
+                        $daysPicker.addClass(CLASS_HIDE);
 
-                    if (format.hasYear) {
-                        this.fillYears();
-                        $yearsPicker.removeClass(CLASS_HIDE);
-                    } else {
-                        this.showView(0);
-                    }
+                        if (format.hasYear) {
+                            this.fillYears();
+                            $yearsPicker.removeClass(CLASS_HIDE);
+                        } else {
+                            this.showView(0);
+                        }
 
-                    break;
+                        break;
 
-                case 1:
-                case 'months':
-                    $yearsPicker.addClass(CLASS_HIDE);
-                    $daysPicker.addClass(CLASS_HIDE);
+                    case 1:
+                    case 'months':
+                        $yearsPicker.addClass(CLASS_HIDE);
+                        $daysPicker.addClass(CLASS_HIDE);
 
-                    if (format.hasMonth) {
-                        this.fillMonths();
-                        $monthsPicker.removeClass(CLASS_HIDE);
-                    } else {
-                        this.showView(2);
-                    }
+                        if (format.hasMonth) {
+                            this.fillMonths();
+                            $monthsPicker.removeClass(CLASS_HIDE);
+                        } else {
+                            this.showView(2);
+                        }
 
-                    break;
+                        break;
 
                     // case 0:
                     // case 'days':
-                default:
-                    $yearsPicker.addClass(CLASS_HIDE);
-                    $monthsPicker.addClass(CLASS_HIDE);
+                    default:
+                        $yearsPicker.addClass(CLASS_HIDE);
+                        $monthsPicker.addClass(CLASS_HIDE);
 
-                    if (format.hasDay) {
-                        this.fillDays();
-                        $daysPicker.removeClass(CLASS_HIDE);
-                    } else {
-                        this.showView(1);
-                    }
+                        if (format.hasDay) {
+                            this.fillDays();
+                            $daysPicker.removeClass(CLASS_HIDE);
+                        } else {
+                            this.showView(1);
+                        }
                 }
             }
         },
@@ -450,7 +556,7 @@
                 '<' + itemTag + ' ' +
                 (defaults.disabled ? 'class="' + options.disabledClass + '"' :
                     defaults.picked ? 'class="' + options.pickedClass + '"' :
-                    defaults.muted ? 'class="' + options.mutedClass + '"' : '') +
+                        defaults.muted ? 'class="' + options.mutedClass + '"' : '') +
                 (defaults.view ? ' data-view="' + defaults.view + '"' : '') +
                 '>' +
                 defaults.text +
@@ -542,9 +648,7 @@
 
             this.$yearsPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$yearsNext.toggleClass(disabledClass, isNextDisabled);
-            this.$yearsCurrent.
-            toggleClass(disabledClass, true).
-            html((viewYear + start) + suffix + ' - ' + (viewYear + end) + suffix);
+            this.$yearsCurrent.toggleClass(disabledClass, true).html((viewYear + start) + suffix + ' - ' + (viewYear + end) + suffix);
             this.$years.html(list);
         },
 
@@ -598,9 +702,7 @@
 
             this.$yearPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$yearNext.toggleClass(disabledClass, isNextDisabled);
-            this.$yearCurrent.
-            toggleClass(disabledClass, isPrevDisabled && isNextDisabled).
-            html(viewYear + options.yearSuffix || '');
+            this.$yearCurrent.toggleClass(disabledClass, isPrevDisabled && isNextDisabled).html(viewYear + options.yearSuffix || '');
             this.$months.html(list);
         },
 
@@ -761,12 +863,10 @@
 
             this.$monthPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$monthNext.toggleClass(disabledClass, isNextDisabled);
-            this.$monthCurrent.
-            toggleClass(disabledClass, isPrevDisabled && isNextDisabled).
-            html(
+            this.$monthCurrent.toggleClass(disabledClass, isPrevDisabled && isNextDisabled).html(
                 options.yearFirst ?
-                viewYear + suffix + ' ' + months[viewMonth] :
-                months[viewMonth] + ' ' + viewYear + suffix
+                    viewYear + suffix + ' ' + months[viewMonth] :
+                    months[viewMonth] + ' ' + viewYear + suffix
             );
             this.$days.html(prevItems.join('') + items.join(' ') + nextItems.join(''));
         },
@@ -794,125 +894,125 @@
             view = $target.data('view');
 
             switch (view) {
-            case 'years prev':
-            case 'years next':
-                viewYear = view === 'years prev' ? viewYear - 10 : viewYear + 10;
-                year = $target.text();
-                isYear = REGEXP_YEAR.test(year);
+                case 'years prev':
+                case 'years next':
+                    viewYear = view === 'years prev' ? viewYear - 10 : viewYear + 10;
+                    year = $target.text();
+                    isYear = REGEXP_YEAR.test(year);
 
-                if (isYear) {
-                    viewYear = parseInt(year, 10);
+                    if (isYear) {
+                        viewYear = parseInt(year, 10);
+                        this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    }
+
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    this.fillYears();
+
+                    if (isYear) {
+                        this.showView(1);
+                        this.pick('year');
+                    }
+
+                    break;
+
+                case 'year prev':
+                case 'year next':
+                    viewYear = view === 'year prev' ? viewYear - 1 : viewYear + 1;
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    this.fillMonths();
+                    break;
+
+                case 'year current':
+
+                    if (this.format.hasYear) {
+                        this.showView(2);
+                    }
+
+                    break;
+
+                case 'year picked':
+
+                    if (this.format.hasMonth) {
+                        this.showView(1);
+                    } else {
+                        this.hideView();
+                    }
+
+                    break;
+
+                case 'year':
+                    viewYear = parseInt($target.text(), 10);
                     this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                }
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
 
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.fillYears();
+                    if (this.format.hasMonth) {
+                        this.showView(1);
+                    } else {
+                        this.hideView();
+                    }
 
-                if (isYear) {
-                    this.showView(1);
                     this.pick('year');
-                }
+                    break;
 
-                break;
+                case 'month prev':
+                case 'month next':
+                    viewMonth = view === 'month prev' ? viewMonth - 1 : view === 'month next' ? viewMonth + 1 : viewMonth;
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    this.fillDays();
+                    break;
 
-            case 'year prev':
-            case 'year next':
-                viewYear = view === 'year prev' ? viewYear - 1 : viewYear + 1;
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.fillMonths();
-                break;
+                case 'month current':
 
-            case 'year current':
+                    if (this.format.hasMonth) {
+                        this.showView(1);
+                    }
 
-                if (this.format.hasYear) {
-                    this.showView(2);
-                }
+                    break;
 
-                break;
+                case 'month picked':
 
-            case 'year picked':
+                    if (this.format.hasDay) {
+                        this.showView(0);
+                    } else {
+                        this.hideView();
+                    }
 
-                if (this.format.hasMonth) {
-                    this.showView(1);
-                } else {
+                    break;
+
+                case 'month':
+                    viewMonth = $.inArray($target.text(), this.options.monthsShort);
+                    this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+
+                    if (this.format.hasDay) {
+                        this.showView(0);
+                    } else {
+                        this.hideView();
+                    }
+
+                    this.pick('month');
+                    break;
+
+                case 'day prev':
+                case 'day next':
+                case 'day':
+                    viewMonth = view === 'day prev' ? viewMonth - 1 : view === 'day next' ? viewMonth + 1 : viewMonth;
+                    viewDay = parseInt($target.text(), 10);
+                    this.date = new Date(viewYear, viewMonth, viewDay);
+                    this.viewDate = new Date(viewYear, viewMonth, viewDay);
+                    this.fillDays();
+
+                    if (view === 'day') {
+                        this.hideView();
+                    }
+
+                    this.pick('day');
+                    break;
+
+                case 'day picked':
                     this.hideView();
-                }
-
-                break;
-
-            case 'year':
-                viewYear = parseInt($target.text(), 10);
-                this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-
-                if (this.format.hasMonth) {
-                    this.showView(1);
-                } else {
-                    this.hideView();
-                }
-
-                this.pick('year');
-                break;
-
-            case 'month prev':
-            case 'month next':
-                viewMonth = view === 'month prev' ? viewMonth - 1 : view === 'month next' ? viewMonth + 1 : viewMonth;
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.fillDays();
-                break;
-
-            case 'month current':
-
-                if (this.format.hasMonth) {
-                    this.showView(1);
-                }
-
-                break;
-
-            case 'month picked':
-
-                if (this.format.hasDay) {
-                    this.showView(0);
-                } else {
-                    this.hideView();
-                }
-
-                break;
-
-            case 'month':
-                viewMonth = $.inArray($target.text(), this.options.monthsShort);
-                this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-
-                if (this.format.hasDay) {
-                    this.showView(0);
-                } else {
-                    this.hideView();
-                }
-
-                this.pick('month');
-                break;
-
-            case 'day prev':
-            case 'day next':
-            case 'day':
-                viewMonth = view === 'day prev' ? viewMonth - 1 : view === 'day next' ? viewMonth + 1 : viewMonth;
-                viewDay = parseInt($target.text(), 10);
-                this.date = new Date(viewYear, viewMonth, viewDay);
-                this.viewDate = new Date(viewYear, viewMonth, viewDay);
-                this.fillDays();
-
-                if (view === 'day') {
-                    this.hideView();
-                }
-
-                this.pick('day');
-                break;
-
-            case 'day picked':
-                this.hideView();
-                this.pick('day');
-                break;
+                    this.pick('day');
+                    break;
 
                 // No default
             }
@@ -1037,9 +1137,9 @@
             var date = this.date;
 
             if (this.trigger(EVENT_PICK, {
-                    view: _view || '',
-                    date: date
-                }).isDefaultPrevented()) {
+                view: _view || '',
+                date: date
+            }).isDefaultPrevented()) {
                 return;
             }
 
@@ -1126,6 +1226,15 @@
         },
 
         /**
+         * Get the current date format
+         *
+         * @return {String} (format)
+         */
+        getDateFormat: function () {
+            return this.options.format;
+        },
+
+        /**
          * Set the current date with a new date
          *
          * @param {Date} date
@@ -1191,56 +1300,7 @@
          * @return {Date} (parsed date)
          */
         parseDate: function (date) {
-            var format = this.format;
-            var parts = [];
-            var length;
-            var year;
-            var day;
-            var month;
-            var val;
-            var i;
-
-            if (isDate(date)) {
-                return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            } else if (isString(date)) {
-                parts = date.match(REGEXP_DIGITS) || [];
-            }
-
-            date = new Date();
-            year = date.getFullYear();
-            day = date.getDate();
-            month = date.getMonth();
-            length = format.parts.length;
-
-            if (parts.length === length) {
-                for (i = 0; i < length; i++) {
-                    val = parseInt(parts[i], 10) || 1;
-
-                    switch (format.parts[i]) {
-                    case 'dd':
-                    case 'd':
-                        day = val;
-                        break;
-
-                    case 'mm':
-                    case 'm':
-                        month = val - 1;
-                        break;
-
-                    case 'yy':
-                        year = 2000 + val;
-                        break;
-
-                    case 'yyyy':
-                        year = val;
-                        break;
-
-                        // No default
-                    }
-                }
-            }
-
-            return new Date(year, month, day);
+            return parseDate(this.format, date)
         },
 
         /**
@@ -1250,35 +1310,7 @@
          * @return {String} (formated date)
          */
         formatDate: function (date) {
-            var format = this.format;
-            var formated = '';
-            var length;
-            var year;
-            var part;
-            var val;
-            var i;
-
-            if (isDate(date)) {
-                formated = format.source;
-                year = date.getFullYear();
-                val = {
-                    d: date.getDate(),
-                    m: date.getMonth() + 1,
-                    yy: year.toString().substring(2),
-                    yyyy: year
-                };
-
-                val.dd = (val.d < 10 ? '0' : '') + val.d;
-                val.mm = (val.m < 10 ? '0' : '') + val.m;
-                length = format.parts.length;
-
-                for (i = 0; i < length; i++) {
-                    part = format.parts[i];
-                    formated = formated.replace(part, val[part]);
-                }
-            }
-
-            return formated;
+            return Datepicker.formatDate(date, this.format);
         },
 
         // Destroy the datepicker and remove the instance from the target element
@@ -1288,8 +1320,6 @@
             this.$element.removeData(NAMESPACE);
         }
     };
-
-    Datepicker.LANGUAGES = {};
 
     Datepicker.DEFAULTS = {
         // Show the datepicker automatically when initialized
@@ -1309,12 +1339,6 @@
 
         // A element (or selector) for triggering the datepicker
         trigger: null,
-
-        // The ISO language code (built-in: en-US)
-        language: '',
-
-        // The date string format
-        format: 'yyyy-mm-dd',
 
         // The initial date
         date: null,
@@ -1336,21 +1360,6 @@
 
         // A string suffix to the year number.
         yearSuffix: '',
-
-        // Days' name of the week.
-        days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-
-        // Shorter days' name
-        daysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-
-        // Shortest days' name
-        daysMin: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
-
-        // Months' name
-        months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-
-        // Shorter months' name
-        monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
 
         // A element tag for each item of years, months and days
         itemTag: 'li',
@@ -1446,8 +1455,11 @@
     };
 
     $.fn.qorDatepicker.Constructor = Datepicker;
-    $.fn.qorDatepicker.languages = Datepicker.LANGUAGES;
     $.fn.qorDatepicker.setDefaults = Datepicker.setDefaults;
+    $.fn.qorDatepicker.formatDate = Datepicker.formatDate;
+    $.fn.qorDatepicker.parseDate = function (format, date) {
+        return parseDate(parseFormat(format), date)
+    };
 
     // No conflict
     $.fn.qorDatepicker.noConflict = function () {
@@ -1455,4 +1467,7 @@
         return this;
     };
 
+    $document.data('datepicker', function (cb) {
+        return cb.call($.fn.qorDatepicker)
+    })
 });

@@ -1,0 +1,15 @@
+.qor-field-url {
+  .qor-field__value-value {
+    font-size: 90%;
+    width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.qor-field {
+  .required-asterisk {
+    color: darkred;
+  }
+}

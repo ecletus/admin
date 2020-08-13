@@ -13,7 +13,12 @@ type I18n interface {
 }
 
 // T call i18n backend to translate
-func (admin *Admin) T(context *core.Context, key string, value interface{}, values ...interface{}) template.HTML {
+func (this *Admin) T(context *core.Context, key string, value interface{}, values ...interface{}) template.HTML {
+	return template.HTML(this.Ts(context, key, value, values...))
+}
+
+// T call i18n backend to translate
+func (this *Admin) Ts(context *core.Context, key string, value interface{}, values ...interface{}) string {
 	if len(values) > 1 {
 		panic("Values has many args.")
 	}
@@ -24,11 +29,11 @@ func (admin *Admin) T(context *core.Context, key string, value interface{}, valu
 		t.Data(values[0])
 	}
 
-	return template.HTML(t.Get())
+	return t.Get()
 }
 
 // TT call i18n backend to translate template
-func (admin *Admin) TT(context *core.Context, key string, data interface{}, defaul ...string) template.HTML {
+func (this *Admin) TT(context *core.Context, key string, data interface{}, defaul ...string) template.HTML {
 	t := context.GetI18nContext().T(key).Data(data)
 	if len(defaul) > 0 {
 		t = t.Default(defaul[0])

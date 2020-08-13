@@ -1,14 +1,15 @@
 package admin
 
 import (
+	"github.com/ecletus/core/resource"
 	"strings"
 
 	"github.com/ecletus/core"
 )
 
-func (admin *Admin) LoadCrumbs(rh *RouteHandler, ctx *Context, patterns ...string) {
+func (this *Admin) LoadCrumbs(_ *RouteHandler, ctx *Context, patterns ...string) {
 	resourceParam := strings.TrimSuffix(patterns[0][1:], "/*")
-	res := admin.GetResourceByParam(resourceParam)
+	res := this.GetResourceByParam(resourceParam)
 
 	if res == nil {
 		return
@@ -27,7 +28,7 @@ func (admin *Admin) LoadCrumbs(rh *RouteHandler, ctx *Context, patterns ...strin
 		}
 
 		if res.Config.Singleton {
-			if res.HasKey() && resCrumber.ID == "" {
+			if res.HasKey() && resCrumber.ID == nil {
 				if primaryFiels := res.GetPrimaryFields(); len(primaryFiels) > 0 {
 					recorde := res.New()
 					err := ctx.Site.GetSystemDB().DB.Model(res.Value).Select(primaryFiels[0].DBName).First(recorde).Error
@@ -36,20 +37,50 @@ func (admin *Admin) LoadCrumbs(rh *RouteHandler, ctx *Context, patterns ...strin
 					}
 					key := res.GetKey(recorde)
 					resCrumber.ID = key
-					ctx.RouteContext.URLParams.Add(res.ParamIDName(), key)
+					ctx.RouteContext.URLParams.Add(res.ParamIDName(), key.String())
 				}
 			} else {
-				for _, m := range *res.menus {
-					switch p {
-					case m.RelativePath[1:], m.RelativePath[1:] + "/*":
-						if subRes := m.Resource; subRes != nil {
-							if subRes.Config.Singleton && subRes.HasKey() {
-								resCrumber = &ResourceCrumber{Resource: subRes, ParentID: append(resCrumber.ParentID, resCrumber.ID), ID: resCrumber.ID}
-							} else {
-								resCrumber = &ResourceCrumber{Resource: subRes, ParentID: append(resCrumber.ParentID, resCrumber.ID)}
+				var ok bool
+				if res.itemMenus != nil {
+					menu_loop:
+					for _, m := range res.itemMenus {
+						switch p {
+						case m.URI:
+							if subRes := m.Resource; subRes != nil {
+								if subRes.Config.Singleton && subRes.HasKey() {
+									resCrumber = &ResourceCrumber{
+										Resource: subRes,
+										Parent: append(resCrumber.Parent, resCrumber.Resource),
+										ParentID: append(resCrumber.ParentID, resCrumber.ID),
+										ID: resCrumber.ID,
+									}
+								} else {
+									resCrumber = &ResourceCrumber{
+										Resource: subRes,
+										Parent: append(resCrumber.Parent, resCrumber.Resource),
+										ParentID: append(resCrumber.ParentID, resCrumber.ID),
+									}
+								}
+								res = subRes
+								crubers = append(crubers, resCrumber)
+								ok = true
+								break menu_loop
 							}
-							res = subRes
-							crubers = append(crubers, resCrumber)
+						}
+					}
+				}
+
+				if !ok {
+					for _, action := range res.Actions {
+						if p == action.Name {
+							ok = true
+							crubers = append(crubers, core.BreadCrumberFunc(func(ctx *core.Context) []core.Breadcrumb {
+								return []core.Breadcrumb{core.NewBreadcrumb("", ctx.TtS(action), "")}
+							}))
+							if action.Resource != nil {
+								resCrumber = &ResourceCrumber{Resource: action.Resource}
+							}
+							break
 						}
 					}
 				}
@@ -58,7 +89,7 @@ func (admin *Admin) LoadCrumbs(rh *RouteHandler, ctx *Context, patterns ...strin
 			// id pattern
 			idPattern := res.ParamIDPattern()
 			if strings.HasPrefix(p, idPattern) {
-				resCrumber.ID = ctx.URLParam(res.ParamIDName())
+				resCrumber.ID = resource.MustParseID(res, ctx.URLParam(res.ParamIDName()))
 			} else {
 				subRes := res.GetResourceByParam(strings.TrimSuffix(p, "/*"))
 				if subRes == nil {
@@ -69,9 +100,18 @@ func (admin *Admin) LoadCrumbs(rh *RouteHandler, ctx *Context, patterns ...strin
 					}
 				} else {
 					if subRes.Config.Singleton && subRes.HasKey() {
-						resCrumber = &ResourceCrumber{Resource: subRes, ParentID: append(resCrumber.ParentID, resCrumber.ID), ID: resCrumber.ID}
+						resCrumber = &ResourceCrumber{
+							Resource: subRes,
+							Parent: append(resCrumber.Parent, resCrumber.Resource),
+							ParentID: append(resCrumber.ParentID, resCrumber.ID),
+							ID: resCrumber.ID,
+						}
 					} else {
-						resCrumber = &ResourceCrumber{Resource: subRes, ParentID: append(resCrumber.ParentID, resCrumber.ID)}
+						resCrumber = &ResourceCrumber{
+							Resource: subRes,
+							Parent: append(resCrumber.Parent, resCrumber.Resource),
+							ParentID: append(resCrumber.ParentID, resCrumber.ID),
+						}
 					}
 					res = subRes
 					crubers = append(crubers, resCrumber)
@@ -90,7 +130,10 @@ func (admin *Admin) LoadCrumbs(rh *RouteHandler, ctx *Context, patterns ...strin
 	appender := ctx.Breadcrumbs()
 
 	for _, crumber := range crubers {
-		appender.Append(crumber.Breadcrumbs(ctx.Context)...)
+		if !ctx.HasError() {
+			appender.Append(crumber.Breadcrumbs(ctx.Context)...)
+		}
 	}
+
 	return
 }

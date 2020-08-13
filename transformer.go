@@ -25,6 +25,7 @@ var DefaultTransformer = &Transformer{
 func init() {
 	DefaultTransformer.RegisterTransformer("xml", &XMLTransformer{})
 	DefaultTransformer.RegisterTransformer("json", &JSONTransformer{})
+	DefaultTransformer.RegisterTransformer("csv", &CSVTransformer{})
 }
 
 // Transformer encoder & decoder transformer

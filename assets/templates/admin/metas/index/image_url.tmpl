@@ -1,6 +1,8 @@
 {{define "content"}}
     {{if has_prefix .Value "<"}}
         {{.Value}}
+    {{else if .Meta.Config.Popup }}
+        <a href="javascript:void(0);" data-url="{{.Value}}" data-title="{{.Context.StringifyRecord .BaseResource .Record}} - {{meta_record_label .Meta .Record}}" data-image="true"><img src="{{.Value}}"/></a>
     {{else}}
         <img src="{{.Value}}"/>
     {{end}}

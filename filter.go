@@ -2,9 +2,6 @@ package admin
 
 import (
 	"fmt"
-	"html/template"
-	"reflect"
-	"strings"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
@@ -16,7 +13,7 @@ type FieldFilter struct {
 	Struct                  *aorm.StructField
 	Virtual                 *aorm.VirtualField
 	InlineQueryName         string
-	TermForamtterFunc       func(term interface{}) interface{}
+	TermFormatterFunc       func(term interface{}) interface{}
 	QueryFieldFormatterFunc func(f *FieldFilter, queryField string) string
 }
 
@@ -33,28 +30,18 @@ func (f *FieldFilter) QueryField() string {
 }
 
 func (f *FieldFilter) FormatTerm(term interface{}) interface{} {
-	if f.TermForamtterFunc != nil {
-		return f.TermForamtterFunc(term)
+	if f.TermFormatterFunc != nil {
+		return f.TermFormatterFunc(term)
 	}
 	return term
 }
 
 func NewFieldFilter(res *Resource, fieldName string) (f *FieldFilter) {
 	f = &FieldFilter{FieldName: fieldName}
-	f.Struct, f.Virtual = res.FakeScope.GetModelStruct().FieldDiscovery(fieldName)
-	if f.Struct != nil {
-		if f.Struct.Relationship != nil {
-			typ := f.Struct.Struct.Type
-			if typ.Kind() == reflect.Ptr {
-				typ = typ.Elem()
-			}
-
-			ms := res.FakeScope.New(reflect.New(typ).Interface()).GetModelStruct()
-			f.Struct = ms.PrimaryFields[0]
-			f.FieldName += "." + f.Struct.Name
-		}
-		parts := strings.Split(f.FieldName, ".")
-		f.InlineQueryName = "{" + strings.Join(parts[0:len(parts)-1], ".") + "}." + f.Struct.DBName
+	if fpq := res.ModelStruct.FieldPathQueryOf(fieldName); fpq != nil {
+		f.Struct = fpq.Struct
+		f.Virtual = fpq.Virtual
+		f.InlineQueryName = fpq.Query()
 		return f
 	}
 	return nil
@@ -66,61 +53,72 @@ type Filter struct {
 
 	Name               string
 	Label              string
+	LabelDisabled      bool
 	Type               string
 	DefaultOperation   string
 	Operations         []string // eq, cont, gt, gteq, lt, lteq
 	NotChooseOperation bool
 	Resource           *Resource
-	Handler            func(*aorm.DB, *FilterArgument) *aorm.DB
+	Handler            func(db *aorm.DB, arg *FilterArgument) *aorm.DB
+	HandleEmpty        bool
 	Config             FilterConfigInterface
 	Available          func(context *Context) bool
 	Visible            func(context *Context) bool
 	Hidden             bool
 	advanced           bool
 
-	DefaultLabel string
-	FieldLabel   bool
-	LabelFunc    func() (string, string)
+	DefaultLabel  string
+	FieldLabel    bool
+	LabelPairFunc func(ctx *core.Context) (key, defaul string)
 
 	FieldName string
 	Field     *FieldFilter
+	Valuer    func(arg *FilterArgument) (value interface{}, err error)
+	index     uint32
 }
 
-func (f *Filter) With(fn func(f *Filter)) *Filter {
-	fn(f)
-	return f
+func (this *Filter) Index() uint32 {
+	return this.index
 }
 
-func (f *Filter) IsAdvanced() bool {
-	return f.advanced
+func (this *Filter) With(fn func(f *Filter)) *Filter {
+	fn(this)
+	return this
 }
 
-func (f *Filter) Advanced() *Filter {
-	f.advanced = true
-	return f
+func (this *Filter) IsAdvanced() bool {
+	return this.advanced
 }
 
-func (f *Filter) IsVisible(context *Context) bool {
-	if f.Hidden {
+func (this *Filter) Advanced() *Filter {
+	this.advanced = true
+	return this
+}
+
+func (this *Filter) IsVisible(context *Context) bool {
+	if this.Hidden {
 		return false
 	}
-	if f.Visible != nil {
-		return f.Visible(context)
+	if this.Visible != nil {
+		return this.Visible(context)
 	}
 	return true
 }
 
-func (f *Filter) GetLabelPair() (string, string) {
-	if f.LabelFunc != nil {
-		return f.LabelFunc()
+func (this *Filter) GetLabelC(ctx *core.Context) string {
+	if key, defaul := this.GetLabelPair(ctx); key != "" {
+		return ctx.Ts(key, defaul)
+	} else {
+		return defaul
 	}
-
-	return fmt.Sprintf("%v.filter.%v", f.Scheme.Resource.I18nPrefix, f.Name), f.Label
 }
 
-func (f *Filter) GetLabel(ctx *core.Context) template.HTML {
-	key, defaul := f.GetLabelPair()
-	return ctx.T(key, defaul)
+func (this *Filter) GetLabelPair(ctx *core.Context) (string, string) {
+	if this.LabelPairFunc != nil {
+		return this.LabelPairFunc(ctx)
+	}
+
+	return fmt.Sprintf("%v.filter.%v", this.Scheme.Resource.I18nPrefix, this.Name), this.Label
 }
 
 // FilterConfigInterface filter config interface
@@ -135,6 +133,7 @@ type FilterArgument struct {
 	Value    *resource.MetaValues
 	Resource *Resource
 	Context  *core.Context
+	GoValue  interface{}
 }
 
 // SavedFilter saved filter settings

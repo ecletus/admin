@@ -14,7 +14,7 @@ func TestMenu(t *testing.T) {
 	admin := New(core.NewConfig(nil))
 	admin.router.Prefix = "/admin"
 
-	menu := &Menu{Name: "Dashboard", Link: "/link1"}
+	menu := &Menu{Name: "Dashboard", URI: "/link1"}
 	admin.AddMenu(menu)
 
 	if menu.URL() != "/link1" {

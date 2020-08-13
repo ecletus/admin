@@ -1,29 +1,37 @@
 package admin
 
 import (
-	"fmt"
+	"path"
 	"reflect"
 	"strings"
 
+	errwrap "github.com/moisespsena-go/error-wrap"
+	"github.com/moisespsena-go/logging"
+	"github.com/moisespsena-go/xroute"
+
 	"github.com/moisespsena-go/aorm"
+
+	"github.com/ecletus/fragment"
+	"github.com/jinzhu/inflection"
+	"github.com/moisespsena-go/edis"
 
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/core/utils"
-	"github.com/ecletus/fragment"
-	"github.com/jinzhu/inflection"
-	"github.com/moisespsena-go/xroute"
-	"github.com/moisespsena-go/edis"
-	"github.com/moisespsena-go/error-wrap"
 )
 
-func (admin *Admin) newResource(value interface{}, config *Config, onUid func(uid string)) *Resource {
+var newResourceLog = logging.WithPrefix(log, "new_resource")
+
+func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid string)) *Resource {
+	var log = newResourceLog
 	if config == nil {
 		config = &Config{}
 	}
 
+	var typ reflect.Type
+
 	if value == nil {
 		if config.Sub.Parent == nil {
-			panic("Resource Value is nil.")
+			log.Fatalf("value is nil")
 		}
 
 		if field, ok := reflect.TypeOf(config.Sub.Parent.Value).Elem().FieldByName(config.Sub.FieldName); ok {
@@ -40,7 +48,7 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 				config.ID += config.Sub.FieldName
 			}
 
-			typ := field.Type
+			typ = field.Type
 			if typ.Kind() == reflect.Ptr {
 				typ = typ.Elem()
 			}
@@ -49,39 +57,71 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 					config.Param = config.Sub.FieldName
 				}
 				typ = typ.Elem()
-				if typ.Kind() == reflect.Ptr {
-					typ = typ.Elem()
-				}
 			}
-			value = reflect.New(typ).Interface()
 		} else {
-			panic("Resource field \"" + config.Sub.FieldName + "\" does not exists.")
+			log.Fatal("resource field `" + config.Sub.FieldName + "` does not exists")
 		}
+	} else {
+		typ, _, _ = aorm.StructTypeOf(reflect.TypeOf(value))
 	}
 
-	var uid string
+	var uid, uidSufix string
 	if config.Sub != nil && config.Sub.Parent != nil {
-		uid = config.Sub.Parent.UID + "@"
-		if config.Name == "" && config.Param == "" && config.ID == "" && config.Sub.FieldName != "" {
+		uid = config.Sub.Parent.UID
+		if config.Name == "" && config.ID == "" && config.Sub.FieldName != "" {
 			config.ID = config.Sub.FieldName
+			uidSufix = config.Sub.FieldName
+		}
+
+		if config.Param == "" {
+			config.Param = utils.ToParamString(config.Sub.FieldName)
 		}
 	}
 
-	uid += utils.TypeId(value)
+	if config.Sub != nil && config.Sub.FieldName != "" {
+		if config.ModelStruct == nil {
+			config.ModelStruct = config.Sub.Parent.ModelStruct.FieldsByName[config.Sub.FieldName].Model
+		}
+	}
+
+	if config.ModelStruct == nil {
+		config.ModelStruct = aorm.StructOf(typ)
+	}
+
+	if uidSufix == "" {
+		if uid != "" {
+			uid += "@"
+		}
+		uid += utils.TypeId(typ)
+	} else {
+		uid += "#" + uidSufix
+	}
+	log = logging.WithPrefix(newResourceLog, uid)
+	log.Debug("create")
+
+	if !aorm.AcceptTypeForModelStruct(typ) {
+		log.Notice("type excluded")
+		return nil
+	}
+
+	value = reflect.New(typ).Interface()
+
+	if res, ok := this.ResourcesByUID[uid]; ok {
+		if config.Duplicated != nil {
+			config.Duplicated(uid, res)
+		}
+		return res
+	}
 
 	if onUid != nil {
 		onUid(uid)
 	}
 
-	if config.Controller == nil {
-		config.Controller = NewCrudSearchIndexController()
-	}
-
 	res := &Resource{
-		Resource:         resource.New(admin.FakeDB.NewScope(value), config.ID, uid),
+		Resource:         resource.New(value, config.ID, uid, config.ModelStruct),
 		Config:           config,
 		cachedMetas:      &map[string][]*Meta{},
-		admin:            admin,
+		Admin:            this,
 		Resources:        make(map[string]*Resource),
 		ResourcesByParam: make(map[string]*Resource),
 		MetaAliases:      make(map[string]*resource.MetaName),
@@ -90,16 +130,43 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		Inherits:         make(map[string]*Child),
 		RouteHandlers:    make(map[string]*RouteHandler),
 		labelKey:         config.LabelKey,
+		Param:            config.Param,
+		Tags:             &ResourceTags{},
 	}
 
-	res.Controller.Resource = res
+	res.SetLogger(log)
+
+	res.SetDefaultDenyMode(func() bool {
+		return this.DefaultDenyMode
+	})
+
+	if config.Controller == nil {
+		config.Controller = NewCrudSearchIndexController()
+	} else if _, ok := config.Controller.(ControllerUpdater); !ok {
+		res.ReadOnly = true
+	}
+
+	res.Singleton = res.Config.Singleton
+	res.ControllerBuilder = &ResourceControllerBuilder{
+		Resource:   res,
+		Controller: config.Controller,
+	}
+
+	var viewController interface{}
+	if config.ViewControllerFactory != nil {
+		viewController = config.ViewControllerFactory(config.Controller)
+	} else {
+		viewController = &Controller{controller: config.Controller}
+	}
+
+	res.ViewControllerBuilder = &ResourceViewControllerBuilder{
+		ResourceController: res.ControllerBuilder,
+		Controller:         viewController,
+	}
+
+	res.ControllerBuilder.ViewController = res.ViewControllerBuilder
 
 	_, res.softDelete = value.(aorm.SoftDeleter)
-
-	res.Controller.Controller = config.Controller
-	res.Controller.ViewController = &ResourceViewController{
-		Controller: &Controller{Admin: admin, controller: config.Controller},
-	}
 
 	res.Scheme = NewScheme(res, "Default")
 	res.Resource.SetDispatcher(res)
@@ -112,26 +179,33 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 
 	if config.ID != "" {
 		res.ID = config.ID
-		res.I18nPrefix += "." + res.ID
-	}
-
-	if config.Sub != nil {
-		if config.Sub.Parent == nil {
-			panic("Parent is nil.")
+		if base := path.Base(res.ID); base != res.ModelStruct.Type.Name() {
+			if typ.Name() == "" {
+				res.I18nPrefix = res.Config.Sub.Parent.I18nPrefix + "." + base
+			} else {
+				res.I18nPrefix += "." + base
+			}
 		}
-		res.ParentResource = config.Sub.Parent
 	}
 
 	res.Router = xroute.NewMux(res.ID)
+	if res.Config.Singleton {
+		res.ItemRouter = res.Router
+	} else {
+		res.ItemRouter = xroute.NewMux(res.ID + ":ItemRouter")
+	}
 
 	if config.Prefix != "" {
 		res.Router.SetPrefix(strings.Replace(config.Prefix, ".", "/", -1))
 	}
 
-	if res.Config.Singleton {
-		res.ObjectRouter = res.Router
-	} else {
-		res.ObjectRouter = xroute.NewMux(res.ID + ":ObjectRouter")
+	if !config.Alone {
+		if config.Sub != nil {
+			if config.Sub.Parent == nil {
+				log.Fatal("parent is nil.")
+			}
+			res.ParentResource = config.Sub.Parent
+		}
 	}
 
 	res.Permission = config.Permission
@@ -148,8 +222,7 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		res.PluralName = inflection.Plural(res.Name)
 	}
 
-	res.Param = config.Param
-	if res.Param == "" {
+	if !config.Alone && res.Param == "" {
 		if res.Config.Singleton {
 			res.Param = res.Name
 		} else {
@@ -160,33 +233,34 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 		}
 	}
 
-	res.Param = utils.ToParamString(res.Param)
-	res.Parents = resourceParents(res)
-	res.PathLevel = len(res.Parents)
-	res.ParamName = resourceParamName(res.Parents, res.Param)
-	res.paramIDName = resourceParamIDName(res.PathLevel, res.ParamName)
+	if !config.Alone {
+		res.Param = utils.ToParamString(res.Param)
+		res.Parents = resourceParents(res)
+		res.PathLevel = len(res.Parents)
+		res.ParamName = resourceParamName(res.Parents, res.Param)
+		res.paramIDName = resourceParamIDName(res.PathLevel, res.ParamName)
 
-	if config.Sub != nil {
-		if config.Sub.FieldName != "" {
-			if field, ok := config.Sub.Parent.FakeScope.FieldByName(config.Sub.FieldName); ok {
-				if field.Relationship != nil {
-					res.SetParentResource(config.Sub.Parent, field.Relationship.ForeignFieldNames[0])
+		if config.Sub != nil {
+			if config.Sub.FieldName != "" {
+				if field, ok := config.Sub.Parent.ModelStruct.FieldsByName[config.Sub.FieldName]; ok {
+					if field.Relationship != nil {
+						res.SetParentResource(config.Sub.Parent, field.Relationship)
+					} else {
+						res.SetParentResource(config.Sub.Parent, nil)
+					}
 				} else {
-					res.SetParentResource(config.Sub.Parent, "")
+					log.Fatalf("invalid field name %q", config.Sub.FieldName)
 				}
-				//res.SetPrimaryFields(field.Relationship.ForeignFieldNames...)
-			} else {
-				panic(fmt.Sprintf("Invalid fieldName %q", config.Sub.FieldName))
+			} else if config.Sub.ParentFieldName != "" {
+				res.SetParentResource(config.Sub.Parent, res.ModelStruct.FieldsByName[config.Sub.ParentFieldName].Relationship)
+			} else if config.Sub.Relation != nil {
+				res.SetParentResource(config.Sub.Parent, config.Sub.Relation)
 			}
-		} else if config.Sub.ParentFieldName != "" {
-			res.SetParentResource(config.Sub.Parent, config.Sub.ParentFieldName)
-		}
 
-		if res.IsParentFieldVirtual() && !config.Invisible {
-			panic("Sub resource does not have relation for parent.")
+			if !res.Singleton {
+				subResourceConfigureFilters(res)
+			}
 		}
-
-		subResourceConfigureFilters(res)
 	}
 
 	// Configure resource when initializing
@@ -194,43 +268,75 @@ func (admin *Admin) newResource(value interface{}, config *Config, onUid func(ui
 	for i := 0; i < modelType.NumField(); i++ {
 		if fieldStruct := modelType.Field(i); fieldStruct.Anonymous {
 			if injector, ok := reflect.New(fieldStruct.Type).Interface().(resource.ConfigureResourceBeforeInitializeInterface); ok {
-				injector.ConfigureQorResourceBeforeInitialize(res)
+				injector.ConfigureResourceBeforeInitialize(res)
 			}
 		}
 	}
 
 	if injector, ok := res.Value.(resource.ConfigureResourceBeforeInitializeInterface); ok {
-		injector.ConfigureQorResourceBeforeInitialize(res)
+		injector.ConfigureResourceBeforeInitialize(res)
 	}
 
-	res.OnDBAction(func(e *resource.DBEvent) {
-		if e.Context.ResourceID == "" {
-			e.Context.ResourceID = e.Context.URLParam(res.ParamIDName())
-		}
-	}, resource.E_DB_ACTION_FIND_ONE.Before())
+	if !config.Alone {
+		res.OnDBActionE(func(e *resource.DBEvent) (err error) {
+			if e.Context.ResourceID == nil {
+				if idS := e.Context.URLParam(res.ParamIDName()); idS != "" {
+					e.Context.ResourceID, err = res.ParseID(idS)
+				}
+			}
+			return
+		}, resource.E_DB_ACTION_FIND_ONE.Before())
 
-	res.UseTheme("slideout")
-	configureDefaultLayouts(res)
+		res.UseTheme("slideout")
+
+		if res.ParentRelation != nil {
+			if res.ParentRelation.FieldName != "" {
+				res.MetaDisable(res.ParentRelation.FieldName)
+			}
+			res.MetaDisable(res.ParentRelation.ForeignFieldNames...)
+		}
+
+		parts := strings.Split(strings.ReplaceAll(res.UID, ".models.", "."), "@")
+		for i, p := range parts {
+			pos := strings.LastIndexByte(p, '.')
+			parts[i] = p[0:pos] + "/" + p[pos+1:]
+		}
+		res.TemplatePath = utils.ToUri(strings.ReplaceAll(strings.Join(parts, "/sub/"), "#", "/_"))
+
+		configureDefaultLayouts(res)
+	}
 	return res
 }
 
 // NewResource initialize a new qor resource, won't add it to admin, just initialize it
-func (admin *Admin) NewResource(value interface{}, config ...*Config) *Resource {
+func (this *Admin) NewResource(value interface{}, config ...*Config) *Resource {
 	if len(config) == 0 {
 		config = []*Config{nil}
 	}
-	return admin.NewResourceConfig(value, config[0])
+	return this.NewResourceConfig(value, config[0])
+}
+
+// NewResource initialize a new qor resource, won't add it to admin, just initialize it
+func (this *Admin) NewSingletonResource(value interface{}, config ...*Config) *Resource {
+	if len(config) == 0 {
+		config = []*Config{{}}
+	}
+	config[0].Singleton = true
+	return this.NewResourceConfig(value, config[0])
 }
 
 // NewResourceConfig initialize a new qor resource, won't add it to admin, just initialize it
-func (admin *Admin) NewResourceConfig(value interface{}, cfg *Config) *Resource {
+func (this *Admin) NewResourceConfig(value interface{}, cfg *Config) (res *Resource) {
 	if cfg == nil {
 		cfg = &Config{}
 	}
 
-	cfg.Invisible = true
-	cfg.NotMount = true
-	res := admin.newResource(value, cfg, nil)
+	cfg.Alone = true
+
+	if res = this.newResource(value, cfg, nil); res == nil {
+		return
+	}
+
 	res.configure()
 
 	res.AfterRegister(func() {
@@ -245,58 +351,92 @@ func (admin *Admin) NewResourceConfig(value interface{}, cfg *Config) *Resource 
 	if res.Config.Setup != nil {
 		res.Config.Setup(res)
 	}
+	for _, setup := range res.Config.Setups {
+		setup(res)
+	}
 	res.initializeLayouts()
 	for _, cb := range res.afterRegister {
 		cb()
 	}
 	res.afterRegister = nil
 	res.registered = true
-	err := admin.TriggerResource(&ResourceEvent{edis.NewEvent(E_RESOURCE_ADDED), res, false})
+	err := this.TriggerResource(&ResourceEvent{edis.NewEvent(E_RESOURCE_ADDED), res, nil, false})
 	if err != nil {
 		panic(errwrap.Wrap(err, "Trigger Resource Added"))
 	}
-	return res
+	return
 }
 
 // AddResource make a model manageable from admin interface
-func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource {
-	if len(config) == 0 {
-		config = []*Config{nil}
+func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
+	var cfg *Config
+	for _, cfg = range config {
+	}
+	if cfg == nil {
+		cfg = &Config{}
 	}
 
-	res := admin.newResource(value, config[0], func(uid string) {
-		if _, ok := admin.ResourcesByUID[uid]; ok {
+	if cfg.Duplicated == nil {
+		cfg.Duplicated = func(uid string, res *Resource) {
 			panic("Duplicate resource: UID=" + uid)
 		}
-	})
+	}
 
-	admin.ResourcesByUID[res.UID] = res
+	var log logging.Logger
+	var donea func()
+	defer func() {
+		if donea != nil {
+			donea()
+		}
+	}()
+	res := this.newResource(value, cfg, func(uid string) {
+		log = logging.WithPrefix(newResourceLog, uid)
+		donea = func() { log.Debug("done") }
+	})
+	if _, ok := this.ResourcesByUID[res.UID]; ok {
+		return res
+	}
+	this.ResourcesByUID[res.UID] = res
+
 	res.configure()
 
 	if res.ParentResource != nil {
 		res.ParentResource.Resources[res.ID] = res
 		res.ParentResource.ResourcesByParam[res.Param] = res
 		if !res.Config.Invisible {
-			menu := res.ParentResource.AddMenu(res.DefaultMenu())
-			menu.Enabled = func(menu *Menu, context *Context) bool {
-				if !context.NotFound {
-					if !context.IsResultSlice() {
-						if res.GetKey(context.Result) != "" {
-							if res.Config.MenuEnabled != nil {
-								return res.Config.MenuEnabled(menu, context)
+			if res.IsSingleton() {
+				menu := res.ParentResource.AddMenu(res.DefaultMenu())
+				menu.Enabled = func(menu *Menu, context *Context) bool {
+					if !context.NotFound {
+						if res.Config.MenuEnabled != nil {
+							return res.Config.MenuEnabled(menu, context)
+						}
+						return true
+					}
+					return false
+				}
+			} else {
+				menu := res.ParentResource.AddItemMenu(res.DefaultMenu())
+				menu.Enabled = func(menu *Menu, context *Context) bool {
+					if !context.NotFound {
+						if !context.IsResultSlice() {
+							if !aorm.IdOf(context.Result).IsZero() {
+								if res.Config.MenuEnabled != nil {
+									return res.Config.MenuEnabled(menu, context)
+								}
+								return true
 							}
-							return true
 						}
 					}
+					return false
 				}
-				return false
 			}
 		}
 	} else {
-		admin.Resources[res.ID] = res
-		admin.ResourcesByParam[res.Param] = res
+		this.Resources[res.ID] = res
+		this.ResourcesByParam[res.Param] = res
 		if !res.Config.Invisible {
-			admin.AddMenu(res.DefaultMenu())
+			this.AddMenu(res.DefaultMenu())
 		}
 	}
 
@@ -313,45 +453,54 @@ func (admin *Admin) AddResource(value interface{}, config ...*Config) *Resource 
 
 	res.initializeLayouts()
 
-	if res.Config.Setup != nil {
-		res.Config.Setup(res)
+	if resources, ok := this.ResourcesByType[res.ModelStruct.Type]; ok {
+		this.ResourcesByType[res.ModelStruct.Type] = append(resources, res)
+	} else {
+		this.ResourcesByType[res.ModelStruct.Type] = []*Resource{res}
 	}
 
-	res.registered = true
-	for _, cb := range res.afterRegister {
-		cb()
-	}
-	res.afterRegister = nil
+	done := func() {
+		if res.Config.Setup != nil {
+			log.Debug("setup start ", reflect.TypeOf(res.Config.Setup).PkgPath())
+			res.Config.Setup(res)
+			log.Debug("setup done ", reflect.TypeOf(res.Config.Setup).PkgPath())
+		}
+		res.registered = true
+		if len(res.afterRegister) > 0 {
+			for _, cb := range res.afterRegister {
+				log.Debug("after register start")
+				cb()
+				log.Debug("after register done")
+			}
+		}
+		res.afterRegister = nil
 
-	admin.triggerResourceAdded(res)
+		log.Debug("trigger added start")
+		if err := this.triggerResourceAdded(res); err != nil {
+			panic(err)
+		}
+		log.Debug("trigger added done")
+	}
+
+	if res.ParentResource != nil && !res.ParentResource.registered {
+		res.ParentResource.AfterRegister(done)
+	} else {
+		done()
+	}
 
 	return res
 }
 
-func (admin *Admin) triggerResourceAdded(res *Resource, cb ...func(e *ResourceEvent)) {
-	e := &ResourceEvent{edis.NewEvent(E_RESOURCE_ADDED), res, true}
-	if len(cb) > 0 {
-		for _, cb := range cb {
-			cb(e)
-		}
-		return
-	}
-	err := admin.TriggerResource(e)
-	if err != nil {
-		panic(errwrap.Wrap(err, "Trigger Resource Added"))
-	}
-}
-
 // GetResources get defined resources from admin
-func (admin *Admin) GetResources() (resources []*Resource) {
-	for _, r := range admin.Resources {
+func (this *Admin) GetResources() (resources []*Resource) {
+	for _, r := range this.Resources {
 		resources = append(resources, r)
 	}
 	return
 }
 
-func (admin *Admin) WalkResources(f func(res *Resource) bool) bool {
-	for _, r := range admin.Resources {
+func (this *Admin) WalkResources(f func(res *Resource) bool) bool {
+	for _, r := range this.Resources {
 		if !f(r) {
 			break
 		}
@@ -363,12 +512,9 @@ func (admin *Admin) WalkResources(f func(res *Resource) bool) bool {
 }
 
 // GetResourceByID get resource with name
-func (admin *Admin) GetResourceByID(id string) (resource *Resource) {
-	if resource, ok := admin.ResourcesByUID[id]; ok {
-		return resource
-	}
+func (this *Admin) GetResourceByID(id string) (resource *Resource) {
 	parts := strings.SplitN(id, ".", 2)
-	r := admin.Resources[parts[0]]
+	r := this.Resources[parts[0]]
 	if r == nil || len(parts) == 1 {
 		return r
 	} else {
@@ -377,9 +523,9 @@ func (admin *Admin) GetResourceByID(id string) (resource *Resource) {
 }
 
 // GetResourceByID get resource with name
-func (admin *Admin) GetResourceByParam(param string) (resource *Resource) {
+func (this *Admin) GetResourceByParam(param string) (resource *Resource) {
 	parts := strings.SplitN(param, ".", 2)
-	r := admin.ResourcesByParam[parts[0]]
+	r := this.ResourcesByParam[parts[0]]
 	if r == nil || len(parts) == 1 {
 		return r
 	} else {
@@ -387,19 +533,19 @@ func (admin *Admin) GetResourceByParam(param string) (resource *Resource) {
 	}
 }
 
-func (admin *Admin) GetParentResourceByID(id string) *Resource {
-	return admin.GetResourceByID(id)
+func (this *Admin) GetParentResourceByID(id string) *Resource {
+	return this.GetResourceByID(id)
 }
 
-func (admin *Admin) GetOrParentResourceByID(id string) *Resource {
-	return admin.GetParentResourceByID(id)
+func (this *Admin) GetOrParentResourceByID(id string) *Resource {
+	return this.GetParentResourceByID(id)
 }
 
 // AddSearchResource make a resource searchable from search center
-func (admin *Admin) AddSearchResource(resources ...*Resource) {
+func (this *Admin) AddSearchResource(resources ...*Resource) {
 	for _, res := range resources {
-		if _, ok := res.Controller.Controller.(ControllerSearcher); ok {
-			admin.searchResources = append(admin.searchResources, res)
+		if _, ok := res.ControllerBuilder.Controller.(ControllerSearcher); ok {
+			this.searchResources = append(this.searchResources, res)
 		}
 	}
 }

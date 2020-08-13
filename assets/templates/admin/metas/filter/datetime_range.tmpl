@@ -1,0 +1,35 @@
+<div class="qor-field clearfix" type="filter-datetime">
+  {{if .Label}}<label class="qor-field__label">{{.Label}}</label>{{end}}
+
+  {{ $start := .Context.Request.URL.Query.Get (print .InputNamePrefix ".Start") }}
+  {{ $dateFormat := .Filter.Config.DateConfig.FormatC .Context.Context }}
+  <div class="qor-field__edit qor-field__datetimepicker" data-picker-type="datetime">
+      <div style="margin-right: 150px" class="mdl-textfield mdl-js-textfield">
+        <input style="margin-left: 30px; width: 150px;" class="mdl-textfield__input qor-datetimepicker__input" placeholder="{{$dateFormat}} HH:MM" type="text" name="{{.InputNamePrefix}}.Start" value="{{$start}}">
+      </div>
+      <div>
+        <button data-toggle="qor.datepicker" data-format="{{$dateFormat}}" data-target-input=".qor-datetimepicker__input" class="mdl-button mdl-js-button mdl-button--icon qor-action__datepicker" type="button">
+          <i class="material-icons">date_range</i>
+        </button>
+        <button data-toggle="qor.timepicker" data-target-input=".qor-datetimepicker__input" class="mdl-button mdl-js-button mdl-button--icon qor-action__timepicker" type="button">
+          <i class="material-icons">access_time</i>
+        </button>
+      </div>
+  </div>
+  {{ $end := .Context.Request.URL.Query.Get (print .InputNamePrefix ".End") }}
+  <div class="qor-field__edit qor-field__datetimepicker" data-picker-type="datetime">
+    <div style="margin-right: 150px" class="mdl-textfield mdl-js-textfield">
+      <label class="qor-field__label mdl-textfield__label">-</label>
+      <input style="margin-left: 30px; width: 150px;" class="mdl-textfield__input qor-datetimepicker__input" placeholder="{{$dateFormat}} HH:MM" type="text" name="{{.InputNamePrefix}}.End" value="{{$end}}">
+    </div>
+
+    <div>
+      <button data-toggle="qor.datepicker" data-format="{{$dateFormat}}" data-target-input=".qor-datetimepicker__input" class="mdl-button mdl-js-button mdl-button--icon qor-action__datepicker" type="button">
+        <i class="material-icons">date_range</i>
+      </button>
+      <button data-toggle="qor.timepicker" data-target-input=".qor-datetimepicker__input" class="mdl-button mdl-js-button mdl-button--icon qor-action__timepicker" type="button">
+        <i class="material-icons">access_time</i>
+      </button>
+    </div>
+  </div>
+</div>

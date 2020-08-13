@@ -3,8 +3,13 @@
 
 <div class="qor-field qor-fieldset-container">
   <label class="qor-field__label" for="{{.InputId}}">
-    {{meta_label .Meta}}
+    {{meta_record_label .Meta .Record}}
   </label>
+
+  {{$help := meta_record_help .Meta .Record}}
+  {{if $help}}
+    <div class="qor-field__help">{{$help}}</div>
+  {{end}}
 
   <div class="qor-field__block">
     {{$meta := .Meta}}

@@ -6,7 +6,7 @@ menus:
   Site Management: Configuração do Site
   Actions: Ações
   Resources: Recursos
-  deleted: Excluídos
+  Deleted: Excluídos
 form:
   successfully_created~: "{{.}} Cadastrado com sucesso!"
   successfully_updated~: "{{.}} Atualizado com sucesso!"
@@ -31,26 +31,35 @@ form:
   select_many_hint_button: FEITO
   add_items: Acrescentar itens
   select_some_options: Selecione algumas opções
+  collection:
+    add: "Adicionar %s"
   confirm:
     buttom:
       cancel: Cancelar
       ok: OK
+  file:
+    max_size_label: "Tamanho Máximo:"
+  required_fields: Campos de preenchimento obrigatório
 action:
   new: "Cadastrar {{.}}"
   edit: "Editar {{.}}"
   show: "Detalhes de {{.}}"
 layout:
   title: "Admin"
-  powered_by: "Por <a href=\"http://moisespsena.com\">Moisés P. Sena</a>"
-  logo~: "<a href=\"{{url}}\">&nbsp;</a>"
   header:
     actions: Ações
+  skip_to_content: "ir para conteúdo"
+  site_logo: Logo do Site
 actions:
   search_bar_search: Central de Pesquisa
   bulk_edit: Editar Vários
   exit_bulk_edit: Sair do modo Edição em Massa
   please_select_an_item: Por favor, selecione um item
   view_standalone: Visualizar separado
+  delete: Excluir
+  bulk_delete: Excluir vários
+  restore: Restaurar
+  bulk_restore: Restaurar vários
   header:
     actions: Ações
 search_center:
@@ -61,6 +70,8 @@ search_center:
 account:
   logout: Sair
   profile: Perfil
+  login: Entrar
+  anonymous_label: Visitante
 pagination:
   next: Pŕoxima
   page_num~: "Página {{.Pages}}"
@@ -77,7 +88,7 @@ showpage:
       save@: common.actions.save
       cancel_edit@: common.actions.cancel_edit
 basic_metas:
-  Label: Etiqueta
+  Label: Nome/Etiqueta
   Icon: Ícone
   ID: ID
 filter:
@@ -99,12 +110,37 @@ filter:
     conts: Contém
     start_with: Inicia com
     end_with: Termina com
+  range:
+    from: De
+    to: Até
 schemes:
-  Trash: Lixeira
+  deleted_index: Lixeira
 
 alerts:
-  recorde_deleted: REGISTRO APAGADO
+  recorde_deleted~: "Item <b>APAGADO</b>, não pode ser editado. Use o botão <b>RESTAURAR</b> para restaurar este item."
 
 metas:
   select_one:
-    placeholder: escolha uma opção
+    placeholder: Escolha uma Opção
+
+  date:
+    format: dd/mm/yyyy
+
+  Descriptify: Descrição
+
+event: evento
+
+errors:
+  duplicate_unique_index*:
+    s~: "Já existe um registro com este {{.Field}}"
+    p~: "Já existe um registro com {{join .Fields \"and: e \"}}"
+
+  validations:
+    too_long_text: "Texto muito grande. O número máximo de caracteres permitidos é %d."
+    email:
+      bad_format: "%q: formato inválido."
+      host_not_exists: "%q: o servidor não existe."
+      account_not_exists: "%q: o endereço de email não existe."
+
+
+lovely_message: "Graciosamente desenvolvido com <a href=\"https://ecletus.unapu.com\">Ecletus</a>"

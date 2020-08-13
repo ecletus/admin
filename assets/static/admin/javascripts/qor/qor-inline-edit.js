@@ -182,6 +182,10 @@
     };
 
     $(function() {
+        if (/\/admin\//.test(location.href)) {
+            return this
+        }
+
         let selector = '[data-toggle="qor.inlineEdit"]',
             options = {};
 

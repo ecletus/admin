@@ -1,108 +1,145 @@
-<div class="qor-field">
-  <label class="qor-field__label" for="{{.InputId}}">
-    {{meta_label .Meta}}
-  </label>
+{{$context := .Context}}
+{{$meta := .Meta}}
 
-  {{$current_values := (raw_value_of .ResourceValue .Meta)}}
-  <div class="qor-field__show qor-field__selectmany-show">
-    {{range $value := $current_values}}
-      <span>{{stringify $value}}</span>
+{{if .ReadOnly}}
+  <div class="qor-field">
+    <label class="qor-field__label" for="{{.InputId}}">
+      {{meta_record_label .Meta .Record}}
+    </label>
+
+    {{$help := meta_record_help .Meta .Record}}
+    {{if $help}}
+      <div class="qor-field__help">{{$help}}</div>
     {{end}}
-  </div>
 
-  {{if .Meta.Config.Select2ResultTemplate}}
-    <script name="select2-result-template" type="x-tmpl-mustache">
-      {{.Meta.Config.Select2ResultTemplate}}
-    </script>
-  {{end}}
-
-  {{if .Meta.Config.Select2SelectionTemplate}}
-    <script name="select2-selection-template" type="x-tmpl-mustache">
-      {{.Meta.Config.Select2SelectionTemplate}}
-    </script>
-  {{end}}
-
-
-  {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
-    <script name="select-many-selected-icon" type="x-tmpl-mustache">
-      <span class="qor-select__select-icon"><i class="material-icons">check_circle</i></span>
-    </script>
-
-    <script name="select-many-unselected-icon" type="x-tmpl-mustache">
-      <span class="qor-select__select-icon"><i class="material-icons">panorama_fish_eye</i></span>
-    </script>
-
-    <script name="select-many-hint" type="x-tmpl-mustache">
-      <div class="qor-selectmany__hint clearfix">
-        <span>[[ selectedNum ]] {{marshal (t "github_com:ecletus:admin.form.select_many_hint")}}</span>
-        <a href="#" data-dismiss="bottomsheets">{{t "github_com:ecletus:admin.form.select_many_hint_button"}}</a>
-      </div>
-    </script>
-
-    <script name="select-many-template" type="x-tmpl-mustache">
-      <li data-primary-key="[[ primaryKey ]]">
-        <span>[[ &displayName ]]</span>
-        <a href="javascripr://" class="qor-selected-many__undo">
-          {{marshal (t "github_com:ecletus:admin.form.undo")}}
-        </a>
-        <a href="#" class="qor-selected-many__remove"><i class="material-icons">clear</i></a>
-      </li>
-    </script>
-  {{end}}
-
-  <div class="qor-field__edit qor-field__block qor-field__selectmany" {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}data-toggle="qor.selectmany"{{end}} {{if not (has_update_permission .Meta)}}data-disabled="disabled"{{end}}>
-    {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
-      <ul class="qor-field__selected-many">
-        {{range $value := $current_values}}
-          <li data-primary-key="{{primary_key_of $value}}">
-            <span>{{stringify $value}}</span>
-            <a href="javascripr://" class="qor-selected-many__undo">UNDO</a>
-            <a href="javascripr://" class="qor-selected-many__remove"><i class="material-icons">clear</i></a>
-          </li>
-        {{end}}
-      </ul>
-
-      <a  href="javascript://" class="mdl-button mdl-button--primary qor-field__selectmany-trigger" data-select-modal="many"
-          {{if .InputId}}data-select-id="#{{.InputId}}"{{end}}
-          data-select-listing-url="{{url_for .Meta.Config}}"
-          data-select-creating-url="{{new_resource_path .Meta.Config.RemoteDataResource.Resource}}"
-          data-select-default-creating="{{.Meta.Config.DefaultCreating}}"
-          {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}>
-        {{t "github_com:ecletus:admin.form.add_items"}}
-      </a>
-
-      <select class="qor-field__input qor-field__selectmany-input hidden" id="{{.InputId}}" name="{{.InputName}}" multiple {{if not (has_update_permission .Meta)}}disabled{{end}}>
-        {{range $value := $current_values}}
-          <option value="{{primary_key_of $value}}" selected>{{stringify $value}}</option>
-        {{end}}
-      </select>
-    {{else}}
-      <select class="qor-field__input hidden" id="{{.InputId}}"
-        {{if not (eq .Meta.Config.SelectMode "bottom_sheet")}} data-toggle="qor.chooser" {{end}}
-        data-placeholder="{{meta_placeholder .Meta .Context (t "github_com:ecletus:admin.form.select_some_options")}}"
-        name="{{.InputName}}"
-        multiple
-        {{if not (has_update_permission .Meta)}}disabled{{end}}
-        {{if .Meta.Config.IsRemote}}
-          data-remote-data="true" data-ajax--url="{{url_for .Meta.Config}}"
-          {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
-        {{end}}>
-        {{if .Meta.Config.RemoteDataResource}}
-          {{range $value := $current_values}}
-            <option value="{{primary_key_of $value}}" selected>{{stringify $value}}</option>
-          {{end}}
-        {{else}}
-          {{range $values := (.Meta.Config.GetCollection .ResourceValue .Context)}}
-            {{if (is_included $current_values (index $values 0))}}
-              <option value="{{index $values 0}}" selected>{{index $values 1}}</option>
+    <div class="qor-field__value">
+      {{$current_values := (.Meta.Config.CurrentValues .Context .Record .Meta)}}
+      <div class="qor-field__show qor-field__selectmany-show">
+        {{range $current_values}}
+          {{- if (defined_resource_show_page $meta.Resource) -}}
+            {{$url := ($meta.URLFor (admin_context) .)}}
+            {{if $url}}
+              {{if not ($meta.IsNewRecord .)}}<a data-url="{{$url}}" href="{{$url}}">{{stringify .}}</a>{{end}}
             {{else}}
-              <option value="{{index $values 0}}">{{index $values 1}}</option>
+              {{stringify .}}
+            {{end}}
+          {{- else}}
+            {{stringify .}}
+          {{- end}},
+        {{end}}
+      </div>
+    </div>
+  </div>
+{{else}}
+  <div class="qor-field">
+    <label class="qor-field__label" for="{{.InputId}}">
+      {{meta_record_label .Meta .Record}}{{if and (not .ReadOnly) .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+    </label>
+
+    {{$help := meta_record_help .Meta .Record}}
+    {{if $help}}
+      <div class="qor-field__help">{{$help}}</div>
+    {{end}}
+
+    {{$current_values := (.Meta.Config.CurrentValues .Context .Record .Meta)}}
+    <div class="qor-field__show qor-field__selectmany-show">
+      {{range $value := $current_values}}
+        <span>{{stringify $value}}</span>,
+      {{end}}
+    </div>
+
+    {{if .Meta.Config.Select2ResultTemplate}}
+      <script name="select2-result-template" type="x-tmpl-mustache">
+        {{.Meta.Config.Select2ResultTemplate}}
+      </script>
+    {{end}}
+
+    {{if .Meta.Config.Select2SelectionTemplate}}
+      <script name="select2-selection-template" type="x-tmpl-mustache">
+        {{.Meta.Config.Select2SelectionTemplate}}
+      </script>
+    {{end}}
+
+
+    {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
+      <script name="select-many-selected-icon" type="x-tmpl-mustache">
+        <span class="qor-select__select-icon"><i class="material-icons">check_circle</i></span>
+      </script>
+
+      <script name="select-many-unselected-icon" type="x-tmpl-mustache">
+        <span class="qor-select__select-icon"><i class="material-icons">panorama_fish_eye</i></span>
+      </script>
+
+      <script name="select-many-hint" type="x-tmpl-mustache">
+        <div class="qor-selectmany__hint clearfix">
+          <span>[[ selectedNum ]] {{marshal (t "github_com:ecletus:admin.form.select_many_hint")}}</span>
+          <a href="#" data-dismiss="bottomsheets">{{t "github_com:ecletus:admin.form.select_many_hint_button"}}</a>
+        </div>
+      </script>
+
+      <script name="select-many-template" type="x-tmpl-mustache">
+        <li data-primary-key="[[ primaryKey ]]">
+          <span>[[ &displayName ]]</span>
+          <a href="javascripr://" class="qor-selected-many__undo">
+            {{marshal (t "github_com:ecletus:admin.form.undo")}}
+          </a>
+          <a href="#" class="qor-selected-many__remove"><i class="material-icons">clear</i></a>
+        </li>
+      </script>
+    {{end}}
+
+    <div class="qor-field__edit qor-field__block qor-field__selectmany" {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}data-toggle="qor.selectmany"{{end}} {{if not (has_update_permission .Meta)}}data-disabled="disabled"{{end}}>
+      {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
+        <ul class="qor-field__selected-many">
+          {{range $value := $current_values}}
+            <li data-primary-key="{{primary_key_of $value}}">
+              <span>{{$meta.Config.Stringify $context $value}}</span>
+              <a href="javascripr://" class="qor-selected-many__undo">UNDO</a>
+              <a href="javascripr://" class="qor-selected-many__remove"><i class="material-icons">clear</i></a>
+            </li>
+          {{end}}
+        </ul>
+
+        <a  href="javascript://" class="mdl-button mdl-button--primary qor-field__selectmany-trigger" data-select-modal="many"
+            {{if .InputId}}data-select-id="#{{.InputId}}"{{end}}
+            data-select-listing-url="{{url_for .Meta.Config}}"
+            data-select-creating-url="{{new_resource_path .Meta.Config.RemoteDataResource.Resource}}"
+            data-select-default-creating="{{.Meta.Config.DefaultCreating}}"
+            {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}>
+          {{t "github_com:ecletus:admin.form.add_items"}}
+        </a>
+
+        <select class="qor-field__input qor-field__selectmany-input hidden" id="{{.InputId}}" name="{{.InputName}}" multiple {{if not (has_update_permission .Meta)}}disabled{{end}}>
+          {{range $value := $current_values}}
+            <option value="{{primary_key_of $value}}" selected>{{$meta.Config.Stringify $context $value}}</option>
+          {{end}}
+        </select>
+      {{else}}
+        <select class="qor-field__input hidden" id="{{.InputId}}"
+          data-toggle="qor.chooser"
+          data-placeholder="{{meta_placeholder .Meta .Context (ts "github_com:ecletus:admin.form.select_some_options")}}"
+          name="{{.InputName}}"
+          multiple
+          {{if not (has_update_permission .Meta)}}disabled{{end}}
+          {{if .Meta.Config.IsRemote}}
+            data-remote-data="true" data-ajax-url="{{url_for .Meta.Config}}"
+            {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
+          {{end}}>
+          {{if .Meta.Config.RemoteDataResource}}
+            {{range $value := $current_values}}
+              <option value="{{primary_key_of $value}}" selected>{{$meta.Config.Stringify $context $value}}</option>
+            {{end}}
+          {{else}}
+            {{range $values := (.Meta.Config.GetCollection .ResourceValue .Context)}}
+              {{if (is_included $current_values (index $values 0))}}
+                <option value="{{index $values 0}}" selected>{{$meta.Config.Stringify $context (index $values 1)}}</option>
+              {{else}}
+                <option value="{{index $values 0}}">{{$meta.Config.Stringify $context (index $values 1)}}</option>
+              {{end}}
             {{end}}
           {{end}}
-        {{end}}
-      </select>
-    {{end}}
-
-    <input type="hidden" name="{{.InputName}}" value="">
+        </select>
+      {{end}}
+    </div>
   </div>
-</div>
+{{end}}

@@ -1,21 +1,24 @@
 <div class="qor-layout__sidebar">
   <div class="sidebar-header">
-    {{$logo := (tt "github_com:ecletus:admin.layout.logo" (_tpl_funcs) "-")}}
-    {{if eq $logo "-"}}
-      {{render "shared/logo" .}}
-    {{else}}
-      {{$logo}}
-    {{end}}
+    {{render "shared/logo" .}}
   </div>
   {{if (.CurrentUser)}}
     <div class="sidebar-userinfo">
-        <h5>{{(.CurrentUser).DisplayName}}</h5>
-      <div style="height:30px">
-      {{$profile := t "github_com:ecletus:admin.account.profile"}}
-      {{$logout := t "github_com:ecletus:admin.account.logout"}}
-      <a class="mdl-button mdl-js-button mdl-button--icon" href="{{profile_url}}" title="{{$profile}}" alt="{{$profile}}"><i class="material-icons">account_circle</i></a>
-      <a class="mdl-button mdl-js-button mdl-button--icon" href="{{logout_url}}" title="{{$logout}}" alt="{{$logout}}"><i class="material-icons">exit_to_app</i></a>
+      <div class="sidebar-userinfo__actions">
+        {{- $profile := t "github_com:ecletus:admin.account.profile" -}}
+        {{- $logout := t "github_com:ecletus:admin.account.logout" -}}
+        <a class="mdl-button mdl-js-button mdl-button--icon" href="{{profile_url}}" title="{{$profile}}" alt="{{$profile}}"><i class="material-icons">account_circle</i></a>
+        <a class="mdl-button mdl-js-button mdl-button--icon" href="{{logout_url}}" title="{{$logout}}" alt="{{$logout}}"><i class="material-icons">exit_to_app</i></a>
       </div>
+      <div class="sidebar-userinfo__label">{{(.CurrentUser).DisplayName}}</div>
+    </div>
+  {{else}}
+    <div class="sidebar-userinfo">
+      <div class="sidebar-userinfo__actions">
+        {{$login := t "github_com:ecletus:admin.account.login"}}
+        <a class="mdl-button mdl-js-button mdl-button--icon" href="{{login_url}}" title="{{$login}}" alt="{{$login}}"><i class="material-icons">input</i></a>
+      </div>
+      <div class="sidebar-userinfo__label">{{t "github_com:ecletus:admin.account.anonymous_label"}}</div>
     </div>
   {{end}}
   <div class="sidebar-body">
@@ -26,11 +29,13 @@
         </div>
       {{end}}
 
-      {{render_with "shared/resource_menu" (dict "Result" get_resource_menus "MenuClass" "resource-menu" "Resource" result)}}
+      {{if not ((admin_context).Type.HasS "action")}}
+        {{render_with "shared/resource_menu" (dict "Menus" get_resource_menus "ObjectMenus" get_resource_item_menus "MenuClass" "resource-menu" "Resource" result)}}
+      {{end}}
       {{render "shared/menu" get_menus}}
     </div>
   </div>
   <div class="sidebar-footer">
-    {{t "github_com:ecletus:admin.layout.powered_by"}}
+    {{include "./copyrigth"}}
   </div>
 </div>

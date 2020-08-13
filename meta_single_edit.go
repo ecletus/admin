@@ -2,7 +2,9 @@ package admin
 
 import (
 	"errors"
+
 	"github.com/moisespsena-go/assetfs"
+
 	"github.com/ecletus/core/resource"
 )
 
@@ -10,53 +12,55 @@ import (
 type SingleEditConfig struct {
 	Template string
 	metaConfig
+	meta *Meta
 	ExcludeEditAttrs []string
 	ExcludeNewAttrs []string
 	ExcludeShowAttrs []string
 	AfterParseMetaValues func(record interface{}, context *Context)
 }
 
-func (s *SingleEditConfig) EditSections(res *Resource) []*Section {
+func (this *SingleEditConfig) EditSections(ctx *Context, record interface{}) []*Section {
 	var attrs []interface{}
-	for _, a := range res.EditAttrs() {
+	for _, a := range this.meta.Resource.EditAttrs() {
 		attrs = append(attrs, a)
 	}
-	for _, a := range s.ExcludeEditAttrs {
+	for _, a := range this.ExcludeEditAttrs {
 		attrs = append(attrs, "-" + a)
 	}
-	return res.SectionsList(attrs...)
+	return this.meta.Resource.SectionsList(attrs...)
 }
 
-func (s *SingleEditConfig) NewSections(res *Resource) []*Section {
+func (this *SingleEditConfig) NewSections(ctx *Context) []*Section {
 	var attrs []interface{}
-	for _, a := range res.NewAttrs() {
+	for _, a := range this.meta.Resource.NewAttrs() {
 		attrs = append(attrs, a)
 	}
-	for _, a := range s.ExcludeNewAttrs {
+	for _, a := range this.ExcludeNewAttrs {
 		attrs = append(attrs, "-" + a)
 	}
-	return res.SectionsList(attrs...)
+	return this.meta.Resource.SectionsList(attrs...)
 }
 
-func (s *SingleEditConfig) ShowSections(res *Resource) []*Section {
+func (this *SingleEditConfig) ShowSections(ctx *Context, record interface{}) []*Section {
 	var attrs []interface{}
-	for _, a := range res.ShowAttrs() {
+	for _, a := range this.meta.Resource.ShowSections(ctx, record) {
 		attrs = append(attrs, a)
 	}
-	for _, a := range s.ExcludeShowAttrs {
+	for _, a := range this.ExcludeShowAttrs {
 		attrs = append(attrs, "-" + a)
 	}
-	return res.SectionsList(attrs...)
+	return this.meta.Resource.SectionsList(attrs...)
 }
 
 // GetTemplate get template for single edit
-func (singleEditConfig *SingleEditConfig) GetTemplate(context *Context, metaType string) (assetfs.AssetInterface, error) {
-	if metaType == "form" && singleEditConfig.Template != "" {
-		return context.Asset(singleEditConfig.Template)
+func (this *SingleEditConfig) GetTemplate(context *Context, metaType string) (assetfs.AssetInterface, error) {
+	if metaType == "form" && this.Template != "" {
+		return context.Asset(this.Template)
 	}
 	return nil, errors.New("not implemented")
 }
 
 // ConfigureQorMeta configure single edit meta
-func (singleEditConfig *SingleEditConfig) ConfigureQorMeta(metaor resource.Metaor) {
+func (this *SingleEditConfig) ConfigureQorMeta(metaor resource.Metaor) {
+	this.meta = metaor.(*Meta)
 }

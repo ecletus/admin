@@ -1,0 +1,8 @@
+.qor-money__value {
+  &.money-credit {
+    color: darkblue;
+  }
+  &.money-debit{
+    color: darkred;
+  }
+}

@@ -1,22 +1,31 @@
 {{define "html"}}
-    {{$value := (raw_value_of .ResourceValue .Meta)}}
+    {{$value := (raw_value_of .Record .Meta)}}
     {{if (admin_context).Is "new" }}
-        {{$value := (new_resource_struct .Meta.Resource)}}
-        {{render_nested_form $value .Meta (new_meta_sections .Meta $value) -1}}
+        {{if is_nil $value}}
+            {{$value := (new_resource_struct .Meta.Resource)}}
+            {{render_nested_form $value .Meta (new_meta_sections .Meta $value) -1}}
+        {{else}}
+            {{render_nested_form $value .Meta (new_meta_sections .Meta $value) -1}}
+        {{end}}
     {{else if ((admin_context).Is "edit")}}
         {{render_nested_form $value .Meta (edit_meta_sections .Meta $value) -1}}
     {{else}}
         {{render_nested_form $value .Meta (show_meta_sections .Meta $value) -1}}
     {{end}}
 {{end}}
-{{$value := (raw_value_of .ResourceValue .Meta)}}
-{{if (or (not (is_new_record $value)) (has_create_permission .Meta))}}
+{{$value := (raw_value_of .Record .Meta)}}
+{{if (or (not (.Meta.IsNewRecord $value)) (has_create_permission .Meta))}}
     {{$html := (trim (template_exec "html" .))}}
     {{if $html}}
       <div class="single-edit qor-field">
         <label class="qor-field__label" for="{{.InputId}}">
-          {{meta_label .Meta}}
+            {{meta_record_label .Meta .Record}}{{if  and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
         </label>
+
+          {{$help := meta_record_help .Meta .Record}}
+          {{if $help}}
+          <div class="qor-field__help">{{$help}}</div>
+          {{end}}
 
         <div class="qor-field__block">
           <fieldset id="{{.InputId}}" class="qor-fieldset">

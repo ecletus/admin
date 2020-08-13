@@ -12,41 +12,95 @@
     <meta name="static_url" content="{{admin_static_url}}">
     <meta name="global_static_url" content="{{static_url}}">
 
+    <script type="application/javascript">
+      window.STATIC_URL = "{{admin_static_url}}";
+      window.GLOBAL_STATIC_URL = "{{static_url}}";
+      window.JS_STATIC_URL = STATIC_URL + "/javascripts";
+      window.JS_GLOBAL_STATIC_URL = GLOBAL_STATIC_URL + "/javascripts";
+    </script>
     <!-- Stylesheets -->
-    {{stylesheet_tag "qor_admin_default"}}
-    {{load_admin_stylesheets}}
-    {{load_theme_stylesheets}}
-    {{javascript_tag "vendors"}}
+    {{- stylesheet_tag "qor_admin_default" -}}
+    {{- load_admin_stylesheets -}}
+    {{- load_theme_stylesheets -}}
+    {{- load_resource_stylesheets -}}
+    {{- load_print_mode_stylesheeets -}}
   </head>
 
-  <body class="{{if qor_theme_class}}{{qor_theme_class}}{{end}}">
+  <body class="{{if qor_theme_class}}{{qor_theme_class}}{{end}} identified-user">
     <!--[if lt IE 10]>
-      <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</p>
+      <p class="browsehappy">{{t "github_com:ecletus:common.upgrade_browser"}}</p>
     <![endif]-->
     <a class="visuallyhidden" href="#content" tabindex="1">{{t "github_com:ecletus:admin.layout.skip_to_content"}}</a>
 
     <div class="mdl-layout mdl-js-layout mdl-layout--fixed-drawer mdl-layout--fixed-header qor-layout">
       <header class="mdl-layout__header">
         <div class="mdl-layout__header-row">
-          {{$actions := load_actions "header" }}
-          {{if $actions}}
-            {{$actions}}
-          {{end}}
+          {{- $actions := load_actions "header" -}}
+          {{- if $actions -}}
+            {{- $actions -}}
+          {{- end -}}
         </div>
       </header>
 
       <div class="mdl-layout__drawer">
-        {{render "shared/sidebar"}}
+        {{- include "shared/sidebar" -}}
       </div>
 
       <main class="mdl-layout__content qor-page" id="content">
-        {{.Content}}
+        {{- wrap -}}
+          {{- include "shared/breadcrumbs" -}}
+
+          {{- if not (must_config_get . "context:actions_disabled") -}}
+            {{- wrap strip -}}
+
+              {{- wrap strip -}}
+                {{- load_actions (admin_context).Action -}}
+              {{- begin -}}
+                <div class="qor-actions-default">
+              {{- after -}}
+                </div>
+              {{- end -}}
+
+              {{- if eq (admin_context).Action "index" -}}
+                {{- wrap strip -}}
+                  {{load_actions "index_bulk_edit"}}
+                {{- begin -}}
+                  <div class="qor-actions-bulk hidden">
+                {{- after -}}
+                  </div>
+                {{- end -}}
+              {{- end -}}
+
+            {{- begin}}
+              <div class="qor-actions">
+            {{- after -}}
+              </div>
+            {{- end -}}
+
+          {{- end -}}
+
+        {{- begin -}}
+        <div class="qor-page__header">
+        {{- after -}}
+        </div>
+        {{- end -}}
+
+        {{- yield -}}
+
+        <div class="qor-page__footer">
+          {{- render "shared/page_footer" -}}
+        </div>
       </main>
     </div>
 
-    <!-- JavaScripts -->
-    {{javascript_tag "qor_admin_default"}}
-    {{load_admin_javascripts}}
-    {{load_theme_javascripts}}
+    {{- javascript_tag "vendors" -}}
+    {{- javascript_tag "qor_admin_default"}}
+    {{- load_admin_javascripts -}}
+    {{- load_theme_javascripts -}}
+    {{- javascript_tag ("lang/" + locale) -}}
+    {{- range (js_libs) -}}
+      <script type="application/javascript" src="{{.}}"></script>
+    {{- end -}}
+    {{- load_resource_javascripts -}}
   </body>
 </html>

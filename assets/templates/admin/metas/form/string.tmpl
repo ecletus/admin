@@ -1,17 +1,22 @@
 <div class="qor-field">
   <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
     <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
-      {{meta_label .Meta}}
-      {{$description := meta_description .Meta}}
-      {{if $description}}
-          ({{$description}})
-      {{end}}
+      {{meta_record_label .Meta .Record}}{{if  and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
     </label>
 
-    <div class="qor-field__show">{{.Value}}</div>
+    {{$help := .Config.MaxSizeString}}
+    {{$help += meta_record_help .Meta .Record}}
+    {{if $help}}
+    <div class="qor-field__help">{{$help}}</div>
+    {{end}}
 
-    <div class="qor-field__edit">
-      <input class="mdl-textfield__input" type="text" id="{{.InputId}}" name="{{.InputName}}" value="{{.Value}}" {{if not (has_update_permission .Meta)}}disabled{{end}}{{if .Meta.TemplateData}} {{index .Meta.TemplateData "attrs"}}{{end}}>
-    </div>
+    {{if .ReadOnly}}
+      <div class="qor-field__value">{{.Value}}</div>
+    {{else}}
+      <div class="qor-field__show">{{.Value}}</div>
+      <div class="qor-field__edit">
+        <input class="mdl-textfield__input" type="text" id="{{.InputId}}" name="{{.InputName}}" {{if .Meta.Config.MaxLen}}maxlength="{{.Meta.Config.MaxLen}}" {{end}}value="{{.Value}}" {{if not (has_update_permission .Meta)}}disabled{{end}}{{if .Meta.TemplateData}} {{index .Meta.TemplateData "attrs"}}{{end}}>
+      </div>
+    {{end}}
   </div>
 </div>

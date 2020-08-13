@@ -7,10 +7,14 @@ type JS struct {
 	Raw  bool
 }
 
+func (this JS) String() string {
+	return string(this.Data)
+}
+
 func RawJS(data string) *JS {
 	return &JS{template.JS(data), true}
 }
 
 func NewJS(data string) *JS {
-	return &JS{Data:template.JS(data)}
+	return &JS{Data: template.JS(data)}
 }

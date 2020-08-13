@@ -1,6 +1,9 @@
 package admin
 
 import (
+	"errors"
+
+	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
 	"github.com/moisespsena-go/aorm"
 )
@@ -9,26 +12,29 @@ import (
 
 type SearchController struct{}
 
-func (SearchController) Search(context *Context) interface{} {
-	items, err := context.FindMany()
-	if err != nil {
+func (SearchController) Search(context *Context) (result interface{}) {
+	var err error
+	if result, err = context.FindMany(); err != nil {
 		context.AddError(err)
 	}
-	return items
+	return
 }
 
 // Index
-
 type IndexController struct{}
 
-func (IndexController) Index(context *Context) interface{} {
-	var result interface{}
+func (IndexController) Index(context *Context) (result interface{}) {
 	if context.ValidateLayout() {
 		var err error
 		result, err = context.FindMany()
 		context.AddError(err)
 	}
-	return result
+	return
+}
+
+type IndexSearchController struct {
+	IndexController
+	SearchController
 }
 
 // Create
@@ -53,13 +59,22 @@ func ReadControllerRead(context *Context) (recorde interface{}) {
 
 	if res.Config.Singleton && !res.HasKey() {
 		recorde = res.NewStruct(context.Site)
-		err = context.Crud(res.ApplyDefaultFilters(context.Context)).FindMany(recorde)
+		var ctx *core.Context
+		if ctx, err = res.ApplyDefaultFilters(context.Context); err == nil {
+			err = context.Crud(ctx).FindOne(recorde)
+		}
 	} else {
 		if context.Type.Has(DELETED) {
-			var qnt int
-			query, key := resource.StringToPrimaryQuery(res, context.ResourceID)
-			err := context.DB.
-				Table(res.FakeScope.TableName()).
+			var (
+				qnt   int
+				query string
+				key   []interface{}
+			)
+			if query, key, err = resource.IdToPrimaryQuery(context.Context, res, false, context.ResourceID); err != nil {
+				context.AddError(err)
+				return
+			}
+			err := context.DB().Model(res.Value).
 				Where("deleted_at IS NOT NULL").
 				Where(query, key...).
 				Count(&qnt).Error
@@ -67,7 +82,7 @@ func ReadControllerRead(context *Context) (recorde interface{}) {
 				context.AddError(err)
 				return
 			}
-			context.SetDB(context.DB.Unscoped())
+			context.SetRawDB(context.DB().Unscoped())
 		}
 		recorde, err = context.FindOne()
 	}
@@ -80,9 +95,18 @@ func ReadControllerRead(context *Context) (recorde interface{}) {
 	return
 }
 
-type ReadController struct{}
+type ReadController struct {
+	Recorde     interface{}
+	RecordeFunc func(context *Context) interface{}
+}
 
-func (ReadController) Read(context *Context) (recorde interface{}) {
+func (this ReadController) Read(context *Context) (recorde interface{}) {
+	if this.RecordeFunc != nil {
+		return this.RecordeFunc(context)
+	}
+	if this.Recorde != nil {
+		return this.Recorde
+	}
 	return ReadControllerRead(context)
 }
 
@@ -90,9 +114,9 @@ func (ReadController) Read(context *Context) (recorde interface{}) {
 
 type UpdateController struct{}
 
-func (UpdateController) Update(context *Context, recorde interface{}) {
+func (UpdateController) Update(context *Context, recorde interface{}, old ...interface{}) {
 	context.WithTransaction(func() {
-		context.AddError(context.Crud().Update(recorde))
+		context.AddError(context.Crud().Update(recorde, old...))
 	})
 }
 
@@ -103,8 +127,11 @@ type DeleteController struct {
 
 func (DeleteController) Delete(context *Context, recorde interface{}) {
 	context.WithTransaction(func() {
-		ctx := context.Resource.ApplyDefaultFilters(context.Context)
-		context.AddError(context.Crud(ctx).Delete(recorde))
+		if ctx, err := context.Resource.ApplyDefaultFilters(context.Context); err != nil {
+			context.AddError(err)
+		} else {
+			context.AddError(context.Crud(ctx).Delete(recorde))
+		}
 	})
 }
 
@@ -114,8 +141,11 @@ type DeleteBulkController struct {
 
 func (DeleteBulkController) DeleteBulk(context *Context, recorde ...interface{}) {
 	context.WithTransaction(func() {
-		ctx := context.Clone()
-		ctx = context.Resource.ApplyDefaultFilters(context.Context)
+		ctx, err := context.Resource.ApplyDefaultFilters(context.Context)
+		if err != nil {
+			context.AddError(err)
+			return
+		}
 		for _, recorde := range recorde {
 			ctx := ctx.Clone()
 			ctx.ResourceID = context.Resource.GetKey(recorde)
@@ -130,19 +160,28 @@ func (DeleteBulkController) DeleteBulk(context *Context, recorde ...interface{})
 type RestoreController struct {
 }
 
-func (RestoreController) DeletedIndex(context *Context) interface{} {
-	var result interface{}
-	if context.ValidateLayout() {
-		var err error
-		context.SetDB(context.DB.Where(aorm.IQ("{}.deleted_at IS NOT NULL")).Unscoped())
-		result, err = context.FindMany()
-		context.AddError(err)
+func (RestoreController) DeletedIndex(context *Context) (result interface{}) {
+	if context.Scheme.SchemeName != A_DELETED_INDEX {
+		context.AddError(errors.New("unexpected scheme"))
+		return
 	}
-	return result
+	if context.ValidateLayout() {
+		context.WithDB(func(context *Context) {
+			var err error
+			result, err = context.FindMany()
+			context.AddError(err)
+		})
+	}
+	return
 }
 
-func (RestoreController) Restore(context *Context, key ...string) {
+func (RestoreController) Restore(context *Context, key ...aorm.ID) {
 	context.WithTransaction(func() {
 		context.Resource.Restore(context, key...)
 	})
+}
+
+type IndexReadController struct {
+	IndexController
+	ReadController
 }

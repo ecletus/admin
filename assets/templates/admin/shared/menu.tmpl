@@ -1,16 +1,20 @@
 {{if .Result}}
-<ul class="qor-menu {{.MenuClass?}}">
+  {{if not .SkipRoot?}}
+    <ul class="qor-menu {{.MenuClass?}}">
+  {{end}}
   {{range .Result}}
     {{if .SubMenus}}
-      <li qor-icon-name="{{.GetIcon}}" {{if .Active}}class="active"{{end}}>
-        <a href="{{if .URL}}{{.URL}}{{else}}javascript:void(0);{{end}}">{{t (.GetLabel) .Name}}</a>
+      <li {{if .MdlIcon}}mdl-icon-name="{{.MdlIcon}}"{{else}}qor-icon-name="{{.GetIcon}}"{{end}} {{if .Active}}class="active"{{end}}>
+        <a href="{{if .URL}}{{.URL}}{{else}}javascript:void(0);{{end}}">{{.Label}}</a>
         {{render "shared/menu" .SubMenus}}
       </li>
     {{else}}
-      <li qor-icon-name="{{.GetIcon}}" {{if .Active}}class="active"{{end}}>
-        {{link_to (t (.GetLabel) .Name) .URL}}
+      <li {{if .MdlIcon}}mdl-icon-name="{{.MdlIcon}}"{{else}}qor-icon-name="{{.GetIcon}}"{{end}} {{if .Active}}class="active"{{end}}>
+        {{if .AjaxLoad}}{{link_to_ajax_load .Label .URL}}{{else}}{{link_to .Label .URL}}{{end}}
       </li>
     {{end}}
   {{end}}
-</ul>
+  {{if not .SkipRoot?}}
+  </ul>
+  {{end}}
 {{end}}

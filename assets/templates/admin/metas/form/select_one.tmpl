@@ -1,126 +1,148 @@
-{{$current_value := (raw_value_of .ResourceValue .Meta)}}
-{{$is_existing_record := (not (is_new_record $current_value))}}
+{{$current_value := (raw_value_of .Record .Meta)}}
+{{$is_existing_record := (not (.Meta.IsNewRecord $current_value))}}
 
-{{if (or $is_existing_record (not (.Context.Is "show")))}}
-<div class="qor-field">
-  <label class="qor-field__label" for="{{.InputId}}">
-    {{meta_label .Meta}}
-  </label>
+{{- if and (not .ReadOnly) (or $is_existing_record (not (.Context.Is "show"))) -}}
+    <div class="qor-field">
+      <label class="qor-field__label" for="{{.InputId}}">
+        {{meta_record_label .Meta .Record}}{{if and (not .ReadOnly) .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+      </label>
 
-  <div class="qor-field__show">
-      {{$value := (raw_value_of .ResourceValue .Meta)}}
-      {{if (defined_resource_show_page .Meta.Resource)}}
-          {{$url := (top_url_for $value .Meta.Resource)}}
-          {{if $url}}
-              {{if not (is_new_record $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
+      {{$help := meta_record_help .Meta .Record}}
+      {{if $help}}
+        <div class="qor-field__help">{{$help}}</div>
+      {{end}}
+
+        <div class="qor-field__show">
+          {{$value := (raw_value_of .Record .Meta)}}
+          {{if (defined_resource_show_page .Meta.Resource)}}
+              {{$url := (.Meta.URLFor (admin_context) $value)}}
+              {{if $url}}
+                  {{if not (.Meta.IsNewRecord $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
+              {{else}}
+                  {{.Value}}
+              {{end}}
           {{else}}
               {{.Value}}
           {{end}}
-      {{else}}
-          {{.Value}}
-      {{end}}
-  </div>
+      </div>
 
-  <div class="qor-field__block qor-field__edit  qor-field__selectone" {{if (eq .Meta.Config.SelectMode "bottom_sheet")}} data-toggle="qor.selectone"{{end}}>
-      {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
-        <script name="select-one-selected-template" type="x-tmpl-mustache">
-          <p class="qor-field__selected" data-primary-key="[[ primaryKey ]]">
-            <span class="qor-selected__change">
-            {{if .Meta.Config.BottomSheetSelectedTemplate -}}
-                {{.Meta.Config.BottomSheetSelectedTemplate}}
-            {{- else -}}
-                [[ &{{if .Meta.Config.DisplayField}}{{.Meta.Config.DisplayField}}{{else}}displayText{{end}} ]]
-            {{- end}}</span>
-            <a href="#" class="qor-selected__remove"><i class="material-icons">remove_circle_outline</i></a>
-          </p>
-        </script>
+      <div class="qor-field__block qor-field__edit  qor-field__selectone" {{if (eq .Meta.Config.SelectMode "bottom_sheet")}} data-toggle="qor.selectone"{{end}}
+              {{- if .Meta.Config.BottomSheetSelectedTemplateJS}} data-selected-render="{{.Meta.Config.BottomSheetSelectedTemplateJS.String | b64}}"{{end}}>
+          {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
+            <script name="select-one-selected-template" type="x-tmpl-mustache">
+              <p class="qor-field__selected" data-primary-key="[[ primaryKey ]]">
+                <span class="qor-selected__change">
+                {{if .Meta.Config.BottomSheetSelectedTemplateJS}}
+                    [[ &displayText ]]
+                {{else if .Meta.Config.BottomSheetSelectedTemplate -}}
+                    {{.Meta.Config.BottomSheetSelectedTemplate}}
+                {{- else -}}
+                    [[ &{{if .Meta.Config.DisplayField}}{{.Meta.Config.DisplayField}}{{else}}displayText{{end}} ]]
+                {{- end}}</span>
+                <a href="#" class="qor-selected__remove"><i class="material-icons">remove_circle_outline</i></a>
+              </p>
+            </script>
 
-          <script name="select-one-selected-icon" type="x-tmpl-mustache">
-          <span class="qor-select__select-icon"><i class="material-icons">check_circle</i></span>
-        </script>
+              <script name="select-one-selected-icon" type="x-tmpl-mustache">
+              <span class="qor-select__select-icon"><i class="material-icons">check_circle</i></span>
+            </script>
 
-      {{if $is_existing_record}}
-        <p class="qor-field__selected" data-primary-key="{{primary_key_of $current_value}}">
-          <span class="qor-selected__change">{{.Value}}</span>
-          <a href="javascript://" class="qor-selected__remove"><i class="material-icons">remove_circle_outline</i></a>
-        </p>
-      {{end}}
-
-      <a href="javascript://" {{if $is_existing_record}}style="display:none"{{end}}
-        class="mdl-button mdl-button--colored qor-field__selectone-trigger"
-        data-select-modal="one" {{if .InputId}}data-select-id="#{{.InputId}}"{{end}}
-        data-selectone-url="{{url_for .Meta.Config}}"
-        data-select-listing-url="{{url_for .Meta.Config}}"
-        {{if .Meta.Config.RemoteDataResource.RecordeUrl}}data-remote-recorde-url="{{url_for .Meta.Config.RemoteDataResource.RecordeUrl}}"{{end}}
-        data-select-creating-url="{{new_resource_path .Meta.Config.RemoteDataResource.Resource}}"
-        data-select-default-creating="{{.Meta.Config.DefaultCreating}}"
-        {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
-        {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
-        {{if .Meta.Config.IconField}}data-remote-data-icon-key="{{.Meta.Config.IconField}}"{{end}}
-        {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}>
-        {{meta_placeholder .Meta .Context "Click to Select"}}
-      </a>
-
-      <select id="{{.InputId}}" class="qor-field__input qor-field__selectone-input hidden" name="{{.InputName}}" {{if not (has_update_permission .Meta)}}disabled{{end}}>
-        {{if $is_existing_record}}
-          <option value="{{primary_key_of $current_value}}" selected>{{.Value}}</option>
-        {{end}}
-      </select>
-    {{else}}
-      {{if .Meta.Config.Select2ResultTemplate}}
-          <script name="select2-result-template" type="x-tmpl-mustache"{{if .Meta.Config.Select2ResultTemplate.Raw}} data-raw="true"{{end}}>
-          {{.Meta.Config.Select2ResultTemplate.Data}}
-        </script>
-      {{end}}
-
-      {{if .Meta.Config.Select2SelectionTemplate}}
-          <script name="select2-selection-template" type="x-tmpl-mustache" {{if .Meta.Config.Select2SelectionTemplate.Raw}} data-raw="true"{{end}}>
-          {{.Meta.Config.Select2SelectionTemplate.Data}}
-        </script>
-      {{end}}
-      <select id="{{.InputId}}" class="qor-field__input hidden"
-        {{if .Meta.Config.RemoteDataResource}}{{if $is_existing_record}}chooser-selected="true"{{end}}{{end}}
-        data-toggle="qor.chooser"
-        data-placeholder="{{meta_placeholder .Meta .Context "Select an Option"}}"
-        name="{{.InputName}}"
-        {{if not (has_update_permission .Meta)}}disabled{{end}}
-        {{if .Meta.Config.AllowBlank}}data-allow-clear="true"{{end}}
-        {{if .Meta.Config.IsRemote}}
-          data-remote-data="true"
-          data-ajax--url="{{url_for .Meta.Config}}"
-          {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
-          {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
-          {{if .Meta.Config.IconField}}data-remote-data-icon-key="{{.Meta.Config.IconField}}"{{end}}
-          {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}
-        {{end}}>
-        {{if .Meta.Config.RemoteDataResource}}
           {{if $is_existing_record}}
-            <option value="{{primary_key_of $current_value}}" selected>{{.Value}}</option>
+            <p class="qor-field__selected" data-primary-key="{{primary_key_of $current_value}}">
+              <span class="qor-selected__change">{{.Value}}</span>
+              <a href="javascript://" class="qor-selected__remove"><i class="material-icons">remove_circle_outline</i></a>
+            </p>
           {{end}}
-        {{else}}
-          {{if .Meta.Config.AllowBlank}}
-            <option></option>
-          {{end}}
-          {{range $values := (.Meta.Config.GetCollection .ResourceValue .Context)}}
-            {{if (is_equal $current_value (index $values 0))}}
-              <option value="{{index $values 0}}" selected>{{index $values 1}}</option>
-            {{else}}
-              <option value="{{index $values 0}}">{{index $values 1}}</option>
-            {{end}}
-          {{end}}
-        {{end}}
-      </select>
-    {{end}}
 
-    <input type="hidden" name="{{.InputName}}" value="">
-  </div>
-</div>
-{{else}}
+          <a href="javascript://" {{if $is_existing_record}}style="display:none"{{end}}
+            class="mdl-button mdl-button--colored qor-field__selectone-trigger"
+            data-select-modal="one" {{if .InputId}}data-select-id="#{{.InputId}}"{{end}}
+            data-selectone-url="{{url_for .Meta.Config}}"
+            data-select-listing-url="{{url_for .Meta.Config}}"
+            {{if .Meta.Config.RemoteDataResource.RecordeUrl}}data-remote-recorde-url="{{url_for .Meta.Config.RemoteDataResource.RecordeUrl}}"{{end}}
+            {{if has_create_permission .Meta.Config.RemoteDataResource.Resource}} data-select-creating-url="{{new_resource_path .Meta.Config.RemoteDataResource.Resource}}"
+            data-select-default-creating="{{.Meta.Config.DefaultCreating}}"{{end}}
+            {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
+            {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
+            {{if .Meta.Config.IconField}}data-remote-data-icon-key="{{.Meta.Config.IconField}}"{{end}}
+            {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}>
+            {{meta_placeholder .Meta .Context "Click to Select"}}
+          </a>
+
+          <select id="{{.InputId}}" class="qor-field__input qor-field__selectone-input hidden" name="{{.InputName}}" {{if not (has_update_permission .Meta)}}disabled{{end}}>
+              <option></option>
+              {{if $is_existing_record}}
+              <option value="{{primary_key_of $current_value}}" selected>{{.Value}}</option>
+            {{end}}
+          </select>
+        {{else}}
+          {{if .Meta.Config.Select2ResultTemplate}}
+              <script name="select2-result-template" type="x-tmpl-mustache"{{if .Meta.Config.Select2ResultTemplate.Raw}} data-raw="true"{{end}}>
+              {{.Meta.Config.Select2ResultTemplate.Data}}
+            </script>
+          {{end}}
+
+          {{if .Meta.Config.Select2SelectionTemplate}}
+              <script name="select2-selection-template" type="x-tmpl-mustache" {{if .Meta.Config.Select2SelectionTemplate.Raw}} data-raw="true"{{end}}>
+              {{.Meta.Config.Select2SelectionTemplate.Data}}
+            </script>
+          {{end}}
+          <select id="{{.InputId}}" class="qor-field__input hidden"
+            {{if .Meta.Config.RemoteDataResource}}{{if $is_existing_record}}chooser-selected="true"{{end}}{{end}}
+            data-toggle="qor.chooser"
+            data-placeholder="{{meta_placeholder .Meta .Context "Select an Option"}}"
+            name="{{.InputName}}"
+            {{if not (has_update_permission .Meta)}}disabled{{end}}
+            {{if .Meta.Config.AllowBlank}}data-allow-clear="true"{{end}}
+            {{if .Meta.Config.IsRemote}}
+              data-remote-data="true"
+              data-ajax-url="{{url_for .Meta.Config}}"
+              {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
+              {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
+              {{if .Meta.Config.IconField}}data-remote-data-icon-key="{{.Meta.Config.IconField}}"{{end}}
+              {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}
+            {{end}}>
+            <option></option>
+            {{if .Meta.Config.RemoteDataResource}}
+              {{if $is_existing_record}}
+                <option value="{{primary_key_of $current_value}}" selected>{{.Value}}</option>
+              {{end}}
+            {{else}}
+              {{range $values := (.Meta.Config.GetCollection .Record .Context)}}
+                {{if (is_equal $current_value (index $values 0))}}
+                  <option value="{{index $values 0}}" selected>{{index $values 1}}</option>
+                {{else}}
+                  <option value="{{index $values 0}}">{{index $values 1}}</option>
+                {{end}}
+              {{end}}
+            {{end}}
+          </select>
+        {{end}}
+      </div>
+    </div>
+{{- else -}}
     <div class="qor-field">
         <label class="qor-field__label" for="{{.InputId}}">
-            {{meta_label .Meta}}
+            {{meta_record_label .Meta .Record}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
         </label>
 
-        <div class="qor-field__show">{{.Value}}</div>
+        {{$help := meta_record_help .Meta .Record}}
+        {{if $help}}
+            <div class="qor-field__help">{{$help}}</div>
+        {{end}}
+
+        <div class="qor-field__value">
+            {{$value := (raw_value_of .Record .Meta)}}
+            {{if (defined_resource_show_page .Meta.Resource)}}
+                {{$url := (.Meta.URLFor (admin_context) $value)}}
+                {{if $url}}
+                    {{if not (.Meta.IsNewRecord $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
+                {{else}}
+                    {{.Value}}
+                {{end}}
+            {{else}}
+                {{.Value}}
+            {{end}}
+        </div>
     </div>
 {{end}}

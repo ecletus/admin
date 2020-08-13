@@ -19,7 +19,7 @@
         data-allow-clear="true"
 {{if .Filter.Config.IsRemote -}}
         data-remote-data="true"
-        data-ajax--url="{{url_for .Filter.Config}}"
+        data-ajax-url="{{url_for .Filter.Config}}"
         {{if .Filter.Config.PrimaryField}}data-remote-data-primary-key="{{.Filter.Config.PrimaryField}}"{{end}}
         {{if .Filter.Config.DisplayField}}data-remote-data-display-key="{{.Filter.Config.DisplayField}}"{{end}}
         {{if .Filter.Config.IconField}}data-remote-data-icon-key="{{.Filter.Config.IconField}}"{{end}}
@@ -28,9 +28,11 @@
 {{if .Filter.Config.RemoteDataResource}}
   {{if $value}}
       <option value="{{primary_key_of $value}}" selected>{{stringify $value}}</option>
+  {{else}}
+      <option></option>
   {{end}}
 {{else}}
-    <option></option>
+  <option></option>
   {{range $values := (.Filter.Config.GetCollection nil .Context)}}
     {{if (is_equal $value (index $values 0))}}
         <option value="{{index $values 0}}" selected>{{$label}}: {{index $values 1}}</option>

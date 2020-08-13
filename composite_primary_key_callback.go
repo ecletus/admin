@@ -8,20 +8,20 @@ import (
 	"github.com/moisespsena-go/xroute"
 )
 
+// TODO: unused
+
 var primaryKeyRegexp = regexp.MustCompile(`primary_key\[.+_.+\]`)
 
-func (admin *Admin) registerCompositePrimaryKeyCallback(router xroute.Router) {
+func (this *Admin) registerCompositePrimaryKeyCallback(router xroute.Router) {
 	router.Use(&xroute.Middleware{
 		Name: PKG + ".composite_primary_key_filter",
 		Handler: func(chain *xroute.ChainHandler) {
 			context := ContextFromChain(chain)
-			db := context.DB
 			for key, value := range context.Request.URL.Query() {
 				if primaryKeyRegexp.MatchString(key) {
-					db = db.Set(key, value)
+					context.DB(context.DB().Set(key, value))
 				}
 			}
-			context.DB = db
 			chain.Pass()
 		},
 	})
@@ -30,6 +30,9 @@ func (admin *Admin) registerCompositePrimaryKeyCallback(router xroute.Router) {
 var DisableCompositePrimaryKeyMode = PKG + ".composite_primary_key:query:disable"
 
 func compositePrimaryKeyQueryCallback(scope *aorm.Scope) {
+	if scope.Value == nil {
+		return
+	}
 	if value, ok := scope.Get(DisableCompositePrimaryKeyMode); ok && value != "" {
 		return
 	}

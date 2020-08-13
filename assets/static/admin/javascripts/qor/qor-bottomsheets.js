@@ -260,28 +260,33 @@
             var $bottomsheets = this.$bottomsheets,
                 _this = this;
 
-            $.get(url, $.proxy(function(response) {
-                var $response = $(response).find(CLASS_MAIN_CONTENT),
-                    $responseHeader = $response.find(CLASS_BODY_HEAD),
-                    $responseBody = $response.find(CLASS_BODY_CONTENT);
+            $.ajax({
+                url: url,
+                headers: {
+                    'X-Layout': 'lite'
+                },
+                success: function (response) {
+                    var $response = $(response).find(CLASS_MAIN_CONTENT),
+                        $responseHeader = $response.find(CLASS_BODY_HEAD),
+                        $responseBody = $response.find(CLASS_BODY_CONTENT);
 
-                if ($responseBody.length) {
-                    $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html());
+                    if ($responseBody.length) {
+                        $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html());
 
-                    if ($responseHeader.length) {
-                        this.$body
-                            .find(CLASS_BODY_HEAD)
-                            .html($responseHeader.html())
-                            .trigger('enable');
-                        this.addHeaderClass();
+                        if ($responseHeader.length) {
+                            this.$body
+                                .find(CLASS_BODY_HEAD)
+                                .html($responseHeader.html())
+                                .trigger('enable');
+                            this.addHeaderClass();
+                        }
+                        // will trigger this event(relaod.qor.bottomsheets) when bottomsheets reload complete: like pagination, filter, action etc.
+                        $bottomsheets.trigger(EVENT_RELOAD);
+                    } else {
+                        this.reload(url);
                     }
-                    // will trigger this event(relaod.qor.bottomsheets) when bottomsheets reload complete: like pagination, filter, action etc.
-                    $bottomsheets.trigger(EVENT_RELOAD);
-                } else {
-                    this.reload(url);
-                }
-            }, this)).fail(function() {
-                window.alert('server error, please try again later!');
+                }.bind(this),
+                error: QOR.ajaxError
             });
         },
 
@@ -307,7 +312,7 @@
         },
 
         addHeaderClass: function() {
-            this.$body.find(CLASS_BODY_HEAD).hide();
+            this.$body.find(CLASS_BODY_HEAD).remove();
             if (this.$bottomsheets.find(CLASS_BODY_HEAD).children(CLASS_BOTTOMSHEETS_FILTER).length) {
                 this.$body
                     .addClass('has-header')
@@ -388,6 +393,9 @@
                 dataType: ajaxType ? ajaxType : 'html',
                 processData: false,
                 contentType: false,
+                headers: {
+                    'X-Layout': 'lite'
+                },
                 beforeSend: function() {
                     $submit.prop('disabled', true);
                 },
@@ -444,15 +452,14 @@
                     $(document).trigger(EVENT_BOTTOMSHEET_SUBMIT);
                 },
                 error: function(xhr, textStatus, errorThrown) {
-                    var $error;
-
                     if (xhr.status === 422) {
                         $body.find('.qor-error').remove();
-                        $error = $(xhr.responseText).find('.qor-error');
+                        let $error = $(xhr.responseText).find('.qor-error');
                         $form.before($error);
                         $('.qor-bottomsheets .qor-page__body').scrollTop(0);
+                        QOR.alert($error)
                     } else {
-                        window.alert([textStatus, errorThrown].join(': '));
+                        QOR.ajaxError.apply(this, arguments)
                     }
                 },
                 complete: function() {
@@ -495,6 +502,9 @@
 
             load = $.proxy(function() {
                 $.ajax(url, {
+                    headers: {
+                        'X-Layout': 'lite'
+                    },
                     method: method,
                     dataType: dataType,
                     success: $.proxy(function(response) {
@@ -578,13 +588,13 @@
                                 $bottomsheets.addClass(resourseData.bottomsheetClassname);
                             }
 
+                            this.addHeaderClass();
+
                             $bottomsheets.trigger('enable');
 
                             $bottomsheets.one(EVENT_HIDDEN, function() {
                                 $(this).trigger('disable');
                             });
-
-                            this.addHeaderClass();
                             $bottomsheets.data(data);
 
                             // handle after opened callback
@@ -608,18 +618,17 @@
                         if (!$('.qor-bottomsheets').is(':visible')) {
                             $('body').removeClass(CLASS_OPEN);
                         }
-                        var errors;
                         if ($('.qor-error span').length > 0) {
-                            errors = $('.qor-error span')
+                            let errors = $('.qor-error span')
                                 .map(function() {
                                     return $(this).text();
                                 })
                                 .get()
                                 .join(', ');
+                            QOR.alert(errors);
                         } else {
-                            errors = 'Server error, please try again later!';
+                            QOR.ajaxError.apply(this, arguments)
                         }
-                        window.alert(errors);
                     }, this)
                 });
             }, this);

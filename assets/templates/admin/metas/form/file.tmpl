@@ -1,0 +1,30 @@
+<div class="qor-field">
+  <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
+    <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
+      {{meta_record_label .Meta .Record}}
+    </label>
+
+    {{$help := meta_record_help .Meta .Record}}
+    {{if .Meta.Config.MaxSize}}
+      {{if $help}}{{$help += ". "}}{{end}}
+      {{$help += (t "github_com:ecletus:admin.form.file.max_size_label") + " " + (.Meta.Config.MaxSizeString)}}
+    {{end}}
+
+    {{if $help}}
+    '<div class="qor-field__help">{{$help}}</div>
+    {{end}}
+
+    <div class="qor-field__show">
+      {{.Value}}
+    </div>
+
+
+
+    <div class="qor-field__edit">
+      <input class="mdl-textfield__input" type="file" {{if .Meta.Config.Capture}}capture{{end}} id="{{.InputId}}" name="{{.InputName}}" {{if not (has_update_permission .Meta)}}disabled{{end}}
+              {{if .Meta.Config.AcceptAttribute}}accept="{{.Meta.Config.AcceptAttribute}}"{{end}}
+              {{if .Meta.Config.Multiple}}multiple{{end}}
+      />
+    </div>
+  </div>
+</div>

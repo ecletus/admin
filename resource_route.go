@@ -6,31 +6,62 @@ import (
 	"github.com/moisespsena-go/xroute"
 )
 
-func (res *Resource) RegisterDefaultRouters(actions ...string) {
-	res.Controller.AppendDefaultActions(actions...)
-	res.Controller.RegisterDefaultRouters()
+func (this *Resource) RegisterDefaultRouters(actions ...string) {
+	this.ControllerBuilder.AppendDefaultActions(actions...)
+	this.ViewControllerBuilder.RegisterDefaultHandlers()
+	this.ControllerBuilder.RegisterDefaultRouters()
 }
 
-func (res *Resource) InitRoutes() *xroute.Mux {
-	if res.Config.Singleton {
-		for param, subRes := range res.ResourcesByParam {
+func (this *Resource) InitRoutes() *xroute.Mux {
+	if this.Config.Singleton {
+		for param, subRes := range this.ResourcesByParam {
 			r := subRes.InitRoutes()
 			pattern := "/" + param
-			res.Router.Mount(pattern, r)
+			this.Router.Mount(pattern, r)
 		}
 	} else {
-		for param, subRes := range res.ResourcesByParam {
+		for param, subRes := range this.ResourcesByParam {
 			r := subRes.InitRoutes()
 			pattern := "/" + param
-			res.ObjectRouter.Mount(pattern, r)
+			this.ItemRouter.Mount(pattern, r)
 		}
-		res.Router.Mount("/"+res.ParamIDPattern(), res.ObjectRouter)
+		this.Router.Mount("/"+this.ParamIDPattern(), this.ItemRouter)
 	}
-	return res.Router
+
+	// force prepare all metas
+	this.SetupMetas()
+	return this.Router
 }
 
-func (res *Resource) MountTo(param string) *Resource {
-	config := &(*res.Config)
+func (this *Resource) setupMetas(metas ...*Meta) {
+	for _, meta := range metas {
+		if meta.Resource != nil {
+			meta.Resource.SetupMetas()
+		}
+	}
+}
+
+func (this *Resource) SetupMetas() {
+	if this.setupMetasCalled {
+		return
+	}
+	this.setupMetasCalled = true
+	if this.ControllerBuilder.IsIndexer() {
+		this.setupMetas(this.ConvertSectionToMetas(this.IndexAttrs())...)
+	}
+	if this.ControllerBuilder.IsCreator() {
+		this.setupMetas(this.ConvertSectionToMetas(this.NewAttrs())...)
+	}
+	if this.ControllerBuilder.IsUpdater() {
+		this.setupMetas(this.ConvertSectionToMetas(this.EditAttrs())...)
+	}
+	if this.ControllerBuilder.IsReader() {
+		this.setupMetas(this.ConvertSectionToMetas(this.ShowAttrs())...)
+	}
+}
+
+func (this *Resource) MountTo(param string) *Resource {
+	config := &(*this.Config)
 	if config.Sub != nil {
 		config.Sub = &(*config.Sub)
 	}
@@ -40,5 +71,5 @@ func (res *Resource) MountTo(param string) *Resource {
 	config.ID += nmp
 	config.NotMount = false
 	config.Invisible = true
-	return res.admin.AddResource(res.Value, config)
+	return this.Admin.AddResource(this.Value, config)
 }

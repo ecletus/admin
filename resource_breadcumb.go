@@ -8,55 +8,56 @@ import (
 type ResourceCrumber struct {
 	Prev     core.Breadcrumber
 	Resource *Resource
-	ParentID []string
-	ID       string
+	ParentID []aorm.ID
+	Parent   []*Resource
+	ID       aorm.ID
 }
 
 type ResourceCrumb struct {
 	core.Breadcrumb
 	Resource *Resource
-	ParentID []string
-	ID       string
+	ParentID []aorm.ID
+	ID       aorm.ID
 }
 
-func (r *ResourceCrumber) NewCrumb(ctx *core.Context, recorde bool) core.Breadcrumb {
-	uri := r.Resource.GetContextIndexURI(ctx, r.ParentID...)
+func (this *ResourceCrumber) NewCrumb(ctx *core.Context, recorde bool) core.Breadcrumb {
+	uri := this.Resource.GetContextIndexURI(ctx, this.ParentID...)
 	crumb := &ResourceCrumb{
-		Resource: r.Resource,
-		ParentID: r.ParentID,
+		Resource: this.Resource,
+		ParentID: this.ParentID,
 	}
 	if recorde {
-		crumb.ID = r.ID
-		clone := ctx.Clone()
+		crumb.ID = this.ID
+		_ = ctx.WithDB(func(ctx *core.Context) {
+			ctx.SetRawDB(ctx.DB().Unscoped())
+			model, err := this.Resource.Crud(ctx).FindOneBasic(this.ID)
 
-		if HasDeletedUrlQuery(ctx.Request.URL.Query()) {
-			clone.SetDB(clone.DB.Unscoped())
-		}
-		model, err := r.Resource.Crud(clone).FindOneBasic(r.ID)
-
-		if err != nil {
-			if aorm.IsRecordNotFoundError(err) {
-				return nil
+			if err != nil {
+				if aorm.IsRecordNotFoundError(err) {
+					ctx.AddError(err)
+					crumb = nil
+					return
+				} else {
+					panic(err)
+				}
 			}
-			panic(err)
-		}
-
-		if !r.Resource.Config.Singleton {
-			uri += "/" + r.ID
-		}
-		crumb.Breadcrumb = core.NewBreadcrumb(uri, model.BasicLabel(), model.BasicIcon())
-	} else if r.Resource.Config.Singleton {
-		crumb.Breadcrumb = core.NewBreadcrumb(uri, r.Resource.SingularLabelKey())
+			if !this.Resource.Config.Singleton {
+				uri += "/" + this.ID.String()
+			}
+			crumb.Breadcrumb = core.NewBreadcrumb(uri, model.BasicLabel(), model.BasicIcon())
+		})
+	} else if this.Resource.Config.Singleton {
+		crumb.Breadcrumb = core.NewBreadcrumb(uri, this.Resource.SingularLabelKey())
 	} else {
-		crumb.Breadcrumb = core.NewBreadcrumb(uri, r.Resource.PluralLabelKey())
+		crumb.Breadcrumb = core.NewBreadcrumb(uri, this.Resource.PluralLabelKey())
 	}
 	return crumb
 }
 
-func (r *ResourceCrumber) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
-	crumbs = append(crumbs, r.NewCrumb(ctx, false))
-	if !r.Resource.Config.Singleton && r.ID != "" {
-		if crumb := r.NewCrumb(ctx, true); crumb != nil {
+func (this *ResourceCrumber) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
+	crumbs = append(crumbs, this.NewCrumb(ctx, false))
+	if !this.Resource.Config.Singleton && this.ID != nil {
+		if crumb := this.NewCrumb(ctx, true); crumb != nil {
 			crumbs = append(crumbs, crumb)
 		}
 	}

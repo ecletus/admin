@@ -1,15 +1,15 @@
-{{$action := .Result}}
+{{$argument := .Result}}
 
 <div class="qor-page__body qor-page__edit">
   {{render "shared/flashes"}}
   {{render "shared/errors"}}
 
   <div class="qor-form-container" data-toggle="qor-action-slideout">
-    <form action="{{.Context.Request.URL}}" method="POST" enctype="multipart/form-data">
+    <form action="{{.Context.Request.RequestURI}}" method="POST" enctype="multipart/form-data">
       <input name="_method" value="PUT" type="hidden">
 
-      {{if $action.Resource}}
-        {{render_form $action.Resource.NewStruct (edit_sections $action.Resource)}}
+      {{if $argument.Action.Resource}}
+        {{render_form $argument.Argument (edit_sections $argument.Action.Resource)}}
       {{end}}
 
       <div class="qor-form__actions" style="margin-top: 0;margin-bottom:10px;">

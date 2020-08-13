@@ -24,6 +24,7 @@
     var CLASS_IS_HIDDEN = 'is-hidden';
     var CLASS_IS_FIXED = 'is-fixed';
     var CLASS_HEADER = '.qor-page__header';
+    var CLASS_BODY = '.qor-page__body';
 
     function QorFixer(element, options) {
         this.$element = $(element);
@@ -50,7 +51,6 @@
             this.paddingHeight = options.paddingHeight;
             this.fixedHeaderWidth = [];
             this.isEqualed = false;
-
             this.resize();
             this.bind();
         },

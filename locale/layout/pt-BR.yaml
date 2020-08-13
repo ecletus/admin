@@ -1,3 +1,6 @@
 breadcrumb:
   you_are_here: "Você está aqui:"
-no_records_found: "Nenhum registro."
+  home: Início
+no_records_found: "Nenhum registro encontrado."
+deleted_recordes_notice: "Os registros abaixo foram <b>APAGADOS</b>. Use o botão <b>RESTAURAR</b> para restaurar um ou mais itens."
+deleted_recorde_notice: "Este registro foi <b>APAGADOS</b>. Use o botão <b>RESTAURAR</b> para restaurá-lo."

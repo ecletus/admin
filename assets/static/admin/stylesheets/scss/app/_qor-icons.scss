@@ -39,6 +39,14 @@
   content: "\e872";
 }
 
+[qor-icon-name*="Delete Forever"] > a::before {
+  content: "\e92b";
+}
+
+[qor-icon-name*="Delete Sweep"] > a::before {
+  content: "\e16c";
+}
+
 [qor-icon-name="Edit"]{
   > a::before{
     content: "\e254";
@@ -101,6 +109,10 @@
   content: "\e7fd";
 }
 
+[qor-icon-name*="Group"] > a::before {
+  content: "\e7ef";
+}
+
 [qor-icon-name*="Translation"] > a::before {
   content: "\e894";
 }
@@ -141,6 +153,6 @@
   content: "\e897";
 }
 
-[qor-icon-name] [qor-icon-name] > a::before {
-  content: " " !important;
-}
+//[qor-icon-name] [qor-icon-name] > a::before {
+//  content: " " !important;
+//}

@@ -1,19 +1,23 @@
 {{$context := .}}
 {{$resource := .Resource}}
+{{$readable := has_read_permission .Resource}}
 
 {{if len .Result}}
   <table class="mdl-data-table mdl-js-data-table qor-table qor-js-table">
     <thead>
       <tr>
+          <th class="mdl-data-table__cell--non-numeric qor-table__actions"></th>
         {{$order_by := $context.Request.URL.Query.Get "order_by"}}
         {{$metas := convert_sections_to_metas $resource index_sections}}
         {{range $index, $meta := $metas}}
-          {{$dbName := $meta.DBName}}
-          {{$is_sorted := eq $order_by $dbName}}
-          {{$is_desc_sorted := eq $order_by (print $dbName "_desc")}}
-          <th class="mdl-data-table__cell--non-numeric {{if is_sortable_meta $meta}}{{if (or $is_sorted $is_desc_sorted)}}is-sorted{{end}}{{end}}" data-heading="{{$meta.Name}}" {{if is_sortable_meta $meta}}{{if $is_sorted}}data-order-by="{{$dbName}}_desc"{{else}}data-order-by="{{$dbName}}"{{end}}{{end}}>{{meta_label $meta}}</th>
+            {{if $meta.Icon}}
+              <th class="mdl-data-table__cell--non-numeric qor-table__icon-header"></th>
+            {{else}}
+              {{$is_sorted := eq $order_by $meta.FieldName}}
+              {{$is_desc_sorted := eq $order_by (print $meta.FieldName ":desc")}}
+              <th class="mdl-data-table__cell--non-numeric {{if is_sortable_meta $meta}}{{if (or $is_sorted $is_desc_sorted)}}is-sorted{{end}}{{end}}" data-heading="{{$meta.Name}}" {{if is_sortable_meta $meta}}{{if $is_sorted}}data-order-by="{{$meta.FieldName}}:desc"{{else}}data-order-by="{{$meta.FieldName}}"{{end}}{{end}}>{{meta_label $meta}}</th>
+            {{end}}
         {{end}}
-        <th class="mdl-data-table__cell--non-numeric qor-table__actions"></th>
       </tr>
     </thead>
 
@@ -21,18 +25,20 @@
       {{range $result := .Result}}
         {{$primaryKey := primary_key_of $result}}
         {{$url := url_for $result $resource}}
-
-        <tr data-primary-key="{{$primaryKey}}" data-url="{{$url}}{{if $context.Type.HasS "deleted"}}?:deleted=true{{end}}">
-          {{range $meta := $metas}}
-            {{$value := render_meta $result $meta}}
-            <td class="mdl-data-table__cell--non-numeric" data-heading="{{$meta.Name}}">
-              <div class="qor-table__content">{{$value}}</div>
+        {{$tags := $resource.GetViewTags $context $result}}
+        <tr data-primary-key="{{$primaryKey}}" {{if $tags}}class="tag-{{join $tags "sep: tag-"}}"{{end}} {{if $readable}}data-url="{{$url}}{{if $context.Type.HasS "deleted"}}?:deleted=true{{end}}"{{end}}>
+            <td class="mdl-data-table__cell--non-numeric qor-table__actions">
+                {{include "shared/resource_menu_actions_children" $result}}
+            </td>
+            {{range $meta := $metas}}
+            <td class="mdl-data-table__cell--non-numeric{{if $meta.Icon}} qor-table__icon{{end}}" data-heading="{{$meta.Name}}">
+                {{if $meta.Icon}}
+                    {{render_meta $result $meta}}
+                {{else}}
+                    <div class="qor-table__content">{{render_meta $result $meta}}</div>
+                {{end}}
             </td>
           {{end}}
-
-          <td class="mdl-data-table__cell--non-numeric qor-table__actions">
-            {{render "shared/resource_menu_actions_children" $result}}
-          </td>
         </tr>
       {{end}}
     </tbody>

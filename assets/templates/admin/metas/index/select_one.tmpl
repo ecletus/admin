@@ -1,6 +1,6 @@
-{{$value := (raw_value_of .ResourceValue .Meta)}}
+{{$value := (raw_value_of .Record .Meta)}}
 {{if (defined_resource_show_page .Meta.Resource)}}
-  {{$url := (top_url_for $value .Meta.Resource)}}
+  {{$url := (.Meta.URLFor (admin_context) $value)}}
   {{if $url}}
     {{if not (is_new_record $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
   {{else}}

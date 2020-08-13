@@ -52,7 +52,7 @@ type Inheritance struct {
 	FieldName string
 	index     int
 	dbName    string
-	field     *aorm.Field
+	field     *aorm.StructField
 	query     string
 	Options   *ChildOptions
 }
@@ -65,12 +65,11 @@ type Child struct {
 func (r *Inheritance) build(index int) {
 	r.index = index
 	var ok bool
-	if r.field, ok = r.Resource.FakeScope.FieldByName(r.FieldName); ok {
+	if r.field, ok = r.Resource.ModelStruct.FieldsByName[r.FieldName]; ok {
 		r.dbName = "_ref_" + strconv.Itoa(index)
-		rTbName := r.Resource.FakeScope.QuotedTableName()
 		rFieldName := r.field.DBName
-		pk := r.Resource.FakeScope.PrimaryKey()
-		r.query = "(SELECT " + r.dbName + "." + pk + " FROM " + rTbName + " " + r.dbName + " WHERE " + r.dbName + "." + rFieldName + "_id = {} LIMIT 1) as " + r.dbName
+		pk := r.Resource.ModelStruct.PrimaryField().DBName
+		r.query = "(SELECT " + r.dbName + "." + pk + " FROM / " + r.dbName + " WHERE " + r.dbName + "." + rFieldName + "_id = {} LIMIT 1) as " + r.dbName
 	} else {
 		panic(fmt.Errorf("Invalid field %q", r.FieldName))
 	}
@@ -84,7 +83,7 @@ func (r *Inheritance) DBName() string {
 	return r.dbName
 }
 
-func (r *Inheritance) Field() *aorm.Field {
+func (r *Inheritance) Field() *aorm.StructField {
 	return r.field
 }
 
@@ -114,9 +113,8 @@ func (rs *Inheritances) Build() {
 	if rs.query != "" {
 		return
 	}
-	tbName := rs.resource.FakeScope.QuotedTableName()
-	fName := rs.resource.FakeScope.PrimaryKey()
-	tfname := tbName + "." + fName
+	fName := rs.resource.ModelStruct.PrimaryField().DBName
+	tfname := "/." + fName
 
 	rs.columns = make([]string, len(rs.Items))
 
@@ -124,7 +122,7 @@ func (rs *Inheritances) Build() {
 		rs.columns[i] = strings.Replace(r.query, "{}", tfname, -1)
 	}
 
-	rs.query = "SELECT " + strings.Join(rs.columns, ", ") + " FROM " + tbName + " WHERE " + tfname + " = ?"
+	rs.query = "SELECT " + strings.Join(rs.columns, ", ") + " FROM / WHERE " + tfname + " = ?"
 }
 
 func (rs *Inheritances) Query() string {
@@ -148,7 +146,8 @@ func (rs *Inheritances) Find(pk interface{}, db *aorm.DB) (r *Inheritance, err e
 	if rs.query == "" {
 		rs.Build()
 	}
-	db = db.Raw(rs.query, pk)
+	query := strings.ReplaceAll(rs.query, "/", rs.resource.QuotedTableName(db))
+	db = db.Raw(query, pk)
 	if db.Error != nil {
 		return r, db.Error
 	}
@@ -166,37 +165,37 @@ func (rs *Inheritances) Find(pk interface{}, db *aorm.DB) (r *Inheritance, err e
 	return
 }
 
-func (res *Resource) Inherit(super *Resource, fieldName string, options ...*ChildOptions) *Inheritance {
-	r := super.Children.Add(&Inheritance{Resource: res, FieldName: fieldName})
+func (this *Resource) Inherit(super *Resource, fieldName string, options ...*ChildOptions) *Inheritance {
+	r := super.Children.Add(&Inheritance{Resource: this, FieldName: fieldName})
 	if len(options) == 0 || options[0] == nil {
 		r.Options = &ChildOptions{}
 	} else {
 		r.Options = options[0]
 	}
-	res.Inherits[fieldName] = &Child{r, super}
+	this.Inherits[fieldName] = &Child{r, super}
 	return r
 }
 
-func (res *Resource) GetChildMeta(record interface{}, fieldName string) *ChildMeta {
+func (this *Resource) GetChildMeta(record interface{}, fieldName string) *ChildMeta {
 	if record != nil {
 		r := record.(inheritance.ParentModelInterface)
 		if child := r.GetQorChild(); child != nil {
-			ref := res.Children.Items[child.Index]
+			ref := this.Children.Items[child.Index]
 			return ref.Options.GetMeta(fieldName)
 		}
 	}
 	return nil
 }
 
-func (res *Resource) SetInheritedMeta(meta *Meta) *Meta {
+func (this *Resource) SetInheritedMeta(meta *Meta) *Meta {
 	name := meta.Name
 	meta.Name += "_inherited"
 	if meta.DefaultLabel == "" {
 		meta.DefaultLabel = utils.HumanizeString(name)
 	}
 	meta.Valuer = func(i interface{}, context *core.Context) interface{} {
-		originalMeta := res.GetDefinedMeta(name).Valuer
-		if meta := res.GetChildMeta(i, name); meta != nil {
+		originalMeta := this.GetDefinedMeta(name).Valuer
+		if meta := this.GetChildMeta(i, name); meta != nil {
 			valuer := meta.GetFormattedValuer()
 			return valuer(i, context, originalMeta)
 		}
@@ -206,13 +205,13 @@ func (res *Resource) SetInheritedMeta(meta *Meta) *Meta {
 		return nil
 	}
 	meta.FormattedValuer = func(i interface{}, context *core.Context) interface{} {
-		originalMeta := res.GetDefinedMeta(name).GetFormattedValuer()
-		if meta := res.GetChildMeta(i, name); meta != nil {
+		originalMeta := this.GetDefinedMeta(name).GetFormattedValuer()
+		if meta := this.GetChildMeta(i, name); meta != nil {
 			valuer := meta.GetFormattedValuer()
 			return valuer(i, context, originalMeta)
 		}
 		return originalMeta(i, context)
 	}
-	res.Meta(&Meta{Name: name, Label: meta.Label})
-	return res.SetMeta(meta)
+	this.Meta(&Meta{Name: name, Label: meta.Label})
+	return this.SetMeta(meta)
 }

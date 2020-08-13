@@ -6,27 +6,22 @@ import (
 	"github.com/moisespsena-go/aorm"
 )
 
-func (res *Resource) allAttrs() []string {
+func (this *Resource) allAttrs() []string {
 	var attrs []string
-	scope := &aorm.Scope{Value: res.Value}
 
-Fields:
-	for _, field := range scope.GetModelStruct().StructFields {
-		for _, meta := range res.Metas {
-			if field.Name == meta.FieldName {
-				attrs = append(attrs, meta.Name)
-				continue Fields
+	for _, field := range aorm.StructOf(this.Value).Fields {
+		if meta := this.GetDefinedMeta(field.Name); meta != nil {
+			if meta.DefaultInvisible {
+				continue
 			}
-		}
-
-		if field.IsForeignKey {
+			attrs = append(attrs, meta.Name)
+			continue
+		} else if tags := ParseMetaTags(field.Struct.Tag); tags.Hidden() || tags.DefaultInvisible() {
 			continue
 		}
 
-		for _, value := range []string{"CreatedAt", "UpdatedAt", "DeletedAt"} {
-			if value == field.Name {
-				continue Fields
-			}
+		if field.IsPrimaryKey || field.IsForeignKey || field.StructIndex == nil || aorm.IsAuditedSdField(field.Name) {
+			continue
 		}
 
 		if (field.IsNormal || field.Relationship != nil) && !field.IsIgnored {
@@ -45,8 +40,8 @@ Fields:
 	}
 
 MetaIncluded:
-	for _, meta := range res.Metas {
-		if meta.Name[0] != '_' {
+	for _, meta := range this.Metas {
+		if !meta.DefaultInvisible && meta.Name[0] != '_' {
 			for _, attr := range attrs {
 				if attr == meta.FieldName || attr == meta.Name {
 					continue MetaIncluded

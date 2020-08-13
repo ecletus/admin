@@ -1,0 +1,29 @@
+<div class="qor-field qor-field__range qor-field__daterange clearfix" type="filter-date">
+  {{if .Label}}<label class="qor-field__label">{{.Label}}</label>{{end}}
+
+  {{ $start := .Context.Request.URL.Query.Get (print .InputNamePrefix ".Start") }}
+  {{ $dateFormat := .Filter.Config.FormatC .Context.Context }}
+  <div class="qor-field__range-content">
+    <div class="qor-field__edit qor-field__range-from qor-field__datepicker" data-picker-type="date">
+        <div class="mdl-textfield mdl-js-textfield">
+          <input class="mdl-textfield__input qor-datetimepicker__input" placeholder="{{t "github_com:ecletus:admin.filter.range.from"}} {{$dateFormat}}" type="text" name="{{.InputNamePrefix}}.Start" value="{{$start}}" />
+        </div>
+        <div>
+          <button data-toggle="qor.datepicker" data-format="{{$dateFormat}}" data-target-input=".qor-datetimepicker__input" class="mdl-button mdl-js-button mdl-button--icon qor-action__datepicker" type="button">
+            <i class="material-icons">date_range</i>
+          </button>
+        </div>
+    </div>
+    {{ $end := .Context.Request.URL.Query.Get (print .InputNamePrefix ".End") }}
+    <div class="qor-field__edit qor-field__range-to qor-field__datepicker" data-picker-type="date">
+      <div class="mdl-textfield mdl-js-textfield">
+        <input class="mdl-textfield__input qor-datetimepicker__input" placeholder="{{t "github_com:ecletus:admin.filter.range.to"}} {{$dateFormat}}" type="text" name="{{.InputNamePrefix}}.End" value="{{$end}}"/>
+      </div>
+      <div>
+        <button data-toggle="qor.datepicker" data-format="{{$dateFormat}}" data-target-input=".qor-datetimepicker__input" class="mdl-button mdl-js-button mdl-button--icon qor-action__datepicker" type="button">
+          <i class="material-icons">date_range</i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -33,6 +33,9 @@ func (rr *ResourceRecorde) Count() int {
 
 func (rr *ResourceRecorde) String() string {
 	r := rr.Context.Ts(rr.Resource.SingularLabelKey(), rr.Resource.Name)
+	if rr.Resource.Config.Singleton {
+		return r
+	}
 	if rr.Recorde != nil {
 		r += " (" + utils.Stringify(rr.Recorde) + ")"
 	} else if rr.Recordes != nil {

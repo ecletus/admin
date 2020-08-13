@@ -1,0 +1,31 @@
+{{if .Searcher.Pagination.Total -}}
+    {{- $context := . -}}
+    {{- $result := .Result -}}
+    {{- $allowed_actions := (allowed_actions $context.Resource.Actions $context.Action) -}}
+    {{- $resource := .Resource -}}
+
+    {{- if gt (len $allowed_actions) 0 }}
+      {{- range $action := $allowed_actions}}
+        {{- if (and $action.URL (eq $action.Method "GET"))}}
+          <a class="mdl-button mdl-button--colored mdl-button--raised qor-action-button qor-action-button--link" href="{{call $action.URL $result $context}}">
+            {{T $action}}
+          </a>
+        {{else}}
+          <button class="mdl-button mdl-button--colored mdl-button--raised qor-action-button" type="button"
+            data-url="{{if $action.URL}}{{call $action.URL $result $context}}{{else}}{{join_url (url_for $resource) "!action" $action.ToParam}}{{end}}"
+            {{- if not $action.Resource}} data-dataType="json"
+              data-ajax-form="true"
+              data-from-index="true"
+              {{- if $action.TargetWindow}} data-target-window="true"{{end -}}
+              {{- if $action.EmptyBulkAllowed}} data-optional="true"{{end -}}
+              data-method="{{$action.Method}}"
+              {{- if $action.ReturnURL}} data-return-url="{{call $action.ReturnURL $result $context}}"{{end -}}
+              {{- if $action.RefreshURL}} data-refresh-url="{{call $action.RefreshURL $result $context}}"{{end -}}
+              {{- if $action.PassCurrentParams}} data-pass-current-query="true"{{end -}}
+            {{- end -}}>
+            {{- T $action -}}
+          </button>
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+{{end}}

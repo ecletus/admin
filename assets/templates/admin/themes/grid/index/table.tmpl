@@ -26,7 +26,7 @@
               </div>
 
               {{$allowed_actions := allowed_actions $resource.Actions "menu_item" $result}}
-              {{$children := $resource.GetMenus}}
+              {{$children := $resource.GetItemMenus}}
               {{if or $allowed_actions $children}}
                 <div class="mdl-card__menu qor-table__actions">
                   <button id="actions-for-{{$uniqueKey}}" class="mdl-button mdl-js-button mdl-button--icon qor-button--actions">

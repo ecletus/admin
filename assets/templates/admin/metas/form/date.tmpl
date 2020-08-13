@@ -1,23 +1,27 @@
 <div class="qor-field">
   <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
     <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
-      {{meta_label .Meta}}
-      {{$description := meta_description .Meta}}
-      {{if $description}}
-          ({{$description}})
-      {{end}}
+      {{meta_record_label .Meta .Record}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
     </label>
 
-    <div class="qor-field__show">{{.Value}}</div>
+    {{$help := meta_record_help .Meta .Record}}
+    {{if $help}}
+      <div class="qor-field__help">{{$help}}</div>
+    {{end}}
 
-    <div class="qor-field__edit qor-field__datepicker" data-picker-type="date">
-      <input class="mdl-textfield__input qor-datepicker__input" placeholder="{{meta_placeholder .Meta .Context "YYYY-MM-DD"}}" type="text" id="{{.InputId}}" name="{{.InputName}}" value="{{.Value}}" {{if not (has_update_permission .Meta)}} disabled{{end}}>
-
-      <div>
-        <button data-toggle="qor.datepicker" data-target-input=".qor-datepicker__input" class="mdl-button mdl-js-button mdl-button--icon qor-action__datepicker" type="button">
-          <i class="material-icons">date_range</i>
-        </button>
+    {{if .ReadOnly}}
+      <div class="qor-field__value">{{.Value}}</div>
+    {{else}}
+      <div class="qor-field__show">{{.Value}}</div>
+      <div class="qor-field__edit qor-field__datepicker" data-picker-type="date">
+        {{ $dateFormat := .Meta.Config.FormatC .Context.Context }}
+        <input class="mdl-textfield__input qor-datepicker__input" placeholder="{{$dateFormat}}" type="text" id="{{.InputId}}" name="{{.InputName}}" value="{{.Value}}" {{if not (has_update_permission .Meta)}} disabled{{end}}>
+        <div>
+          <button data-toggle="qor.datepicker" data-format="{{$dateFormat}}" data-target-input=".qor-datepicker__input" class="mdl-button mdl-js-button mdl-button--icon qor-action__datepicker" type="button">
+            <i class="material-icons">date_range</i>
+          </button>
+        </div>
       </div>
-    </div>
+    {{end}}
   </div>
 </div>

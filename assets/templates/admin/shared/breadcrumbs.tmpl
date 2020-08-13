@@ -1,9 +1,11 @@
+{{if not (eq (admin_context).RequestLayout "lite") -}}
 <div class="qor-breadcrumbs mdl-layout__header qor-page-subnav__header">
     <nav>
-{{t "github_com:ecletus:admin:layout.breadcrumb.you_are_here"}}
-{{range crumbs}}
+<span class="qor-breadcrumbs__you-are-here">{{t "github_com:ecletus:admin:layout.breadcrumb.you_are_here"}}</span>
+{{range crumbs -}}
     <a href="{{.URI qor_context}}">{{t .Label}}</a>
-{{end}}
+{{- end -}}
     <a class="active">{{page_title}}</a>
     </nav>
 </div>
+{{end}}

@@ -3,12 +3,19 @@ package admin_helpers
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
-	"github.com/ecletus/core/utils"
+	"github.com/ecletus/helpers"
+	"github.com/pkg/errors"
+
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
+	"github.com/moisespsena-go/aorm"
+
+	path_helpers "github.com/moisespsena-go/path-helpers"
 
 	"github.com/ecletus/admin"
-	"github.com/ecletus/core"
 )
 
 const (
@@ -16,6 +23,8 @@ const (
 	SelectConfigOptionAllowBlank
 	SelectConfigOptionBottonSheet
 )
+
+var pkg = path_helpers.GetCalledDir()
 
 type SelectConfigOption uint8
 
@@ -55,62 +64,133 @@ func (ct SelectConfigOption) S() string {
 	return ct.String()
 }
 
-func SelectOne(r *admin.Resource, names ...string) {
+func SelectOne(r *admin.Resource, names ...NameCallback) {
 	SelectOneOption(0, r, names...)
 }
 
-func SelectOneOption(baseOpt SelectConfigOption, r *admin.Resource, names ...string) {
-	typ := utils.IndirectType(r.Value)
+func SelectOneBS(r *admin.Resource, names ...NameCallback) {
+	SelectOneOption(SelectConfigOptionBottonSheet, r, names...)
+}
 
-	Admin := r.GetAdmin()
-	m := func(name, scheme string, opt SelectConfigOption) {
-		opt |= baseOpt
+type NameCallback struct {
+	Name     string
+	Callback func(meta *admin.Meta)
+}
 
-		field, _ := typ.FieldByName(name)
-		value := reflect.New(utils.IndirectType(field.Type)).Interface()
-		_ = Admin.OnResourceValueAdded(value, func(e *admin.ResourceEvent) {
-			res := admin.NewDataResource(e.Resource)
-			if opt.Has(SelectConfigOptionNotIcon) {
-				res.Layout = admin.BASIC_LAYOUT_HTML
-			}
-			var mode string
-			if opt.Has(SelectConfigOptionBottonSheet) {
-				mode = "bottom_sheet"
-			}
-			var meta *admin.Meta
-			meta = r.Meta(&admin.Meta{
-				Resource: e.Resource,
-				Name:     name,
-				FormattedValuer: func(record interface{}, context *core.Context) (result interface{}) {
-					if record != nil {
-						rv := reflect.ValueOf(record).Elem().FieldByName(name)
-						if rv.Kind() != reflect.Ptr {
-							rv = rv.Addr()
+func SelectOneOption(baseOpt SelectConfigOption, r *admin.Resource, names ...NameCallback) {
+	onResource := func(index int, name, scheme string, opt SelectConfigOption, rs *admin.Resource) {
+		res := admin.NewDataResource(rs)
+		if opt.Has(SelectConfigOptionNotIcon) {
+			res.Layout = admin.BASIC_LAYOUT_HTML
+		}
+		var mode string
+		if opt.Has(SelectConfigOptionBottonSheet) {
+			mode = "bottom_sheet"
+		}
+		var meta *admin.Meta
+		meta = r.Meta(&admin.Meta{
+			Resource: rs,
+			Name:     name,
+			FormattedValuer: func(record interface{}, context *core.Context) (result interface{}) {
+				if record != nil {
+					value := meta.Value(context, record)
+					if !helpers.IsNilInterface(value) {
+						if s, ok := value.(fmt.Stringer); ok {
+							return s.String()
 						}
-						if !rv.IsNil() {
-							if s, ok := rv.Interface().(fmt.Stringer); ok {
-								return s.String()
+						return value
+					}
+				}
+				return ""
+			},
+
+			Config: &admin.SelectOneConfig{
+				Basic:              true,
+				AllowBlank:         opt.Has(SelectConfigOptionAllowBlank),
+				RemoteDataResource: res,
+				SelectMode:         mode,
+				Scheme:             scheme,
+			},
+		})
+
+		if field, ok := r.ModelStruct.FieldsByName[name]; ok && field.Relationship != nil {
+			if rel := field.Relationship; rel.Kind == "belongs_to" || rel.Kind == "has_one" {
+				meta.SetSetter(func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+					var (
+						rev               = reflect.ValueOf(recorde).Elem()
+						valuesS           = metaValue.Value.([]string)
+						foreignFieldNames = rel.ForeignFieldNames
+					)
+					if lv, lf := len(valuesS), len(foreignFieldNames); lv > lf {
+						valuesS = valuesS[0:len(foreignFieldNames)]
+					} else if lf > lv {
+						foreignFieldNames = foreignFieldNames[0:lv]
+					}
+					values := reflect.ValueOf(valuesS)
+					for i, name := range foreignFieldNames {
+						value := rev.FieldByName(name)
+						switch value.Kind() {
+						case reflect.String:
+							value.Set(values.Index(i))
+						case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+							var uiv, err = strconv.ParseUint(values.Index(i).String(), 10, 64)
+							if err != nil {
+								return errors.Wrap(err, pkg + ".SelectOneOption meta auto setter: parse id failed")
 							}
-							if meta.Valuer != nil {
-								return meta.Valuer(record, context)
+							value.SetUint(uiv)
+						case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+							var uiv, err = strconv.ParseInt(values.Index(i).String(), 10, 64)
+							if err != nil {
+								return errors.Wrap(err, pkg + ".SelectOneOption meta auto setter: parse id failed")
 							}
+							value.SetInt(uiv)
+						default:
+							vi := value.Addr().Interface()
+							if parse, ok := vi.(aorm.StringParser); ok {
+								return parse.ParseString(valuesS[i])
+							}
+							return errors.New(pkg + ".SelectOneOption meta auto setter: invalid type")
 						}
 					}
-					return ""
-				},
-
-				Config: &admin.SelectOneConfig{
-					Basic:              true,
-					AllowBlank:         opt.Has(SelectConfigOptionAllowBlank),
-					RemoteDataResource: res,
-					SelectMode:         mode,
-					Scheme:             scheme,
-				},
+					return nil
+				})
+			}
+		} else {
+			meta.SetSetter(func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+				// fake
+				return nil
 			})
-		})
+		}
+
+		if names[index].Callback != nil {
+			names[index].Callback(meta)
+		}
+	}
+	Admin := r.GetAdmin()
+	m := func(index int, name, scheme string, opt SelectConfigOption) {
+		id_ := r.FullID() + "." + name
+		opt |= baseOpt
+
+		if meta := r.GetDefinedMeta(name); meta != nil && meta.Resource != nil {
+			onResource(index, name, scheme, opt, meta.Resource)
+			return
+		}
+		if err := Admin.OnResourcesAdded(func(e *admin.ResourceEvent) error {
+			if e.Resource.Config.NotMount {
+				onResource(index, name, scheme, opt, e.Resource)
+			} else {
+				e.Resource.AfterMount(func() {
+					onResource(index, name, scheme, opt, e.Resource)
+				})
+			}
+			return nil
+		}, id_); err != nil {
+			panic(errors.Wrap(err, id_))
+		}
 	}
 
-	for _, name := range names {
+	for i, nameCb := range names {
+		var name = nameCb.Name
 		parts := strings.Split(name, ":")
 		var (
 			opt    SelectConfigOption
@@ -123,12 +203,12 @@ func SelectOneOption(baseOpt SelectConfigOption, r *admin.Resource, names ...str
 
 		name = parts[0]
 		parts = strings.Split(name, ">")
-		
+
 		if len(parts) > 1 {
 			name = parts[0]
 			scheme = parts[1]
 		}
 
-		m(name, scheme, opt)
+		m(i, name, scheme, opt)
 	}
 }

@@ -55,8 +55,6 @@
 
 // advanced search
 .qor-advanced-filter {
-    position: relative;
-    float: right !important;
     margin-right: 16px !important;
     .qor-advanced-filter__close {
         float:right;
@@ -89,7 +87,7 @@
             clear: none;
             margin: 0;
             .qor-field__datetimepicker .qor-action__datepicker {
-                right: 32px;
+                right: 25px;
             }
             .qor-field__datetimepicker .qor-action__datepicker,
             .qor-field__datetimepicker .qor-action__timepicker {

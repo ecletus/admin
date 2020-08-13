@@ -1,5 +1,7 @@
 package admin
 
+import "github.com/ecletus/roles"
+
 var defaultControllerActions = []string{
 	A_CREATE,
 	A_READ,
@@ -12,124 +14,152 @@ var defaultControllerActions = []string{
 	A_DELETED_INDEX,
 }
 
-type ResourceController struct {
+type ResourceControllerBuilder struct {
 	Resource       *Resource
 	Controller     interface{}
-	ViewController *ResourceViewController
+	ViewController *ResourceViewControllerBuilder
 	defaultActions map[string]bool
 }
 
-func (c *ResourceController) AppendDefaultActions(actions ...string) {
-	if c.defaultActions == nil {
-		c.defaultActions = map[string]bool{}
+func (this *ResourceControllerBuilder) AppendDefaultActions(actions ...string) {
+	if this.defaultActions == nil {
+		this.defaultActions = map[string]bool{}
 	}
 
 	for _, action := range actions {
-		c.defaultActions[action] = true
+		this.defaultActions[action] = true
 	}
 }
 
-func (c *ResourceController) DefaultActions() (actions []string) {
-	if c.defaultActions == nil || len(c.defaultActions) == 0 {
-		c.defaultActions = map[string]bool{}
+func (this *ResourceControllerBuilder) DefaultActions() (actions []string) {
+	if this.defaultActions == nil || len(this.defaultActions) == 0 {
+		this.defaultActions = map[string]bool{}
 		for _, action := range defaultControllerActions {
-			c.defaultActions[action] = true
+			this.defaultActions[action] = true
 		}
 	} else {
-		for action := range c.defaultActions {
+		for action := range this.defaultActions {
 			actions = append(actions, action)
 		}
 	}
 	return
 }
 
-func (c *ResourceController) HasDefaultAction(name string) (ok bool) {
-	if c.defaultActions == nil || len(c.defaultActions) == 0 {
-		c.DefaultActions()
+func (this *ResourceControllerBuilder) HasDefaultAction(name string) (ok bool) {
+	if this.defaultActions == nil || len(this.defaultActions) == 0 {
+		this.DefaultActions()
 	}
-	_, ok = c.defaultActions[name]
+	_, ok = this.defaultActions[name]
 	return
 }
 
-func (rc *ResourceController) RegisterDefaultRouters() {
-	rc.ViewController.InitDefaultHandlers(rc)
-	if rc.Resource.Config.Singleton {
-		rc.RegisterDefaultSingletonRouters()
+func (this *ResourceControllerBuilder) RegisterDefaultRouters() {
+	if this.Resource.Config.Singleton {
+		this.RegisterDefaultSingletonRouters()
 	} else {
-		rc.RegisterDefaultNormalRouters()
+		this.RegisterDefaultNormalRouters()
 	}
 }
 
-func (rc *ResourceController) IsCreator() (ok bool) {
-	_, ok = rc.Controller.(ControllerCreator)
+func (this *ResourceControllerBuilder) IsCreator() (ok bool) {
+	_, ok = this.Controller.(ControllerCreator)
 	return ok
 }
 
-func (rc *ResourceController) IsReader() (ok bool) {
-	_, ok = rc.Controller.(ControllerReader)
+func (this *ResourceControllerBuilder) IsReader() (ok bool) {
+	_, ok = this.Controller.(ControllerReader)
 	return
 }
 
-func (rc *ResourceController) IsUpdater() (ok bool) {
-	_, ok = rc.Controller.(ControllerUpdater)
+func (this *ResourceControllerBuilder) IsUpdater() (ok bool) {
+	_, ok = this.Controller.(ControllerUpdater)
 	return
 }
 
-func (rc *ResourceController) IsDeleter() (ok bool) {
-	_, ok = rc.Controller.(ControllerDeleter)
-	return ok && !rc.Resource.Config.Singleton
+func (this *ResourceControllerBuilder) IsDeleter() (ok bool) {
+	_, ok = this.Controller.(ControllerDeleter)
+	return ok && !this.Resource.Config.Singleton
 }
 
-func (rc *ResourceController) IsBulkDeleter() (ok bool) {
-	_, ok = rc.Controller.(ControllerBulkDeleter)
-	return ok && rc.IsDeleter()
+func (this *ResourceControllerBuilder) IsBulkDeleter() (ok bool) {
+	_, ok = this.Controller.(ControllerBulkDeleter)
+	return ok && this.IsDeleter()
 }
 
-func (rc *ResourceController) IsRestorer() (ok bool) {
-	_, ok = rc.Controller.(ControllerRestorer)
-	return ok && rc.IsDeleter()
+func (this *ResourceControllerBuilder) IsRestorer() (ok bool) {
+	_, ok = this.Controller.(ControllerRestorer)
+	return ok && this.IsDeleter()
 }
 
-func (rc *ResourceController) IsIndexer() (ok bool) {
-	_, ok = rc.Controller.(ControllerIndex)
-	return ok
+func (this *ResourceControllerBuilder) IsIndexer() (ok bool) {
+	_, ok = this.Controller.(ControllerIndex)
+	return ok && !this.Resource.Config.Singleton
 }
 
-func (rc *ResourceController) IsSearcher() (ok bool) {
-	_, ok = rc.Controller.(ControllerSearcher)
+func (this *ResourceControllerBuilder) IsSearcher() (ok bool) {
+	_, ok = this.Controller.(ControllerSearcher)
 	return
 }
 
-func (rc *ResourceController) Creatable() (ok bool) {
-	return rc.IsCreator() && rc.HasDefaultAction(A_CREATE)
+func (this *ResourceControllerBuilder) Creatable() (ok bool) {
+	return this.IsCreator() && this.HasDefaultAction(A_CREATE)
 }
 
-func (rc *ResourceController) Readable() (ok bool) {
-	return rc.IsReader() && rc.HasDefaultAction(A_READ)
+func (this *ResourceControllerBuilder) Readable() (ok bool) {
+	return this.IsReader() && this.HasDefaultAction(A_READ)
 }
 
-func (rc *ResourceController) Updatable() (ok bool) {
-	return rc.IsUpdater() && rc.HasDefaultAction(A_READ)
+func (this *ResourceControllerBuilder) Updatable() (ok bool) {
+	return this.IsUpdater() && this.HasDefaultAction(A_READ)
 }
 
-func (rc *ResourceController) Deletable() (ok bool) {
-	return rc.IsDeleter() && rc.HasDefaultAction(A_DELETE)
+func (this *ResourceControllerBuilder) Deletable() (ok bool) {
+	return this.IsDeleter() && this.HasDefaultAction(A_DELETE)
 }
 
-func (rc *ResourceController) BulkDeletable() (ok bool) {
-	return rc.IsBulkDeleter() && rc.HasDefaultAction(A_BULK_DELETE)
+func (this *ResourceControllerBuilder) BulkDeletable() (ok bool) {
+	return this.IsBulkDeleter() && this.HasDefaultAction(A_BULK_DELETE)
 }
 
-func (rc *ResourceController) Restorable() (ok bool) {
-	return rc.IsRestorer() &&
-		rc.HasDefaultAction(A_RESTORE) &&
-		rc.HasDefaultAction(A_DELETED_INDEX)
+func (this *ResourceControllerBuilder) Restorable() (ok bool) {
+	return this.IsRestorer() &&
+		this.HasDefaultAction(A_RESTORE) &&
+		this.HasDefaultAction(A_DELETED_INDEX)
 }
 
-func (rc *ResourceController) Indexable() (ok bool) {
-	return rc.IsIndexer() && rc.HasDefaultAction(A_INDEX)
+func (this *ResourceControllerBuilder) Indexable() (ok bool) {
+	return this.IsIndexer() && this.HasDefaultAction(A_INDEX)
 }
 
-func (rc *ResourceController) Searchable() (ok bool) {
-	return rc.IsSearcher() && rc.HasDefaultAction(A_SEARCH)
+func (this *ResourceControllerBuilder) Searchable() (ok bool) {
+	return this.IsSearcher() && this.HasDefaultAction(A_SEARCH)
+}
+
+func (this *ResourceControllerBuilder) HasMode(mode roles.PermissionMode) (ok *bool) {
+	var b bool
+	switch mode {
+	case roles.Create:
+		b = this.IsCreator()
+	case roles.Read:
+		b = this.IsReader()
+	case roles.Update:
+		b = this.IsUpdater()
+	case roles.Delete:
+		b = this.IsDeleter()
+	default:
+		return nil
+	}
+	return &b
+}
+
+func (this *ResourceControllerBuilder) HasModes(mode roles.PermissionMode, modeN ...roles.PermissionMode) (ok *bool) {
+	if ok = this.HasMode(mode); ok != nil {
+		return
+	}
+	for _, mode := range modeN {
+		if ok = this.HasMode(mode); ok != nil {
+			return
+		}
+	}
+	return
 }

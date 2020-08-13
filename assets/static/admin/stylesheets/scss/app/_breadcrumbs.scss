@@ -4,45 +4,47 @@
     color: rgba(255,255,255,.6);
     min-height:20px;
     background-color: #00568a !important;
-}
 
-.qor-breadcrumbs A:hover, .qor-breadcrumbs A:focus {
-    color: white;
-}
-.qor-breadcrumbs A {
-  text-decoration: none !important;
-  color: rgba(255,255,255,.6);
-  font-weight: normal;
-}
+    .qor-breadcrumbs__you-are-here {
+        font-style: italic;
+    }
 
-.qor-breadcrumbs A.active {
-    font-weight:bold;
-    color: white;
-}
+    A {
+        text-decoration: none !important;
+        color: rgba(255,255,255,.6);
+        font-weight: normal;
+        font-size: 15px;
 
-.qor-breadcrumbs A:first-child::before {
-    content: " ";
-    display: inline-block;
-    width: 20px;
-}
-
-.qor-breadcrumbs A:not(:first-child)::before {
-    color: rgba(255,255,255,.6);
-    content: "\e315";
-    vertical-align: middle;
-    display: inline-block;
-    font-family: 'Material Icons';
-    font-size: 24px;
-    font-style: normal;
-    font-weight: 400;
-    text-transform: none;
-    letter-spacing: normal;
-    word-break: normal;
-    word-wrap: normal;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-    -moz-osx-font-smoothing: grayscale;
-    -webkit-font-feature-settings: 'liga';
-    -moz-font-feature-settings: 'liga';
-    font-feature-settings: 'liga';
+        &:hover,
+        &:focus {
+            color: white;
+        }
+        &.active {
+            font-weight:bold;
+            color: white;
+        }
+        // skip you are here text
+        &:not(:nth-child(2))::before {
+            color: rgba(255,255,255,.6);
+            content: "\e315";
+            vertical-align: middle;
+            display: inline-block;
+            font-family: 'Material Icons';
+            font-style: normal;
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: normal;
+            word-break: normal;
+            word-wrap: normal;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+            -moz-osx-font-smoothing: grayscale;
+            -webkit-font-feature-settings: 'liga';
+            -moz-font-feature-settings: 'liga';
+            font-feature-settings: 'liga';
+        }
+        &:first-child::before {
+            display: none !important;
+        }
+    }
 }

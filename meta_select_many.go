@@ -5,10 +5,10 @@ import (
 	"html/template"
 	"reflect"
 
-	"github.com/moisespsena-go/assetfs"
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/core/utils"
+	"github.com/moisespsena-go/assetfs"
 )
 
 // SelectManyConfig meta configuration used for select many
@@ -61,4 +61,24 @@ func (selectManyConfig *SelectManyConfig) ConfigureQorMeta(metaor resource.Metao
 			})
 		}
 	}
+}
+
+func (selectManyConfig *SelectManyConfig) CurrentValues(ctx *Context, record interface{}, meta *Meta) interface{} {
+	rawValue := meta.Value(ctx.Context, record)
+	switch t := rawValue.(type) {
+	case SelectManyValuesGetter:
+		return t.Values()
+	case SelectManyValuesContextGetter:
+		return t.Values(ctx)
+	default:
+		return rawValue
+	}
+}
+
+type SelectManyValuesGetter interface {
+	Values() interface{}
+}
+
+type SelectManyValuesContextGetter interface {
+	Values(ctx *Context) interface{}
 }

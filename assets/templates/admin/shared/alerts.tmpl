@@ -1,0 +1,10 @@
+{{$alerts := alerts}}
+{{if $alerts}}
+  <ul class="qor-page-alerts">
+    {{range $alerts}}
+      <li>
+        {{.}}
+      </li>
+    {{end}}
+  </ul>
+{{end}}

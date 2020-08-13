@@ -71,7 +71,8 @@ $(function() {
 
   if ($pageHeader.length) {
     if ($pageHeader.height() > triggerHeight) {
-      $pageBody.css('padding-top', $pageHeader.height());
+      // see qor-head-fixer.js
+      //$pageBody.css('padding-top', $pageHeader.height());
     }
 
     $('.qor-page').addClass('has-header');

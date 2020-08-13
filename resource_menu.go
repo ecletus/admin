@@ -1,42 +1,35 @@
 package admin
 
-import "github.com/jinzhu/inflection"
+import "github.com/moisespsena-go/aorm"
 
-func (res *Resource) CreateMenu(plural bool) *Menu {
-	menuName := res.Name
+func (this *Resource) CreateMenu(plural bool) *Menu {
+	menuName := this.Name
 
 	if plural {
-		menuName = inflection.Plural(menuName)
+		menuName = this.PluralName
 	}
 
 	menu := &Menu{
 		Name:         menuName,
-		Label:        res.GetLabelKey(plural),
-		Permissioner: res,
-		Priority:     res.Config.Priority,
-		Ancestors:    res.Config.Menu,
-		RelativePath: res.GetIndexURI(),
-		Enabled:      res.Config.MenuEnabled,
-		Resource:     res,
+		Label:        menuName,
+		LabelKey:     this.GetLabelKey(plural),
+		Permissioner: this,
+		Priority:     this.Config.Priority,
+		Ancestors:    this.Config.Menu,
+		URI:          this.GetIndexURI(),
+		Enabled:      this.Config.MenuEnabled,
+		Resource:     this,
+		BaseResource: this,
+		subMenus:     make([]*Menu, 0),
 	}
 
-	if res.ParentResource != nil {
+	if this.ParentResource != nil {
 		menu.MakeLink = func(context *Context, args ...interface{}) string {
-			var parentKeys []string
-			for _, arg := range args {
-				switch t := arg.(type) {
-				case string:
-					if t != "" {
-						parentKeys = append(parentKeys, t)
-					}
-				case []string:
-					parentKeys = append(parentKeys, t...)
-				}
-			}
+			var parentKeys = aorm.IDSlice(args...)
 			if len(parentKeys) == 0 {
-				return res.GetContextIndexURI(context.Context, context.ParentResourceID...)
+				return this.GetContextIndexURI(context.Context, context.ParentResourceID...)
 			}
-			return res.GetContextIndexURI(context.Context, parentKeys...)
+			return this.GetContextIndexURI(context.Context, parentKeys...)
 		}
 	}
 

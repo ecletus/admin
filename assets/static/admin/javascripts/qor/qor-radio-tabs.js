@@ -43,7 +43,6 @@
       this.$element.off(EVENT_CLICK, CLASS_TAB, this.switchTab);
     },
 
-
     switchTab: function (e) {
       var $target = $(e.target),
           $element = this.$element,

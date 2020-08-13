@@ -1,12 +1,12 @@
 .mdl-button {
     font-size: 12px;
 }
+
+
 .qor-actions {
-    float: left;
-    min-height: 32px;
-    margin-right: 8px;
     padding: 8px 0;
-    @include clearfix();
+    width: 100%;
+
 
     &:first-child {
         .qor-selector {
@@ -21,12 +21,18 @@
         padding: 0 8px;
     }
 
-    .qor-selector,
-    .qor-action--text,
-    .qor-action--label,
-    .qor-action--select,
-    .qor-action--button {
-        float: left;
+    & > * {
+        display: flex;
+        min-height: 32px;
+        margin-right: 8px;
+
+        & > * {
+            -webkit-flex-shrink: 0;
+            -ms-flex-negative: 0;
+            flex-shrink: 0;
+            height: 20px;
+            margin-left: 5px;
+        }
     }
 }
 .qor-actions__filter {
@@ -96,7 +102,6 @@
 .qor-action-forms {
     display: inline-block;
     vertical-align: middle;
-    padding: 8px 0;
 }
 .qor-action--button {
     height: 32px;
@@ -107,10 +112,6 @@
     }
 }
 
-.qor-action-bulk-edit {
-    float: left;
-    margin-right: 16px;
-}
 .qor-action-forms {
     padding-bottom: 0;
     .qor-form__actions {

@@ -6,6 +6,7 @@ import (
 	"github.com/moisespsena-go/xroute"
 
 	"github.com/ecletus/core/utils"
+	"github.com/moisespsena-go/maps"
 
 	"github.com/ecletus/core/resource"
 
@@ -27,7 +28,9 @@ type SchemeDispatcher struct {
 
 type SchemeConfig struct {
 	Visible bool
-	Setup   func(scheme *Scheme)
+	ResetFilters,
+	ResetDefaultFilters bool
+	Setup func(scheme *Scheme)
 }
 
 type Scheme struct {
@@ -36,80 +39,81 @@ type Scheme struct {
 	SchemeName      string
 	SchemeParam     string
 	Resource        *Resource
-	indexSections   []*Section
-	newSections     []*Section
-	editSections    []*Section
-	isSetShowAttrs  bool
-	showSections    []*Section
-	customSections  *map[string]*[]*Section
-	sortableAttrs   *[]string
 
-	SearchHandler func(keyword string, context *core.Context) *aorm.DB
+	indexSections []*Section
+	newSections   []*Section
+	editSections  []*Section
+	showSections  []*Section
+
+	IndexSectionsFunc func(ctx *Context) []*Section
+	NewSectionsFunc   func(ctx *Context) []*Section
+	EditSectionsFunc  func(ctx *Context, record interface{}) []*Section
+	ShowSectionsFunc  func(ctx *Context, record interface{}) []*Section
+
+	isSetShowAttrs bool
+	customSections *map[string]*[]*Section
+	sortableAttrs  *[]string
+
+	SearchHandler SearchHandler
 
 	scopes             []*Scope
-	filters            []*Filter
-	filtersByName      map[string]*Filter
+	Filters            FilterRegistrator
 	Categories         []string
 	parentScheme       *Scheme
 	Children           map[string]*Scheme
-	Crumbs             core.BreadcrumberFunc
-	DefaultFilters     []func(context *core.Context, db *aorm.DB) *aorm.DB
+	Crumbs             core.BreadCrumberFunc
+	DefaultFilters     DBFilterRegistrator
 	i18nKey            string
 	NotMount           bool
 	handler            *RouteHandler
 	PrepareContextFunc func(ctx *core.Context)
 	defaultMenu        *Menu
 
-	menus *[]*Menu
+	itemMenus, menus []*Menu
 
 	orders []interface{}
+
+	hasFragments bool
+
+	SchemeData maps.SyncedMap
 }
 
 func NewScheme(res *Resource, name string) *Scheme {
 	s := &Scheme{
-		Resource:      res,
-		SchemeName:    name,
-		filtersByName: make(map[string]*Filter),
-		SchemeParam:   utils.ToParamString(name),
+		Resource:       res,
+		SchemeName:     name,
+		Filters:        &FilterRegister{},
+		DefaultFilters: &DBFilterRegister{},
+		SchemeParam:    utils.ToParamString(name),
+		itemMenus:      make([]*Menu, 0),
 	}
 
 	s.Filter(&Filter{
 		Name:   "exclude",
 		Hidden: true,
 		Handler: func(db *aorm.DB, argument *FilterArgument) *aorm.DB {
-			var keys []string
+			var keys []aorm.ID
 			for _, v := range argument.Value.Values {
 				if str := strings.TrimSpace(utils.ToString(v.Value)); str != "" {
-					for _, s := range strings.Split(str, " ") {
-						keys = append(keys, s)
+					for _, v := range strings.Split(str, " ") {
+						if key, err := s.Resource.ParseID(v); err != nil {
+							argument.Context.AddError(err)
+							return db
+						} else {
+							keys = append(keys, key)
+						}
 					}
 				}
 			}
 			if keys == nil {
 				return db
 			}
-			if len(keys) == 1 {
-				if sql, args := s.Resource.PrimaryQuery(keys[0], true); sql != "" {
-					return db.Where(sql, args...)
-				}
-				return db
-			}
 
-			if len(s.Resource.PrimaryFields) == 1 {
-				var pkeys []interface{}
-				for _, key := range keys {
-					for _, pkey := range strings.Split(key, ",") {
-						pkeys = append(pkeys, pkey)
-					}
-				}
-				if sql, args := s.Resource.ValuesToPrimaryQuery(true, pkeys...); sql != "" {
-					return db.Where(sql, args...)
-				}
-				return db
-			} else {
-				panic("Not implemented!")
+			if sql, args, err := resource.IdToPrimaryQuery(argument.Context, s.Resource, true, keys...); err != nil {
+				argument.Context.AddError(err)
+			} else if sql != "" {
+				return db.Where(sql, args...)
 			}
-
 			return db
 		},
 	})
@@ -118,112 +122,112 @@ func NewScheme(res *Resource, name string) *Scheme {
 	return s
 }
 
-func (s *Scheme) Order(order ...interface{}) *Scheme {
-	s.orders = append(s.orders, order...)
-	return s
+func (this *Scheme) Order(order ...interface{}) *Scheme {
+	this.orders = append(this.orders, order...)
+	return this
 }
 
-func (s *Scheme) SetOrder(order ...interface{}) *Scheme {
-	s.orders = order
-	return s
+func (this *Scheme) SetOrder(order ...interface{}) *Scheme {
+	this.orders = order
+	return this
 }
 
-func (s *Scheme) Orders() []interface{} {
-	return s.orders
+func (this *Scheme) Orders() []interface{} {
+	return this.orders
 }
 
-func (s *Scheme) CurrentOrders() []interface{} {
-	if s.orders == nil {
-		return s.Resource.Scheme.orders
+func (this *Scheme) CurrentOrders() []interface{} {
+	if this.orders == nil {
+		return this.Resource.Scheme.orders
 	}
-	return s.orders
+	return this.orders
 }
 
-func (s *Scheme) CurrentSearchHandler() func(keyword string, context *core.Context) *aorm.DB {
-	if s.SearchHandler == nil {
-		return s.Resource.Scheme.SearchHandler
+func (this *Scheme) CurrentSearchHandler() SearchHandler {
+	if this.SearchHandler == nil {
+		return this.Resource.Scheme.SearchHandler
 	}
-	return s.SearchHandler
+	return this.SearchHandler
 }
 
-func (s *Scheme) DefaultMenu() *Menu {
-	if s.defaultMenu == nil {
-		if s == s.Resource.Scheme {
-			s.defaultMenu = s.Resource.CreateMenu(!s.Resource.Config.Singleton)
+func (this *Scheme) DefaultMenu() *Menu {
+	if this.defaultMenu == nil {
+		if this == this.Resource.Scheme {
+			this.defaultMenu = this.Resource.CreateMenu(!this.Resource.Config.Singleton)
 		} else {
-			s.defaultMenu = s.parentScheme.AddDefaultMenuChild(&Menu{
-				Name: s.SchemeName,
+			this.defaultMenu = this.parentScheme.AddDefaultMenuChild(&Menu{
+				Name: this.SchemeName,
 				LabelFunc: func() string {
-					return s.I18nKey()
+					return this.I18nKey()
 				},
-				RelativePath: "/" + s.Resource.Param + s.Path(),
+				URI: "/" + this.Resource.Param + this.Path(),
 			})
 		}
 	}
-	return s.defaultMenu
+	return this.defaultMenu
 }
 
-func (s *Scheme) AddDefaultMenuChild(child *Menu) *Menu {
-	m := s.DefaultMenu()
-	m.subMenus = appendMenu(m.subMenus, m.Ancestors, child)
+func (this *Scheme) AddDefaultMenuChild(child *Menu) *Menu {
+	m := this.DefaultMenu()
+	child.BaseResource = this.Resource
+	m.subMenus = appendMenu(m.subMenus, nil, child)
 	return child
 }
 
-func (s *Scheme) SetI18nKey(key string) *Scheme {
-	s.i18nKey = key
-	return s
+func (this *Scheme) SetI18nKey(key string) *Scheme {
+	this.i18nKey = key
+	return this
 }
 
-func (s *Scheme) I18nKey() string {
-	if s.i18nKey != "" {
-		return s.i18nKey
+func (this *Scheme) I18nKey() string {
+	if this.i18nKey != "" {
+		return this.i18nKey
 	}
-	return s.Resource.I18nPrefix + ".schemes." + s.SchemeName
+	return this.Resource.I18nPrefix + ".schemes." + this.SchemeName
 }
 
-func (s *Scheme) DefaultFilter(fns ...func(context *core.Context, db *aorm.DB) *aorm.DB) {
-	s.DefaultFilters = append(s.DefaultFilters, fns...)
+func (this *Scheme) DefaultFilter(filter ...*DBFilter) {
+	this.DefaultFilters.AddFilter(filter...)
 }
 
-func (s *Scheme) ApplyDefaultFilters(context *core.Context) *core.Context {
-	if s.DefaultFilters == nil {
-		return context
-	}
-	context = context.Clone()
-	db := context.DB
-	for _, df := range s.DefaultFilters {
-		db = df(context, db)
-	}
-	context.SetDB(db)
-	return context
-}
-
-func (s *Scheme) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
-	if s == s.Resource.Scheme {
+func (this *Scheme) ApplyDefaultFilters(ctx *core.Context) (_ *core.Context, err error) {
+	db := ctx.DB()
+	err = this.DefaultFilters.Each(map[string]*DBFilter{}, func(f *DBFilter) (err error) {
+		db, err = f.Handler(ctx, db)
 		return
+	})
+	if err == nil {
+		return ctx.SetRawDB(db), nil
 	}
-	if s.Crumbs != nil {
-		return s.Crumbs(ctx)
-	}
-	crumbs = append(crumbs, core.NewBreadcrumb(s.Resource.GetIndexURI(), s.I18nKey()))
 	return
 }
 
-func (s *Scheme) Path() string {
-	if s.parentScheme != nil && s.parentScheme.parentScheme != nil {
-		return s.parentScheme.Path() + "/" + s.SchemeParam
+func (this *Scheme) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
+	if this == this.Resource.Scheme {
+		return
 	}
-	return "/" + s.SchemeParam
+	if this.Crumbs != nil {
+		return this.Crumbs(ctx)
+	}
+	crumbs = append(crumbs, core.NewBreadcrumb(this.Resource.GetIndexURI(), this.I18nKey()))
+	return
 }
 
-func (s *Scheme) GetSchemeByName(param string) (child *Scheme) {
+func (this *Scheme) Path() string {
+	if this.parentScheme != nil && this.parentScheme.parentScheme != nil {
+		return this.parentScheme.Path() + "/" + this.SchemeParam
+	}
+	return "/" + this.SchemeParam
+}
+
+func (this *Scheme) GetSchemeByName(param string) (child *Scheme) {
 	parts := strings.Split(param, ".")
 
 	if parts[0] == "" {
 		parts = parts[1:]
 	}
 
-	child = s
+	child = this
 
 	for _, p := range parts {
 		if child.Children == nil {
@@ -239,14 +243,15 @@ func (s *Scheme) GetSchemeByName(param string) (child *Scheme) {
 	return
 }
 
-func (s *Scheme) GetScheme(param string) (child *Scheme) {
-	child, _ = s.GetSchemeOk(param)
+func (this *Scheme) GetScheme(param string) (child *Scheme) {
+	child, _ = this.GetSchemeOk(param)
 	return
 }
 
-func (s *Scheme) GetSchemeOk(param string) (child *Scheme, ok bool) {
+func (this *Scheme) GetSchemeOk(param string) (*Scheme, bool) {
+	var ok bool
 	if param == "" {
-		return s, true
+		return this, true
 	}
 
 	parts := strings.Split(param, ".")
@@ -256,22 +261,22 @@ func (s *Scheme) GetSchemeOk(param string) (child *Scheme, ok bool) {
 	}
 
 	for _, p := range parts {
-		if s.Children == nil {
+		if this.Children == nil {
 			return nil, false
 		}
-		if s, ok = s.Children[p]; !ok {
+		if this, ok = this.Children[p]; !ok {
 			return nil, false
 		}
 	}
-	return s, true
+	return this, true
 }
 
-func (s *Scheme) OnDBActionE(cb func(e *resource.DBEvent) error, action ...resource.DBActionEvent) (err error) {
-	return resource.OnDBActionE(s.EventDispatcher, cb, action...)
+func (this *Scheme) OnDBActionE(cb func(e *resource.DBEvent) error, action ...resource.DBActionEvent) (err error) {
+	return resource.OnDBActionE(this.EventDispatcher, cb, action...)
 }
 
-func (s *Scheme) OnDBAction(cb func(e *resource.DBEvent), action ...resource.DBActionEvent) (err error) {
-	return resource.OnDBAction(s.EventDispatcher, cb, action...)
+func (this *Scheme) OnDBAction(cb func(e *resource.DBEvent), action ...resource.DBActionEvent) (err error) {
+	return resource.OnDBAction(this.EventDispatcher, cb, action...)
 }
 
 // IndexAttrs set attributes will be shown in the index page
@@ -279,10 +284,32 @@ func (s *Scheme) OnDBAction(cb func(e *resource.DBEvent), action ...resource.DBA
 //     order.IndexAttrs("User", "PaymentAmount", "ShippedAt", "CancelledAt", "State", "ShippingAddress")
 //     // show all attributes except `State` in the index page
 //     order.IndexAttrs("-State")
-func (s *Scheme) IndexAttrs(values ...interface{}) []*Section {
-	s.Resource.setSections(&s.indexSections, values...)
-	s.SearchAttrs()
-	return s.indexSections
+func (this *Scheme) IndexAttrs(values ...interface{}) []*Section {
+	this.Resource.setSections(&this.indexSections, values...)
+	this.SearchAttrs()
+	return this.indexSections
+}
+
+func (this *Scheme) excludeReadOnlyAttrs(at *[]*Section, values ...interface{}) []*Section {
+	if len(values) == 0 {
+		if len(*at) == 0 {
+			// load defaults
+			this.Resource.setSections(at)
+		}
+		values = append(values, *at)
+		for _, f := range this.Resource.ModelStruct.ReadOnlyFields {
+			values = append(values, "-"+f.Name)
+		}
+		// exclude readonly fields
+		this.Resource.setSections(at, values...)
+	} else {
+		for _, f := range this.Resource.ModelStruct.ReadOnlyFields {
+			values = append(values, "-"+f.Name)
+		}
+
+		this.Resource.setSections(at, values...)
+	}
+	return *at
 }
 
 // NewAttrs set attributes will be shown in the new page
@@ -306,9 +333,8 @@ func (s *Scheme) IndexAttrs(values ...interface{}) []*Section {
 //       "Description",
 //       "ColorVariations",
 //     }
-func (s *Scheme) NewAttrs(values ...interface{}) []*Section {
-	s.Resource.setSections(&s.newSections, values...)
-	return s.newSections
+func (this *Scheme) NewAttrs(values ...interface{}) []*Section {
+	return this.excludeReadOnlyAttrs(&this.newSections, values...)
 }
 
 // EditAttrs set attributes will be shown in the edit page
@@ -332,9 +358,8 @@ func (s *Scheme) NewAttrs(values ...interface{}) []*Section {
 //       "Description",
 //       "ColorVariations",
 //     }
-func (s *Scheme) EditAttrs(values ...interface{}) []*Section {
-	s.Resource.setSections(&s.editSections, values...)
-	return s.editSections
+func (this *Scheme) EditAttrs(values ...interface{}) []*Section {
+	return this.excludeReadOnlyAttrs(&this.editSections, values...)
 }
 
 // ShowAttrs set attributes will be shown in the show page
@@ -358,67 +383,79 @@ func (s *Scheme) EditAttrs(values ...interface{}) []*Section {
 //       "Description",
 //       "ColorVariations",
 //     }
-func (s *Scheme) ShowAttrs(values ...interface{}) []*Section {
+func (this *Scheme) ShowAttrs(values ...interface{}) []*Section {
 	if len(values) > 0 {
 		if values[len(values)-1] == false {
 			values = values[:len(values)-1]
 		} else {
-			s.isSetShowAttrs = true
+			this.isSetShowAttrs = true
 		}
+	} else {
+		this.isSetShowAttrs = true
 	}
-	s.Resource.setSections(&s.showSections, values...)
-	return s.showSections
+	this.Resource.setSections(&this.showSections, values...)
+	return this.showSections
 }
 
-func (s *Scheme) NIESAttrs(values ...interface{}) {
-	s.NewAttrs(values...)
-	s.IndexAttrs(values...)
-	s.EditAttrs(values...)
-	s.ShowAttrs(values...)
+func (this *Scheme) NESAttrs(values ...interface{}) {
+	this.NewAttrs(values...)
+	this.EditAttrs(values...)
+	this.ShowAttrs(values...)
+}
+
+func (this *Scheme) INESAttrs(values ...interface{}) {
+	this.IndexAttrs(values...)
+	this.NewAttrs(values...)
+	this.EditAttrs(values...)
+	this.ShowAttrs(values...)
 }
 
 // SortableAttrs set sortable attributes, sortable attributes could be click to order in qor table
-func (s *Scheme) SortableAttrs(columns ...string) []string {
-	if len(columns) != 0 || s.sortableAttrs == nil {
+func (this *Scheme) SortableAttrs(columns ...string) []string {
+	if len(columns) != 0 || this.sortableAttrs == nil {
 		if len(columns) == 0 {
-			columns = s.Resource.ConvertSectionToStrings(s.indexSections)
+			columns = this.Resource.ConvertSectionToStrings(this.indexSections)
 		}
-		s.sortableAttrs = &[]string{}
-		scope := s.Resource.FakeScope
+		this.sortableAttrs = &[]string{}
 		for _, column := range columns {
-			if field, ok := scope.FieldByName(column); ok && field.DBName != "" {
-				attrs := append(*s.sortableAttrs, column)
-				s.sortableAttrs = &attrs
+			if field, ok := this.Resource.ModelStruct.FieldsByName[column]; ok && field.DBName != "" {
+				attrs := append(*this.sortableAttrs, column)
+				this.sortableAttrs = &attrs
 			}
 		}
 	}
-	return *s.sortableAttrs
+	return *this.sortableAttrs
 }
 
 // SearchAttrs set search attributes, when search resources, will use those columns to search
 //     // Search products with its name, code, category's name, brand's name
 //	   product.SearchAttrs("Name", "Code", "Category.Name", "Brand.Name")
-func (s *Scheme) SearchAttrs(columns ...string) []string {
-	if len(columns) != 0 || s.SearchHandler == nil {
+func (this *Scheme) SearchAttrs(columns ...string) []string {
+	if len(columns) != 0 || this.SearchHandler == nil {
 		if len(columns) == 0 {
-			if len(s.indexSections) == 0 && s != s.Resource.Scheme {
-				return s.Resource.Scheme.SearchAttrs()
+			if len(this.indexSections) == 0 && this != this.Resource.Scheme {
+				return this.Resource.Scheme.SearchAttrs()
 			} else {
-				columns = s.Resource.ConvertSectionToStrings(s.indexSections)
+				columns = this.Resource.ConvertSectionToStrings(this.indexSections)
 			}
 		}
 
 		if len(columns) > 0 {
 			var filterFields []filterField
 			for _, column := range columns {
-				f := NewFieldFilter(s.Resource, column)
+				parts := strings.SplitN(column, " ", 2)
+				var op string
+				if len(parts) == 2 {
+					op, column = parts[0], parts[1]
+				}
+				f := NewFieldFilter(this.Resource, column)
 				if f != nil {
-					filterFields = append(filterFields, filterField{Field: f})
+					filterFields = append(filterFields, filterField{Field: f, Operation: op})
 				}
 			}
 
-			s.SearchHandler = func(keyword string, context *core.Context) *aorm.DB {
-				return filterResourceByFields(s.Resource, filterFields, keyword, context.DB, context)
+			this.SearchHandler = func(searcher *Searcher, db *aorm.DB, keyword string) (*aorm.DB, error) {
+				return filterResourceByFields(this.Resource, filterFields, keyword, db, searcher.Context.Context), nil
 			}
 		}
 	}
@@ -426,9 +463,9 @@ func (s *Scheme) SearchAttrs(columns ...string) []string {
 	return columns
 }
 
-func (s *Scheme) getAttrs(attrs []string) []string {
+func (this *Scheme) getAttrs(attrs []string) []string {
 	if len(attrs) == 0 {
-		return s.Resource.allAttrs()
+		return this.Resource.allAttrs()
 	}
 
 	var onlyExcludeAttrs = true
@@ -440,16 +477,16 @@ func (s *Scheme) getAttrs(attrs []string) []string {
 	}
 
 	if onlyExcludeAttrs {
-		return append(s.Resource.allAttrs(), attrs...)
+		return append(this.Resource.allAttrs(), attrs...)
 	}
 	return attrs
 }
 
-func (s *Scheme) GetCustomAttrs(name string) ([]*Section, bool) {
-	if s.customSections == nil {
+func (this *Scheme) GetCustomAttrs(name string) ([]*Section, bool) {
+	if this.customSections == nil {
 		return nil, false
 	}
-	sections, ok := (*s.customSections)[name]
+	sections, ok := (*this.customSections)[name]
 	if ok {
 		return *sections, ok
 	} else {
@@ -462,72 +499,91 @@ func (s *Scheme) GetCustomAttrs(name string) ([]*Section, bool) {
 //     order.IndexAttrs("User", "PaymentAmount", "ShippedAt", "CancelledAt", "State", "ShippingAddress")
 //     // show all attributes except `State` in the index page
 //     order.IndexAttrs("-State")
-func (s *Scheme) CustomAttrs(name string, values ...interface{}) []*Section {
-	if s.customSections == nil {
-		s.customSections = &map[string]*[]*Section{}
+func (this *Scheme) CustomAttrs(name string, values ...interface{}) []*Section {
+	if this.customSections == nil {
+		this.customSections = &map[string]*[]*Section{}
 	}
 
 	sections := &[]*Section{}
-	s.Resource.setSections(sections, values...)
-	(*s.customSections)[name] = sections
+	this.Resource.setSections(sections, values...)
+	(*this.customSections)[name] = sections
 
 	return *sections
 }
 
-func (s *Scheme) IndexSections(context *Context) []*Section {
-	if len(s.indexSections) == 0 {
-		if s.parentScheme != nil {
-			return s.parentScheme.IndexSections(context)
+func (this *Scheme) IndexSections(context *Context) []*Section {
+	if this.IndexSectionsFunc != nil {
+		return this.IndexSectionsFunc(context)
+	}
+
+	if len(this.indexSections) == 0 {
+		if this.parentScheme != nil {
+			return this.parentScheme.IndexSections(context)
 		}
-		if s.Resource.Scheme != s {
-			return s.Resource.Scheme.IndexSections(context)
+		if this.Resource.Scheme != this {
+			return this.Resource.Scheme.IndexSections(context)
 		}
 	}
-	sections := s.Resource.allowedSections(nil, s.IndexAttrs(), context, roles.Read)
+	sections := this.Resource.allowedSections(nil, this.IndexAttrs(), context, roles.Read)
 	return sections
 }
 
-func (s *Scheme) EditSections(context *Context, record interface{}) (sections []*Section) {
-	if len(s.editSections) == 0 {
-		if s.parentScheme != nil {
-			return s.parentScheme.EditSections(context, record)
+func (this *Scheme) EditSections(context *Context, record interface{}) (sections []*Section) {
+	if this.EditSectionsFunc != nil {
+		return this.EditSectionsFunc(context, record)
+	}
+
+	if len(this.editSections) == 0 {
+		if this.parentScheme != nil {
+			return this.parentScheme.EditSections(context, record)
 		}
-		if s.Resource.Scheme != s {
-			return s.Resource.Scheme.EditSections(context, record)
+		if this.Resource.Scheme != this {
+			return this.Resource.Scheme.EditSections(context, record)
 		}
 	}
-	if s == s.Resource.Scheme && s.Resource.Fragment != nil {
-		sections = append(sections, &Section{Resource: s.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
+	if this == this.Resource.Scheme && this.Resource.Fragment != nil {
+		sections = append(sections, &Section{Resource: this.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
 	}
-	sections = append(sections, s.Resource.allowedSections(record, s.EditAttrs(), context, roles.Update)...)
+	sections = append(sections, this.Resource.allowedSections(record, this.EditAttrs(), context, roles.Update)...)
 	return sections
 }
 
-func (s *Scheme) NewSections(context *Context) []*Section {
-	if len(s.newSections) == 0 {
-		if s.parentScheme != nil {
-			return s.parentScheme.NewSections(context)
+func (this *Scheme) NewSections(context *Context) []*Section {
+	if this.NewSectionsFunc != nil {
+		return this.NewSectionsFunc(context)
+	}
+
+	if len(this.newSections) == 0 {
+		if this.parentScheme != nil {
+			return this.parentScheme.NewSections(context)
 		}
-		if s.Resource.Scheme != s {
-			return s.Resource.Scheme.NewSections(context)
+		if this.Resource.Scheme != this {
+			return this.Resource.Scheme.NewSections(context)
 		}
 	}
-	return s.Resource.allowedSections(nil, s.NewAttrs(), context, roles.Create)
+	return this.Resource.allowedSections(nil, this.NewAttrs(), context, roles.Create)
 }
 
-func (s *Scheme) ShowSections(context *Context, record interface{}) []*Section {
-	if len(s.showSections) == 0 {
-		if s.parentScheme != nil {
-			return s.parentScheme.ShowSections(context, record)
+func (this *Scheme) ShowSections(context *Context, record interface{}) []*Section {
+	if this.ShowSectionsFunc != nil {
+		return this.ShowSectionsFunc(context, record)
+	}
+	return this.ShowSectionsOriginal(context, record)
+}
+
+func (this *Scheme) ShowSectionsOriginal(context *Context, record interface{}) []*Section {
+	if len(this.showSections) == 0 {
+		if this.parentScheme != nil {
+			return this.parentScheme.ShowSections(context, record)
 		}
-		if s.Resource.Scheme != s {
-			return s.Resource.Scheme.ShowSections(context, record)
+		if this.Resource.Scheme != this {
+			return this.Resource.Scheme.ShowSections(context, record)
 		}
 	}
-	return s.Resource.allowedSections(record, s.ShowAttrs(), context, roles.Read)
+	return this.Resource.allowedSections(record, this.ShowAttrs(), context, roles.Read)
 }
 
-func (s *Scheme) ContextSections(context *Context, recorde interface{}, action ...string) []*Section {
+func (this *Scheme) ContextSections(context *Context, recorde interface{}, action ...string) []*Section {
 	var b ContextType
 	if len(action) > 0 && action[0] != "" {
 		b = ParseContextType(action[0])
@@ -536,22 +592,22 @@ func (s *Scheme) ContextSections(context *Context, recorde interface{}, action .
 	}
 
 	if b.Has(NEW) {
-		return s.NewSections(context)
+		return this.NewSections(context)
 	}
 	if b.Has(SHOW) {
-		return s.ShowSections(context, recorde)
+		return this.ShowSections(context, recorde)
 	}
 	if b.Has(EDIT) {
-		return s.EditSections(context, recorde)
+		return this.EditSections(context, recorde)
 	}
 	if b.Has(INDEX) {
-		return s.IndexSections(context)
+		return this.IndexSections(context)
 	}
 	return nil
 }
 
-func (s *Scheme) Parents() (parents []*Scheme) {
-	p := s.parentScheme
+func (this *Scheme) Parents() (parents []*Scheme) {
+	p := this.parentScheme
 	for p != nil {
 		parents = append(parents, p)
 		p = p.parentScheme
@@ -564,28 +620,35 @@ func (s *Scheme) Parents() (parents []*Scheme) {
 	return
 }
 
-func (s *Scheme) PrepareContext(ctx *core.Context) {
-	for _, p := range s.Parents() {
+func (this *Scheme) PrepareContext(ctx *core.Context) {
+	for _, p := range this.Parents() {
 		if p.PrepareContextFunc != nil {
 			p.PrepareContextFunc(ctx)
 		}
 	}
 
-	if s.PrepareContextFunc != nil {
-		s.PrepareContextFunc(ctx)
+	if this.PrepareContextFunc != nil {
+		this.PrepareContextFunc(ctx)
 	}
 }
 
-func (s *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
-	child := NewScheme(s.Resource, name)
-	child.parentScheme = s
-	var c *SchemeConfig
-	if len(cfg) > 0 {
-		c = cfg[0]
+func (this *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
+	child := NewScheme(this.Resource, name)
+	child.parentScheme = this
+	var c = new(SchemeConfig)
+	for _, c = range cfg {
 	}
 
-	if s.Children == nil {
-		s.Children = map[string]*Scheme{}
+	if this.Children == nil {
+		this.Children = map[string]*Scheme{}
+	}
+
+	if !c.ResetDefaultFilters {
+		child.DefaultFilters.InheritsFrom(this.DefaultFilters)
+	}
+
+	if !c.ResetFilters {
+		child.Filters.InheritsFrom(this.Filters)
 	}
 
 	if c.Setup != nil {
@@ -593,10 +656,10 @@ func (s *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
 	}
 
 	if !child.NotMount {
-		if s.Resource.Controller.Indexable() {
-			child.handler = s.Resource.Controller.ViewController.IndexHandler().Child()
+		if this.Resource.ControllerBuilder.Indexable() {
+			child.handler = this.Resource.ControllerBuilder.ViewController.IndexHandler().Child()
 		} else {
-			child.handler = s.Resource.Controller.ViewController.ReadHandler().Child()
+			child.handler = this.Resource.ControllerBuilder.ViewController.ReadHandler().Child()
 		}
 		child.Resource.Router.Get(child.Path(), child.handler)
 		child.Resource.Router.Api(func(r xroute.Router) {
@@ -606,52 +669,83 @@ func (s *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
 		})
 
 		if c.Visible {
-			child.DefaultMenu()
+			child.DefaultMenu().Permissioner = this.Resource
 		}
 	}
 
-	s.Children[child.SchemeParam] = child
-	s.Resource.triggerSchemeAdded(s)
+	this.Children[child.SchemeParam] = child
+	this.Resource.triggerSchemeAdded(this)
 	return child
 }
 
-// GetMenus get all sidebar menus for admin
-func (s *Scheme) GetMenus() (menus []*Menu) {
-	if s.menus == nil {
-		if s.Resource.menus != nil {
-			return *s.Resource.menus
+// GetItemMenus get all sidebar itemMenus for admin
+func (this *Scheme) GetItemMenus() (menus []*Menu) {
+	if this.itemMenus == nil {
+		if this.Resource.itemMenus != nil {
+			return this.Resource.itemMenus
 		}
 		return
 	}
-	return *s.menus
+	return this.itemMenus
 }
 
-// AddMenu add a menu to admin sidebar
-func (s *Scheme) AddMenu(menu ...*Menu) *Menu {
-	if s.menus == nil {
-		var menus []*Menu
-		s.menus = &menus
-	}
+// AddItemMenu add a menu to admin sidebar
+func (this *Scheme) AddItemMenu(menu ...*Menu) *Menu {
 	var m *Menu
 	for _, m = range menu {
-		m.prefix = s.Resource.Param
-		menus := appendMenu(*s.menus, m.Ancestors, m)
-		s.menus = &menus
+		m.prefix = this.Resource.Param
+		menus := appendMenu(this.itemMenus, m.Ancestors, m)
+		this.itemMenus = menus
 	}
 	return m
 }
 
-// GetMenu get sidebar menu with name
-func (s *Scheme) GetMenu(name string) *Menu {
-	var menus = s.menus
+// GetItemMenu get sidebar menu with name
+func (this *Scheme) GetItemMenu(name string) *Menu {
+	var menus = this.itemMenus
 	if menus == nil {
-		menus = s.Resource.menus
+		menus = this.Resource.itemMenus
 	}
 	if menus == nil {
 		return nil
 	}
 
-	return getMenu(*menus, name)
+	return getMenu(menus, name)
+}
+
+// GetMenus get all sidebar itemMenus for admin
+func (this *Scheme) GetMenus() (menus []*Menu) {
+	if this.menus == nil {
+		if this.Resource.menus != nil {
+			return this.Resource.menus
+		}
+		return
+	}
+	return this.menus
+}
+
+// AddMenu add a menu to admin sidebar
+func (this *Scheme) AddMenu(menu ...*Menu) *Menu {
+	var m *Menu
+	for _, m = range menu {
+		m.prefix = this.Resource.Param
+		menus := appendMenu(this.menus, m.Ancestors, m)
+		this.menus = menus
+	}
+	return m
+}
+
+// GetMenu get sidebar menu with name
+func (this *Scheme) GetMenu(name string) *Menu {
+	var menus = this.menus
+	if menus == nil {
+		menus = this.Resource.menus
+	}
+	if menus == nil {
+		return nil
+	}
+
+	return getMenu(menus, name)
 }
 
 type SchemeEvent struct {

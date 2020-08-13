@@ -1,20 +1,21 @@
 <div class="qor-field">
-  {{if (eq .Context.Action "show")}}
+  {{if or (eq .Context.Action "show") .ReadOnly}}
     {{if .Value}}
-      <label><span class="qor-field__label"><i class="material-icons">done</i> {{meta_label .Meta}}</span></label>
+      <label><span class="qor-field__label"><i class="material-icons">done</i> {{meta_record_label .Meta .Record}}</span></label>
     {{end}}
   {{else}}
     <label class="mdl-switch mdl-js-switch mdl-js-ripple-effect" {{if .InputId}}for="{{.InputId}}"{{end}}>
       <input type="checkbox" {{if .InputId}}id="{{.InputId}}"{{end}} name="{{.InputName}}" class="mdl-switch__input"
           type="checkbox" {{if .Value}}checked{{end}}{{if (or (eq .Context.Action "show") (not (has_update_permission .Meta)))}} disabled{{end}}>
       <span class="qor-field__label mdl-switch__label">
-        {{meta_label .Meta}}
-        {{$description := meta_description .Meta}}
-        {{if $description}}
-            ({{$description}})
-        {{end}}
+        {{meta_record_label .Meta .Record}}
       </span>
       <input type="hidden" name="{{.InputName}}" value="false">
     </label>
+  {{end}}
+
+  {{$help := meta_record_help .Meta .Record}}
+  {{if $help}}
+      <div class="qor-field__help">{{$help}}</div>
   {{end}}
 </div>

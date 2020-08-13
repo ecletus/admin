@@ -39,13 +39,15 @@
                 placeholder="{{t "github_com:ecletus:admin.pagination.50_entries"}}"
               {{ else if eq 100 $paginationResult.Pagination.PerPage }}
                 placeholder="{{t "github_com:ecletus:admin.pagination.100_entries"}}"
-              {{ else }}
+              {{ else if $paginationResult.Pagination.Unlimited }}
                 placeholder="{{t "github_com:ecletus:admin.pagination.show_all"}}"
               {{ end }} >
         <option value="20">{{t "github_com:ecletus:admin.pagination.20_entries"}}</option>
         <option value="50">{{t "github_com:ecletus:admin.pagination.50_entries"}}</option>
         <option value="100">{{t "github_com:ecletus:admin.pagination.100_entries"}}</option>
-        <option value="-1">{{t "github_com:ecletus:admin.pagination.show_all"}}</option>
+          {{if $paginationResult.Pagination.UnlimitedEnabled}}
+            <option value="-1">{{t "github_com:ecletus:admin.pagination.show_all"}}</option>
+          {{end}}
       </select>
     </div>
   </nav>

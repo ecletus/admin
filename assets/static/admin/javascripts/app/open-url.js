@@ -54,6 +54,12 @@ $(function() {
             hasSlideoutTheme = $this.parents('.qor-theme-slideout').length,
             isActionButton = ($this.hasClass('qor-action-button') || $this.hasClass('qor-action--button')) && !openType;
 
+        if (openType !== "bottomsheet") {
+            if ($target.is('.mdl-data-table__select,.qor-table__actions') || $target.parents('.mdl-data-table__select,.qor-table__actions,.qor-actions-bulk').length) {
+                return
+            }
+        }
+
         // if clicking item's menu actions
         if ($target.closest('.qor-button--actions').length || (!$target.data('url') && $target.is('a')) || (isInTable && isBottomsheetsOpened())) {
             return;

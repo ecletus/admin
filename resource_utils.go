@@ -3,6 +3,7 @@ package admin
 import (
 	"fmt"
 	"strings"
+
 	"github.com/ecletus/core"
 	"github.com/moisespsena-go/aorm"
 )
@@ -31,30 +32,36 @@ func resourceParamIDName(level int, paramName string) string {
 }
 
 func subResourceConfigureFilters(res *Resource) {
-	res.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
-		if context.ResourceID == "" && len(context.ParentResourceID) > 0 {
-			return res.FilterByParent(db, context.ParentResourceID[len(context.ParentResourceID)-1])
-		}
-		return db
+	res.DefaultFilter(&DBFilter{
+		Name: "admin:parent_filter",
+		Handler: func(context *core.Context, db *aorm.DB) (DB *aorm.DB, err error) {
+			if context.ResourceID == nil && len(context.ParentResourceID) > 0 {
+				if parentId := context.ParentResourceID[len(context.ParentResourceID)-1]; parentId != nil {
+					return res.FilterByParent(context, db, parentId)
+				}
+			}
+			return db, nil
+		},
 	})
 
-	res.DefaultFilter(res.Config.Sub.Filters...)
-
-	scope := res.FakeScope
+	res.DefaultFilters.AddFilter(res.Config.Sub.Filters...)
 
 	if res.Config.Sub.RawFieldFilter != nil {
 		var rawDbFields []string
 		var rawDbFieldsValues []interface{}
 		for fieldName, value := range res.Config.Sub.RawFieldFilter {
-			if f, ok := scope.FieldByName(fieldName); ok {
-				rawDbFields = append(rawDbFields, scope.QuotedTableName() + "." + f.DBName)
+			if f, ok := res.ModelStruct.FieldsByName[fieldName]; ok {
+				rawDbFields = append(rawDbFields, "{}."+f.DBName)
 				rawDbFieldsValues = append(rawDbFieldsValues, value)
 			} else {
 				panic("Field \"" + fieldName + "\" does not exists.")
 			}
 		}
-		res.DefaultFilter(func(context *core.Context, db *aorm.DB) *aorm.DB {
-			return db.Where(strings.Join(rawDbFields, " AND "), rawDbFieldsValues...)
+		res.DefaultFilter(&DBFilter{
+			Name: "admin:parent_filter:raw_fields",
+			Handler: func(context *core.Context, db *aorm.DB) (DB *aorm.DB, err error) {
+				return db.Where(aorm.IQ(strings.Join(rawDbFields, " AND ")), rawDbFieldsValues...), nil
+			},
 		})
 	}
 }

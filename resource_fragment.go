@@ -1,23 +1,21 @@
 package admin
 
 import (
-	"github.com/ecletus/core"
-	"github.com/ecletus/core/resource"
 	"github.com/ecletus/fragment"
 	"github.com/ecletus/helpers"
-	"github.com/moisespsena-go/aorm"
 	errwrap "github.com/moisespsena-go/error-wrap"
+
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
+	"github.com/moisespsena-go/aorm"
 )
 
-func (res *Resource) AddFragment(value fragment.FragmentModelInterface) *Resource {
-	return res.AddFragmentConfig(value, &FragmentConfig{})
+func (this *Resource) AddFragment(value fragment.FragmentModelInterface) *Resource {
+	return this.AddFragmentConfig(value, &FragmentConfig{})
 }
 
-func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cfg *FragmentConfig) *Resource {
-	if _, ok := res.Value.(fragment.FragmentedModelInterface); !ok {
-		panic(NotFragmentableError)
-	}
-
+func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cfg *FragmentConfig) *Resource {
+	_ = this.Value.(fragment.FragmentedModelInterface)
 	if cfg == nil {
 		cfg = &FragmentConfig{}
 	}
@@ -29,18 +27,25 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 	}
 
 	cfg.Config.Singleton = true
-	cfg.Config.Sub.Parent = res
+	cfg.Config.Sub.Parent = this
 	cfg.Config.DisableFormID = true
 	cfg.Config.Sub.ParentFieldName = "ID"
+
+	if len(cfg.Schemes) == 0 {
+		cfg.Schemes = append(cfg.Schemes, this.Scheme)
+		for _, scheme := range this.Scheme.Children {
+			cfg.Schemes = append(cfg.Schemes, scheme)
+		}
+	}
 
 	_, isForm := value.(fragment.FormFragmentModelInterface)
 
 	setup := cfg.Config.Setup
 
 	cfg.Config.Setup = func(fragRes *Resource) {
-		fragRes.SetMeta(&Meta{Name: "ID", Enabled: func(recorde interface{}, context *Context, meta *Meta) bool {
-			return false
-		}}, true)
+		if !this.Singleton && !fragRes.Config.Virtual {
+			fragRes.SetMeta(&Meta{Name: "ID", Type: "-"}, true)
+		}
 		if isForm {
 			meta := &Meta{
 				Name:              AttrFragmentEnabled,
@@ -67,9 +72,9 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 				meta.Label = fragRes.SingularLabelKey()
 			}
 			fragRes.SetMeta(meta, true)
-			res.Fragments.AddForm(fragRes, cfg)
+			this.Fragments.AddForm(fragRes, cfg)
 		} else {
-			res.Fragments.Add(fragRes, cfg)
+			this.Fragments.Add(fragRes, cfg)
 		}
 
 		fragRes.Fragment.Build()
@@ -100,62 +105,52 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 		}
 	}
 
-	fragRes := res.AddResourceConfig(value, cfg.Config)
+	fragRes := this.AddResourceConfig(value, cfg.Config)
 
-	if len(res.Fragments.Fragments) == 1 {
-		_ = res.GetAdmin().OnDone(func(e *AdminEvent) {
-			res.Fragments.Build()
+	for _, scheme := range cfg.Schemes {
+		if !scheme.hasFragments {
+			scheme.hasFragments = true
+			_ = scheme.OnDBActionE(func(e *resource.DBEvent) (err error) {
+				context := e.Context
+				if v := context.Value("skip.fragments"); v == nil {
+					r := e.Result().(fragment.FragmentedModelInterface)
+					for id, fr := range r.GetFragments() {
+						fragRes := this.Fragments.Get(id).Resource
+						if ID := aorm.IdOf(fr); ID.IsZero() {
+							aorm.IdOf(r).SetTo(fr)
+						}
+						if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
+							return errwrap.Wrap(err, "Fragment "+id)
+						}
+					}
+					for id, fr := range r.GetFormFragments() {
+						fragRes := this.Fragments.Get(id).Resource
+						if ID := aorm.IdOf(fr); ID.IsZero() {
+							aorm.IdOf(r).SetTo(fr)
+						}
+						if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
+							return errwrap.Wrap(err, "Fragment "+id)
+						}
+					}
+				}
+				return nil
+			}, resource.E_DB_ACTION_UPDATE.After())
+		}
+	}
+
+	if len(this.Fragments.Fragments) == 1 {
+		_ = this.GetAdmin().OnDone(func(e *AdminEvent) {
+			this.Fragments.Build()
 		})
-		_ = res.OnDBActionE(func(e *resource.DBEvent) (err error) {
-			context := e.Context
-			if v := context.Data().Get("skip.fragments"); v == nil {
-				r := e.Result().(fragment.FragmentedModelInterface)
-				for id, fr := range r.GetFragments() {
-					fragRes := res.Fragments.Get(id).Resource
-					if fr.GetID() == "" {
-						fr.SetID(r.GetID())
-					}
-					if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
-						return errwrap.Wrap(err, "Fragment "+id)
-					}
-				}
-				for id, fr := range r.GetFormFragments() {
-					fragRes := res.Fragments.Get(id).Resource
-					if fr.GetID() == "" {
-						fr.SetID(r.GetID())
-					}
-					if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
-						return errwrap.Wrap(err, "Fragment "+id)
-					}
-				}
-			}
-			return nil
-		}, resource.E_DB_ACTION_SAVE.After())
 
-		_ = res.Scheme.OnDBActionE(func(e *resource.DBEvent) (err error) {
-			context := e.Context
-			if v := context.Data().Get("skip.fragments"); v == nil {
-				DB := context.DB
-				fields, query := res.Fragments.Fields(), res.Fragments.Query()
-				DB = DB.ExtraSelectFieldsSetter(
-					PKG+".fragments",
-					func(result interface{}, values []interface{}, set func(result interface{}, low, hight int) interface{}) {
-						res.Fragments.ExtraFieldsScan(result.(fragment.FragmentedModelInterface), values, set)
-					}, fields, query)
-				DB = res.Fragments.JoinLeft(DB)
-				context.SetDB(DB)
-			}
-			return nil
-		}, resource.BEFORE|resource.E_DB_ACTION_FIND_MANY|resource.E_DB_ACTION_FIND_ONE)
-
-		res.FakeScope.GetModelStruct().BeforeRelatedCallback(func(fromScope *aorm.Scope, toScope *aorm.Scope, DB *aorm.DB, fromField *aorm.Field) *aorm.DB {
-			fields, query := res.Fragments.Fields(), res.Fragments.Query()
+		this.ModelStruct.BeforeRelatedCallback(func(fromScope *aorm.Scope, toScope *aorm.Scope, DB *aorm.DB, fromField *aorm.Field) *aorm.DB {
+			fields, query := this.Fragments.Fields(), this.Fragments.Query(core.ContextFromDB(DB))
 			DB = DB.ExtraSelectFieldsSetter(
 				PKG+".fragments",
-				func(result interface{}, values []interface{}, set func(result interface{}, low, hight int) interface{}) {
-					res.Fragments.ExtraFieldsScan(result.(fragment.FragmentedModelInterface), values, set)
+				func(result interface{}, values []interface{}, set func(model *aorm.ModelStruct, result interface{}, low, hight int) interface{}) {
+					this.Fragments.ExtraFieldsScan(result.(fragment.FragmentedModelInterface), values, set)
 				}, fields, query)
-			DB = res.Fragments.JoinLeft(DB)
+			DB = this.Fragments.JoinLeft(DB)
 			return DB
 		})
 	}
@@ -172,7 +167,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 				return fragmentedRecorde.GetFragment(frag.ID)
 			})
 			meta.Fragment = fragRes.Fragment
-			meta.Resource = res
+			meta.Resource = this
 			meta.NewValuer(func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{} {
 				fragmentedRecorde := recorde.(fragment.FragmentedModelInterface)
 				frag := meta.Fragment
@@ -185,19 +180,27 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 				value := frag.GetOrNew(fragmentedRecorde, context)
 				return meta.ProxyTo.GetSetter()(value, metaValue, context)
 			})
-			meta = res.Meta(meta)
+			meta = this.Meta(meta)
 		}
 
 		fieldsNamesInterface := helpers.StringsToInterfaces(fieldsNames)
-		res.EditAttrs(append([]interface{}{res.EditAttrs()}, fieldsNamesInterface...)...)
-		res.ShowAttrs(append([]interface{}{res.ShowAttrs()}, fieldsNamesInterface...)...)
-	} else {
-		res.Meta(&Meta{
+		if len(cfg.Sections) > 0 {
+			fieldsNamesInterface = []interface{}{}
+			for _, sec := range cfg.Sections {
+				fieldsNamesInterface = append(fieldsNamesInterface, sec)
+			}
+		}
+		this.EditAttrs(append([]interface{}{this.EditAttrs()}, fieldsNamesInterface...)...)
+		this.ShowAttrs(append([]interface{}{this.ShowAttrs()}, fieldsNamesInterface...)...)
+	} else if !fragRes.Config.Virtual {
+		this.Meta(&Meta{
 			Name: metaName,
 			Type: "fragment",
 			Enabled: func(recorde interface{}, context *Context, meta *Meta) bool {
 				if recorde != nil {
-					return fragRes.Fragment.Enabled(recorde.(fragment.FragmentedModelInterface), context.Context)
+					if _, ok := recorde.(fragment.FragmentedModelInterface); ok {
+						return fragRes.Fragment.Enabled(recorde.(fragment.FragmentedModelInterface), context.Context)
+					}
 				}
 				return false
 			},
@@ -205,7 +208,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 				return fragRes.ConvertSectionToMetas(fragRes.ContextSections(ctx, record))
 			},
 			Setter: func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-				if _, ok := res.Fragments.Fragments[metaValue.Name]; !ok {
+				if _, ok := this.Fragments.Fragments[metaValue.Name]; !ok {
 					return nil
 				}
 				value := fragRes.Fragment.FormGetOrNew(recorde.(fragment.FragmentedModelInterface), context)
@@ -229,9 +232,9 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 		})
 
 		var hasEditMeta bool
-		if len(res.editSections) > 0 {
+		if len(this.editSections) > 0 {
 		root:
-			for _, sec := range res.editSections {
+			for _, sec := range this.editSections {
 				for _, row := range sec.Rows {
 					for _, col := range row {
 						if col == metaName {
@@ -244,15 +247,15 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 		}
 
 		if !hasEditMeta {
-			res.EditAttrs(res.EditAttrs(), metaName)
+			this.EditAttrs(this.EditAttrs(), metaName)
 		}
 
-		if len(res.showSections) == 0 {
-			res.ShowAttrs(res.EditAttrs(), metaName)
+		if len(this.showSections) == 0 {
+			this.ShowAttrs(this.EditAttrs(), metaName)
 		} else {
 			var hasShowMeta bool
 		root2:
-			for _, sec := range res.showSections {
+			for _, sec := range this.showSections {
 				for _, row := range sec.Rows {
 					for _, col := range row {
 						if col == metaName {
@@ -264,7 +267,7 @@ func (res *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, cf
 			}
 
 			if !hasShowMeta {
-				res.ShowAttrs(res.ShowAttrs(), metaName)
+				this.ShowAttrs(this.ShowAttrs(), metaName)
 			}
 		}
 	}

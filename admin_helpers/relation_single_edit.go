@@ -1,22 +1,20 @@
 package admin_helpers
 
 import (
-	"reflect"
-
 	"github.com/ecletus/admin"
-	"github.com/ecletus/core/utils"
+	"github.com/pkg/errors"
 )
 
 func SingleEdit(r *admin.Resource, field ...string) {
-	typ := utils.IndirectType(r.Value)
-
 	Admin := r.GetAdmin()
 	m := func(fieldName string) {
-		field, _ := typ.FieldByName(fieldName)
-		value := reflect.New(utils.IndirectType(field.Type)).Interface()
-		_ = Admin.OnResourceValueAdded(value, func(e *admin.ResourceEvent) {
+		id_ := r.FullID() + "." + fieldName
+		if err := Admin.OnResourcesAdded(func(e *admin.ResourceEvent) error {
 			r.SetMeta(&admin.Meta{Name: fieldName, Type: "single_edit", Resource: e.Resource})
-		})
+			return nil
+		}, id_); err != nil {
+			panic(errors.Wrap(err, id_))
+		}
 	}
 
 	for _, name := range field {

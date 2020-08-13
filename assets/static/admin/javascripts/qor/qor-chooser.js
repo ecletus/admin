@@ -53,15 +53,22 @@
 
             if (select2Data.remoteData) {
                 option.ajax = $.fn.select2.ajaxCommonOptions(select2Data);
-                let xurl = QOR.Xurl(select2Data["ajax-Url"], $this);
+                let url = select2Data.ajaxUrl || select2Data.originalAjaxUrl
+                let xurl = QOR.Xurl(url, $this);
+                let primaryKey = select2Data.remoteDataPrimaryKey;
+                delete select2Data["ajaxUrl"];
+                $this.removeAttr('data-ajax-url');
+                $this.attr('data-original-ajax-url', url);
 
-                delete select2Data["ajax-Url"];
                 option.ajax.url = function (params) {
                     xurl.query.keyword = [params.term];
                     xurl.query.page = params.page;
                     xurl.query.per_page = 20;
-                    let url = xurl.toString();
-                    return url
+                    let result = xurl.build();
+                    if (!result.notFound.length && !result.empties.length) {
+                        return result.url
+                    }
+                    return 'https://unsolvedy.dependency.localhost/' + result.notFound.concat(result.empties).toString()
                 };
 
                 option.templateResult = function(data) {
@@ -82,6 +89,13 @@
                     if (data.loading) return data.text;
                     data.QorChooserOptions = dataOptions;
                     let tmpl = $this.parents('.qor-field').find('[name="select2-selection-template"]');
+                    if (data.element) {
+                        if (primaryKey) {
+                            $(data.element).attr('data-value', data[primaryKey]);
+                        } else {
+                            $(data.element).attr('data-value', data.id);
+                        }
+                    }
                     if (tmpl.length > 0 && tmpl.data("raw")) {
                         var f = tmpl.data("func");
                         if (!f) {

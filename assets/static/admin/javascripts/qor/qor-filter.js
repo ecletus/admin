@@ -22,31 +22,16 @@
         CLASS_IS_ACTIVE = 'is-active',
         CLASS_BOTTOMSHEETS = '.qor-bottomsheets';
 
-    function encodeSearch(data, detached) {
-        var search = decodeURI(location.search);
-        var params;
+    let re = /([^&=]+)(=([^&]*))?/g;
+    let decodeRE = /\+/g;  // Regex for replacing addition symbol with a space
 
-        if ($.isArray(data)) {
-            params = decodeSearch(search);
-
-            $.each(data, function(i, param) {
-                i = $.inArray(param, params);
-
-                if (i === -1) {
-                    params.push(param);
-                } else if (detached) {
-                    params.splice(i, 1);
-                }
-            });
-
-            search = '?' + params.join('&');
-        }
-
-        return search;
+    function decode(str) {
+        return decodeURIComponent( str.replace(decodeRE, " ") )
     }
 
+
     function decodeSearch(search) {
-        var data = [];
+        let data = [];
 
         if (search && search.indexOf('?') > -1) {
             search = search.replace(/\+/g, ' ').split('?')[1];
@@ -58,8 +43,8 @@
             if (search) {
                 // search = search.toLowerCase();
                 data = $.map(search.split('&'), function(n) {
-                    var param = [];
-                    var value;
+                    let param = [];
+                    let value;
 
                     n = n.split('=');
                     if (/page/.test(n[0])) {
@@ -82,6 +67,53 @@
         }
 
         return data;
+    }
+
+    function parseParams(data) {
+        let query = decodeURI(data === undefined ? location.search : data),
+            params = {}, e, search;
+        if (query && query[0] === '?') {
+            query = query.substring(1)
+        }
+        while ( e = re.exec(query) ) {
+            let k = decode( e[1] ), v = decode( e[3] );
+            if (k.substring(k.length - 2) === '[]') {
+                (params[k] || (params[k] = [])).push(v);
+            }
+            else params[k] = v;
+        }
+        return {
+            params: params,
+            isArray: function(key) {
+                return key.substring(key.length - 2) === '[]'
+            },
+            remove: function (key) {
+                delete (this.params[key])
+            },
+            set: function(key, value) {
+                if (key.substring(key.length - 2) === '[]') {
+                    this.params[key] = this.params[key] || []
+                    this.params[key].push(value);
+                }
+                else this.params[key] = value;
+            },
+            removeAny: function (key, values) {
+                if (!this.params.hasOwnProperty(key)) return;
+                this.params[key] = this.params[key].filter(val => values.indexOf(val) < 0);
+                if (!this.params[key].length)
+                    this.remove(key)
+            },
+            removeItem: function (key, item) {
+                if (!this.params.hasOwnProperty(key)) return;
+                this.params[key] = this.params[key].filter(val => val !== item);
+                if (!this.params[key].length)
+                    this.remove(key)
+            },
+            encode: function () {
+                const search = $.param(this.params);
+                return search.length ? '?' + search : '';
+            }
+        }
     }
 
     function QorFilter(element, options) {
@@ -112,68 +144,48 @@
 
         toggle: function(e) {
             let $target = $(e.currentTarget),
-                data = [],
-                params,
-                param,
-                search,
-                name,
+                params = parseParams(),
+                paramName,
                 value,
-                index,
-                matched,
-                paramName;
+                search;
 
             if ($target.is('select')) {
-                params = decodeSearch(decodeURI(location.search));
-
-                paramName = name = $target.attr('name');
+                paramName = $target.attr('name');
                 value = $target.val();
-                param = [name];
-
-                if (value) {
-                    param.push(value);
-                }
-
-                param = param.join('=');
-
-                if (value) {
-                    data.push(param);
-                }
-
-                $target.children().each(function() {
-                    var $this = $(this);
-                    var param = [name];
-                    var value = $.trim($this.prop('value'));
-
+                if (params.isArray(paramName)) {
+                    let values = [];
+                    $target.children().each((_, el) => values[values.length] = $(el).prop('value'));
+                    params.removeAny(paramName, values);
                     if (value) {
-                        param.push(value);
+                        params.set(paramName, value)
                     }
-
-                    param = param.join('=');
-                    index = $.inArray(param, params);
-
-                    if (index > -1) {
-                        matched = param;
-                        return false;
-                    }
-                });
-
-                if (matched) {
-                    data.push(matched);
-                    search = encodeSearch(data, true);
                 } else {
-                    search = encodeSearch(data);
+                    if (value) params.set(paramName, value)
+                    else params.remove(paramName)
                 }
+                search = params.encode()
             } else if ($target.is('a')) {
                 e.preventDefault();
-                paramName = $target.data().paramName;
-                data = decodeSearch($target.attr('href'));
-                if ($target.hasClass(CLASS_IS_ACTIVE)) {
-                    search = encodeSearch(data, true); // set `true` to detach
+                let uri = $target.attr('href'),
+                    pos = uri.indexOf('?');
+                if (pos >= 0) {
+                    search = uri.substring(0, pos)
                 } else {
-                    search = encodeSearch(data);
+                    search = "?"
                 }
+            } else if ($target.is('input')) {
+                paramName = $target.attr('name');
+                value = $target.val();
+                if (value)
+                    params.set(paramName, value);
+                else
+                    params.remove(paramName);
+                search = params.encode()
             }
+            this.applySearch(search, paramName)
+        },
 
+        applySearch: function(search, paramName) {
             if (this.$element.closest(CLASS_BOTTOMSHEETS).length) {
                 $(CLASS_BOTTOMSHEETS).trigger(EVENT_FILTER_CHANGE, [search, paramName]);
             } else {
@@ -216,7 +228,7 @@
         var selector = '[data-toggle="qor.filter"]';
         var options = {
             label: 'a',
-            group: 'select'
+            group: 'select,input'
         };
 
         $(document)

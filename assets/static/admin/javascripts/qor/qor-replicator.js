@@ -37,7 +37,7 @@
 
         init: function() {
             let $element = this.$element,
-                $template = $element.find('> .qor-field__block > .qor-fieldset--new'),
+                $template = $element.find('> .qor-field__block > [type="qor-collection-edit-new/html"]'),
                 fieldsetName;
 
             this.isInSlideout = $element.closest('.qor-slideout').length;
@@ -45,12 +45,9 @@
             this.maxitems = $element.data('maxItem');
             this.isSortable = $element.hasClass('qor-fieldset-sortable');
 
-            if (!$template.length || $element.closest('.qor-fieldset--new').length) {
+            if (!$template.length) {
                 return;
             }
-
-            // Should destroy all components here
-            $template.trigger('disable');
 
             // if have isMultiple data value or template length large than 1
             this.isMultipleTemplate = $element.data('isMultiple');
@@ -63,18 +60,17 @@
                 $template.each((i, ele) => {
                     fieldsetName = $(ele).data('fieldsetName');
                     if (fieldsetName) {
-                        this.template[fieldsetName] = $(ele).prop('outerHTML');
+                        this.template[fieldsetName] = $(ele).html();
                         this.fieldsetName.push(fieldsetName);
                     }
                 });
 
                 this.parseMultiple();
             } else {
-                this.template = $template.prop('outerHTML');
-                this.parse();
+                this.template = $template.html();
+                this.index = $template.data("next-index");
             }
 
-            $template.hide();
             this.bind();
             this.resetButton();
             this.resetPositionButton();
@@ -93,7 +89,7 @@
         },
 
         getCurrentItems: function() {
-            return this.$element.find('> .qor-field__block > .qor-fieldset').not('.qor-fieldset--new,.is-deleted').length;
+            return this.$element.find('> .qor-field__block > .qor-fieldset').not('.is-deleted').length;
         },
 
         toggleButton: function(isHide) {
@@ -114,17 +110,6 @@
             }
         },
 
-        parse: function() {
-            let template;
-
-            if (!this.template) {
-                return;
-            }
-            template = this.initTemplate(this.template);
-            this.template = template.template;
-            this.index = template.index;
-        },
-
         parseMultiple: function() {
             let template,
                 name,
@@ -140,43 +125,10 @@
             this.multipleIndex = _.max(this.index);
         },
 
-        initTemplate: function(template) {
-            let i,
-                hasInlineReplicator = this.hasInlineReplicator;
-
-            template = template.replace(/(\w+)\="(\S*\[\d+\]\S*)"/g, function(attribute, name, value) {
-                value = value.replace(/^(\S*)\[(\d+)\]([^\[\]]*)$/, function(input, prefix, index, suffix) {
-                    if (input === value) {
-                        if (name === 'name' && !i) {
-                            i = index;
-                        }
-
-                        if (hasInlineReplicator && /\[\d+\]/.test(prefix)) {
-                            return input.replace(/\[\d+\]/, '[{{index}}]');
-                        } else {
-                            return prefix + '[{{index}}]' + suffix;
-                        }
-                    }
-                });
-
-                return name + '="' + value + '"';
-            });
-
-            return {
-                template: template,
-                index: parseFloat(i)
-            };
-        },
-
         bind: function() {
             let options = this.options;
 
             this.$element.on(EVENT_CLICK, options.addClass, $.proxy(this.add, this)).on(EVENT_CLICK, options.delClass, $.proxy(this.del, this));
-
-            !this.isInSlideout && $(document).on(EVENT_SUBMIT, 'form', this.removeData.bind(this));
-            $(document)
-                .on(EVENT_SLIDEOUTBEFORESEND, '.qor-slideout', this.removeData.bind(this))
-                .on(EVENT_SELECTCOREBEFORESEND, this.removeData.bind(this));
         },
 
         unbind: function() {
@@ -186,10 +138,6 @@
             $(document)
                 .off(EVENT_SLIDEOUTBEFORESEND, '.qor-slideout')
                 .off(EVENT_SELECTCOREBEFORESEND);
-        },
-
-        removeData: function() {
-            $('.qor-fieldset--new').remove();
         },
 
         add: function(e, data, isAutomatically) {
@@ -266,10 +214,11 @@
             let $item,
                 $element = this.$element;
 
-            $item = $(this.template.replace(/\{\{index\}\}/g, this.index));
+            $item = $(this.template.replace(/(="\S*)(\{\{index\}\})/g, (input, prefix) => prefix+this.index));
+
             // add order property for sortable fieldset
             if (this.isSortable) {
-                let order = $element.find('> .qor-field__block > .qor-sortable__item').not('.qor-fieldset--new').length;
+                let order = $element.find('> .qor-field__block > .qor-sortable__item').length;
                 $item.attr('order-index', order).css('order', order);
             }
 

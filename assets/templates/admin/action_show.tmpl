@@ -1,0 +1,12 @@
+{{$argument := .Result}}
+
+<div class="qor-page__body qor-page__edit">
+  {{render "shared/flashes"}}
+  {{render "shared/errors"}}
+
+  <div class="qor-form-container" data-toggle="qor-action-slideout">
+      {{if $argument.Action.Resource}}
+        {{render_form $argument.Argument (show_sections $argument.Action.Resource)}}
+      {{end}}
+  </div>
+</div>

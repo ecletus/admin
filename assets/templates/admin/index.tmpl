@@ -1,31 +1,33 @@
 {{define "new_buttom"}}
   {{if has_create_permission .Resource}}
-  {{$new_url := (new_resource_path .Resource)}}
-  <a class="mdl-button mdl-button--fab mdl-button--primary qor-button--new" href="{{$new_url}}" data-url="{{$new_url}}">
-      <i class="material-icons">add</i>
-  </a>
+    {{$new_url := (new_resource_path .Resource)}}
+    <a class="mdl-button mdl-button--fab mdl-button--primary qor-button--new" href="{{$new_url}}" data-submit-success-target="window" data-url="{{$new_url}}">
+        <i class="material-icons">add</i>
+    </a>
   {{end}}
 {{end}}
 
-<div class="qor-page__header">
-  {{$actions := load_actions "index" }}
-  {{if $actions}}{{$actions}}{{end}}
-</div>
-
 <div class="qor-page__body">
-  {{render "shared/flashes"}}
-  {{render "shared/errors"}}
+  {{include "shared/alerts"}}
+  {{include "shared/flashes"}}
+  {{include "shared/errors"}}
 
   {{if .Result}}
+    {{record_frame .Resource .Result "index/before"}}
+
     <div class="qor-table-container">
-      {{render "index/table"}}
+      {{record_frame .Resource .Result "index/table/before"}}
+      {{include "index/table"}}
+      {{record_frame .Resource .Result "index/table/after"}}
     </div>
 
     {{template "new_buttom" .}}
 
-    {{render "index/pagination"}}
+    {{include "index/pagination"}}
+
+    {{record_frame .Resource .Result "index/after"}}
   {{else}}
-    <div style="text-align: center">{{t "github_com:ecletus:admin:layouts.no_records_found" "No records found."}}</div>
+    <div class="center-text">{{t "github_com:ecletus:admin:layout.no_records_found" "No records found."}}</div>
     {{template "new_buttom" .}}
   {{end}}
 </div>

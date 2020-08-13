@@ -4,24 +4,16 @@ import (
 	"github.com/moisespsena-go/aorm"
 )
 
-func (res *Resource) configureAudited() {
-	if _, ok := res.Value.(aorm.Auditor); ok {
+func (this *Resource) configureAudited() {
+	if _, ok := this.Value.(aorm.Auditor); ok {
 		for _, fname := range aorm.AuditedFields {
-			if m := res.Meta(&Meta{Name: fname}); m.Enabled == nil {
-				res.Meta(&Meta{
-					Name: fname,
-					Type: "-",
-				})
-			}
+			this.Meta(&Meta{Name: fname, Label: "aorm.audited.fields." + fname, DefaultInvisible: true})
 		}
 	}
 
-	if res.softDelete {
+	if this.softDelete {
 		for _, fname := range aorm.SoftDeleteFields {
-			res.Meta(&Meta{
-				Name: fname,
-				Type: "-",
-			})
+			this.Meta(&Meta{Name: fname, Label: "aorm.soft_delete.fields." + fname, DefaultInvisible: true})
 		}
 	}
 }

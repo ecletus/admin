@@ -1,499 +1,241 @@
 package admin
 
 import (
-	"database/sql"
-	"fmt"
-	"net/url"
-	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
-	"mime/multipart"
-
-	"github.com/ecletus/core"
-	"github.com/ecletus/core/resource"
-	"github.com/ecletus/core/utils"
 	"github.com/moisespsena-go/aorm"
-	"gopkg.in/fatih/set.v0"
 )
 
-// PaginationPageCount default pagination page count
-var PaginationPageCount = 20
-
-type scopeFunc func(db *aorm.DB, context *core.Context) *aorm.DB
-
-// Pagination is used to hold pagination related information when rendering tables
-type Pagination struct {
-	Total       int
-	Pages       int
-	CurrentPage int
-	PerPage     int
-}
-
-type ImmutableScopes struct {
-	set set.Interface
-}
-
-func (is *ImmutableScopes) Has(names ...interface{}) bool {
-	return is.set != nil && is.set.Has(names...)
-}
-
-func (is *ImmutableScopes) List() (items []string) {
-	if is.set != nil {
-		for _, v := range is.set.List() {
-			items = append(items, v.(string))
-		}
-	}
-	return
-}
+type SearchHandler = func(searcher *Searcher, db *aorm.DB, keyword string) (_ *aorm.DB, err error)
 
 // Searcher is used to search results
 type Searcher struct {
 	*Context
 	scopes        []*Scope
-	filters       map[*Filter]*resource.MetaValues
+	filters       map[*Filter]*FilterArgument
 	Pagination    Pagination
 	CurrentScopes ImmutableScopes
-	Layout        string
+	Finder        *Finder
+	Orders        []interface{}
+	one           bool
 }
 
-func (s *Searcher) DefaulLayout(layout ...string) {
-	if s.Layout == "" {
-		if len(layout) == 0 || layout[0] == "" {
-			layout = []string{s.Type.Clear(DELETED).S()}
-		}
-		s.Layout = layout[0]
-	}
-}
-
-func (s *Searcher) Basic() *Searcher {
-	s.Layout = "basic"
-	return s
-}
-
-func (s *Searcher) Readonly() *Searcher {
-	s.Layout = "readonly"
-	return s
-}
-
-func (s *Searcher) ForUpdate() *Searcher {
-	s.Layout = ""
-	return s
-}
-
-func (s *Searcher) IsReadonly() bool {
-	return s.Layout == "readonly"
-}
-
-func (s *Searcher) clone() *Searcher {
-	return &(*s)
+func (this Searcher) clone() *Searcher {
+	this.Context = this.Context.Clone()
+	return &this
 }
 
 // Page set current page, if current page equal -1, then show all records
-func (s *Searcher) Page(num int) *Searcher {
-	s.Pagination.CurrentPage = num
-	return s
+func (this *Searcher) Page(num int) *Searcher {
+	this.Pagination.CurrentPage = num
+	return this
 }
 
 // PerPage set pre page count
-func (s *Searcher) PerPage(num int) *Searcher {
-	s.Pagination.PerPage = num
-	return s
+func (this *Searcher) PerPage(num int) *Searcher {
+	this.Pagination.PerPage = num
+	return this
 }
 
-// Scope filter with defined scopes
-func (s *Searcher) Scope(names ...string) *Searcher {
-	newSearcher := s.clone()
-	scopesSet := set.New(set.NonThreadSafe)
+func (this *Searcher) ParseContext(finder ...*Finder) (err error) {
+	this.Context.Context = this.Context.Context.Clone()
+	ctx := this.Context.Context
 
-	for _, name := range names {
-		for _, scope := range s.Scheme.scopes {
-			if scope.Name == name {
-				scopesSet.Add(name)
-
-				if !scope.Default {
-					newSearcher.scopes = append(newSearcher.scopes, scope)
-					break
-				}
-			}
-		}
+	for _, this.Finder = range finder {
+	}
+	if this.Finder == nil {
+		this.Finder = &Finder{}
 	}
 
-	newSearcher.CurrentScopes = ImmutableScopes{scopesSet}
-	return newSearcher
-}
-
-// Filter filter with defined filtersByName, filter with columns value
-func (s *Searcher) Filter(filter *Filter, values *resource.MetaValues) *Searcher {
-	newSearcher := s.clone()
-	if newSearcher.filters == nil {
-		newSearcher.filters = map[*Filter]*resource.MetaValues{}
-	}
-	newSearcher.filters[filter] = values
-	return newSearcher
-}
-
-// FindMany find many records based on current conditions
-func (s *Searcher) FindMany() (interface{}, error) {
-	context := s.parseContext()
-
-	if context.HasError() {
-		return nil, context.Errors
+	if this.Scheme == nil {
+		this.Scheme = this.Resource.Scheme
 	}
 
-	return s.Resource.CrudScheme(context, s.Scheme).FindManyLayoutOrDefault(s.Layout)
-}
-
-// FindOne find one record based on current conditions
-func (s *Searcher) FindOne() (interface{}, error) {
-	var (
-		err     error
-		context = s.parseContext()
-		result  = s.Resource.NewStruct(s.Site)
-	)
-
-	if context.HasError() {
-		return result, context.Errors
+	if len(this.Orders) == 0 {
+		this.Orders = this.Scheme.CurrentOrders()
 	}
 
-	err = s.Resource.CrudScheme(context, s.Scheme).SetLayoutOrDefault(s.Layout).FindOne(result)
-	return result, err
-}
-
-var filterRegexp = regexp.MustCompile(`^filtersByName\[(.*?)\]`)
-
-func (s *Searcher) callScopes(context *core.Context) *core.Context {
-	db := context.DB
-
-	// call default scopes
-	for _, scope := range s.Resource.scopes {
-		if scope.Default {
-			db = scope.Handler(db, s, context)
-		}
+	if ctx, err = this.Scheme.ApplyDefaultFilters(ctx); err != nil {
+		return
 	}
 
-	// call scopes
-	for _, scope := range s.scopes {
-		db = scope.Handler(db, s, context)
-	}
-
-	// call filtersByName
-	if s.filters != nil {
-		for filter, value := range s.filters {
-			if filter.Handler != nil {
-				filterArgument := &FilterArgument{
-					Filter:   filter,
-					Scheme:   s.Scheme,
-					Value:    value,
-					Context:  context,
-					Resource: s.Resource,
-				}
-				db = filter.Handler(db, filterArgument)
-			}
-		}
-	}
-
-	// add order by
-	if orderBy := context.GetFormOrQuery("order_by"); orderBy != "" {
-		if regexp.MustCompile("^[a-zA-Z_]+$").MatchString(orderBy) {
-			if field, ok := db.NewScope(s.Context.Resource.Value).FieldByName(strings.TrimSuffix(orderBy, "_desc")); ok {
-				if strings.HasSuffix(orderBy, "_desc") {
-					db = db.Order(field.DBName+" DESC", true)
-				} else {
-					db = db.Order(field.DBName, true)
-				}
-			}
-		}
-	}
-
-	context.DB = db
-
-	// call search
-	if keyword := context.GetFormOrQuery("keyword"); keyword != "" {
-		if sh := s.Scheme.CurrentSearchHandler(); sh != nil {
-			context.DB = sh(keyword, context)
-		}
-	}
-
-	return context
-}
-
-func (s *Searcher) FilterRaw(data map[string]string) *Searcher {
-	params := url.Values{}
-	for key, value := range data {
-		params.Add("filtersByName["+key+"].Value", value)
-	}
-
-	return s.FilterFromParams(params, nil)
-}
-
-func (s *Searcher) FilterFromParams(params url.Values, form *multipart.Form) *Searcher {
-	searcher := s
-
-	for key := range params {
-		if matches := filterRegexp.FindStringSubmatch(key); len(matches) > 0 {
-			var prefix = fmt.Sprintf("filtersByName[%v].", matches[1])
-			if filter, ok := s.Scheme.filtersByName[matches[1]]; ok {
-				if metaValues, err := resource.ConvertFormDataToMetaValues(s.Context.Context, params, form, []resource.Metaor{}, prefix); err == nil {
-					searcher = searcher.Filter(filter, metaValues)
-				}
-			}
-		}
-	}
-
-	return searcher
-}
-
-func (s *Searcher) FilterRawPairs(args ...string) *Searcher {
-	data := make(map[string]string)
-	l := len(args)
-	for i := 0; i < l; i += 2 {
-		data[args[i]] = args[i+1]
-	}
-	return s.FilterRaw(data)
-}
-
-func (s *Searcher) parseContext() *core.Context {
-	var (
-		searcher = s.clone()
-		context  = s.Context.Context.Clone()
-	)
-
-	if s.Scheme == nil {
-		s.Scheme = s.Resource.Scheme
-	}
-
-	context.SetDB(context.DB.Order(s.Scheme.CurrentOrders()))
-	context = s.Scheme.ApplyDefaultFilters(context)
-
-	if context != nil && context.Request != nil {
-		var query = context.Request.URL.Query()
+	if ctx != nil && ctx.ResourceID == nil && ctx.Request != nil {
+		var query = ctx.Request.URL.Query()
 		// parse scopes
-		if scopes, ok := query["scopes"]; ok {
-			searcher = searcher.Scope(scopes...)
+		if scopes, ok := query["scopes[]"]; ok {
+			this.Scope(scopes...)
 		}
-		searcher = searcher.FilterFromParams(query, context.Request.MultipartForm)
+		this.FilterFromParams(query, ctx.Request.MultipartForm)
+		this.DefaultFilters()
 
 		if savingName := query.Get("filter_saving_name"); savingName != "" {
 			var filters []SavedFilter
-			requestURL := context.Request.URL
-			requestURLQuery := context.Request.URL.Query()
+			requestURL := ctx.Request.URL
+			requestURLQuery := ctx.Request.URL.Query()
 			requestURLQuery.Del("filter_saving_name")
 			requestURL.RawQuery = requestURLQuery.Encode()
 			newFilters := []SavedFilter{{Name: savingName, URL: requestURL.String()}}
-			if context.AddError(s.Admin.settings.Get("saved_filters", &filters, searcher.Context)); !context.HasError() {
+			if ctx.AddError(this.Admin.settings.Get("saved_filters", &filters, this.Context)); !ctx.HasError() {
 				for _, filter := range filters {
 					if filter.Name != savingName {
 						newFilters = append(newFilters, filter)
 					}
 				}
 
-				context.AddError(s.Admin.settings.Save("saved_filters", newFilters, searcher.Resource, context.CurrentUser(), searcher.Context))
+				if err = this.Admin.settings.Save("saved_filters", newFilters, this.Resource, ctx.CurrentUser(), this.Context); err != nil {
+					return
+				}
 			}
 		}
 
 		if savingName := query.Get("delete_saved_filter"); savingName != "" {
 			var filters, newFilters []SavedFilter
-			if context.AddError(s.Admin.settings.Get("saved_filters", &filters, searcher.Context)); !context.HasError() {
+			if ctx.AddError(this.Admin.settings.Get("saved_filters", &filters, this.Context)); !ctx.HasError() {
 				for _, filter := range filters {
 					if filter.Name != savingName {
 						newFilters = append(newFilters, filter)
 					}
 				}
 
-				context.AddError(s.Admin.settings.Save("saved_filters", newFilters, searcher.Resource, context.CurrentUser(), searcher.Context))
+				if err = this.Admin.settings.Save("saved_filters", newFilters, this.Resource, ctx.CurrentUser(), this.Context); err != nil {
+					return
+				}
 			}
 		}
 	}
 
-	s.Scheme.PrepareContext(context)
-	searcher.callScopes(context)
+	var db = ctx.DB()
 
-	db := context.DB
+	if this.Resource.IsSingleton() || ctx.ResourceID != nil || this.one {
+		db = db.Limit(1)
+	} else {
+		if db, err = this.callScopes(db, ctx); err != nil {
+			return
+		}
 
-	// pagination
-	context.DB = db.Model(s.Resource.Value).Set("qor:getting_total_count", true)
-	if err := s.Resource.CrudScheme(context, s.Scheme).SetLayoutOrDefault(s.Layout).FindMany(&s.Pagination.Total); err != nil {
-		context.AddError(err)
-		return context
-	}
-
-	if s.Pagination.CurrentPage == 0 {
-		if s.Context.Request != nil {
-			if page, err := strconv.Atoi(s.Context.Request.URL.Query().Get("page")); err == nil {
-				s.Pagination.CurrentPage = page
+		// call search
+		if keyword := ctx.GetFormOrQuery("keyword"); keyword != "" {
+			if sh := this.Scheme.CurrentSearchHandler(); sh != nil {
+				if db, err = sh(this, db, keyword); err != nil {
+					return
+				}
 			}
 		}
 
-		if s.Pagination.CurrentPage == 0 {
-			s.Pagination.CurrentPage = 1
-		}
-	}
+		if !this.Finder.Unlimited {
+			// pagination
+			this.Pagination.UnlimitedEnabled = this.Resource.Config.UnlimitedPageCount
+			ctx.SetRawDB(db.Model(this.Resource.Value))
 
-	if s.Pagination.PerPage == 0 {
-		if perPage, err := strconv.Atoi(s.Context.Request.URL.Query().Get("per_page")); err == nil {
-			s.Pagination.PerPage = perPage
-		} else if s.Resource.Config.PageCount > 0 {
-			s.Pagination.PerPage = s.Resource.Config.PageCount
-		} else {
-			s.Pagination.PerPage = PaginationPageCount
-		}
-	}
+			if this.Finder.Count == nil {
+				if err = this.Resource.CrudScheme(ctx, this.Scheme).Count(&this.Pagination.Total); err != nil {
+					return
+				}
+			} else {
+				if this.Pagination.Total, err = this.Finder.Count(this); err != nil {
+					return err
+				}
+			}
 
-	if s.Pagination.CurrentPage > 0 {
-		s.Pagination.Pages = (s.Pagination.Total-1)/s.Pagination.PerPage + 1
+			if this.Pagination.CurrentPage == 0 {
+				if this.Context.Request != nil {
+					if page, err := strconv.Atoi(this.Context.Request.URL.Query().Get("page")); err == nil {
+						this.Pagination.CurrentPage = page
+					}
+				}
 
-		db = db.Limit(s.Pagination.PerPage).Offset((s.Pagination.CurrentPage - 1) * s.Pagination.PerPage)
-	}
+				if this.Pagination.CurrentPage == 0 {
+					this.Pagination.CurrentPage = 1
+				}
+			}
 
-	context.DB = db
+			if this.Pagination.PerPage == 0 {
+				if perPage, err := strconv.Atoi(this.Context.Request.URL.Query().Get("per_page")); err == nil {
+					this.Pagination.PerPage = perPage
+				} else if this.Resource.Config.PageCount > 0 {
+					this.Pagination.PerPage = this.Resource.Config.PageCount
+				} else {
+					this.Pagination.PerPage = PaginationPageCount
+				}
+			}
 
-	return context
-}
+			if this.Pagination.PerPage < 0 {
+				if this.Pagination.UnlimitedEnabled {
+					this.Pagination.PerPage = -1
+				} else if this.Resource.Config.PageCount > 0 {
+					this.Pagination.PerPage = this.Resource.Config.PageCount
+				} else {
+					this.Pagination.PerPage = PaginationPageCount
+				}
+			}
 
-type filterField struct {
-	Field     *FieldFilter
-	Operation string
-	Typ       reflect.Type
-}
+			if this.Pagination.CurrentPage > 0 {
+				this.Pagination.Pages = (this.Pagination.Total-1)/this.Pagination.PerPage + 1
+				if this.Finder.Limit == nil {
+					db = db.Limit(this.Pagination.PerPage).Offset((this.Pagination.CurrentPage - 1) * this.Pagination.PerPage)
+				} else {
+					db = this.Finder.Limit(this)
+				}
+			}
 
-func (f filterField) Apply(arg interface{}) (query string, argx interface{}) {
-	op := f.Operation
-	fieldName := f.Field.QueryField()
+			// exclude
+			if exclude := ctx.Request.URL.Query()["exclude"]; len(exclude) > 0 {
+				var ids []aorm.ID
 
-	var cb = func() string {
-		return fieldName + " " + op + " ?"
-	}
+				for _, exclude := range exclude {
+					if exclude == "" {
+						continue
+					}
+					for _, value := range strings.Split(exclude, ":") {
+						if id, err := this.Resource.ParseID(value); err != nil {
+							ctx.AddError(err)
+						} else {
+							ids = append(ids, id)
+						}
+					}
+				}
 
-	if f.Field.Struct.Struct.Type.Kind() == reflect.String {
-		cb = func() string {
-			return "UPPER(" + fieldName + ") " + op + " UPPER(?)"
-		}
-	} else if op == "" {
-		op = "eq"
-	}
-	switch op {
-	case "eq", "equal":
-		op = "="
-	case "ne":
-		op = "!="
-	case "btw":
-		op = "BETWEEN"
-		cb = func() string {
-			return fieldName + " BETWEEN ? AND ?"
-		}
-	case "gt":
-		op = ">"
-	case "lt":
-		op = "<"
-	default:
-		if f.Field.Struct.Struct.Type.Kind() == reflect.String {
-			op = "LIKE"
-			arg = "%" + arg.(string) + "%"
-		}
-	}
-	return cb(), f.Field.FormatTerm(arg)
-}
-
-func filterResourceByFields(res *Resource, filterFields []filterField, keyword string, db *aorm.DB, context *core.Context) *aorm.DB {
-	var (
-		joinConditionsMap  = map[string][]string{}
-		conditions         []string
-		keywords           []interface{}
-		generateConditions func(field filterField, scope *aorm.Scope)
-	)
-
-	generateConditions = func(filterfield filterField, scope *aorm.Scope) {
-		field := filterfield.Field.Struct
-
-		apply := func(kw interface{}) {
-			query, arg := filterfield.Apply(kw)
-			conditions = append(conditions, query)
-			keywords = append(keywords, arg)
-		}
-
-		appendString := func() {
-			apply(keyword)
-		}
-
-		appendInteger := func() {
-			if _, err := strconv.Atoi(keyword); err == nil {
-				apply(keyword)
+				ctx.ExcludeResourceID = ids
 			}
 		}
 
-		appendFloat := func() {
-			if _, err := strconv.ParseFloat(keyword, 64); err == nil {
-				apply(keyword)
+		// add order by
+		if orderBy := ctx.GetFormOrQuery("order_by"); orderBy != "" {
+			if match := reOrderBy.FindAllStringSubmatch(orderBy, -1); len(match) > 0 {
+				fieldPath, order := match[0][1], match[0][4]
+				if fpq := this.Context.Resource.ModelStruct.FieldPathQueryOf(fieldPath); fpq != nil {
+					if order == "desc" {
+						fpq.Sufix(" DESC")
+					}
+					this.Orders = []interface{}{fpq}
+				}
 			}
 		}
 
-		appendBool := func() {
-			if value, err := strconv.ParseBool(keyword); err == nil {
-				apply(value)
+		if len(this.Orders) > 0 {
+			db = db.Order(this.Orders, true)
+		}
+	}
+
+	ctx.SetRawDB(db)
+	this.Scheme.PrepareContext(ctx)
+
+	if this.Finder.FindMany == nil {
+		this.Finder.FindMany = func(s *Searcher) (interface{}, error) {
+			return s.Resource.CrudScheme(s.Context.Context, s.Scheme).FindManyLayoutOrDefault(s.Layout)
+		}
+	}
+
+	if this.Finder.FindOne == nil {
+		this.Finder.FindOne = func(s *Searcher) (interface{}, error) {
+			result := s.Resource.NewStruct(s.Site)
+			if err := s.Resource.CrudScheme(s.Context.Context, s.Scheme).SetLayoutOrDefault(s.Layout).FindOne(result); err != nil {
+				return nil, err
 			}
-		}
-
-		appendTime := func() {
-			if parsedTime, err := utils.ParseTime(keyword, context); err == nil {
-				apply(parsedTime)
-			}
-		}
-
-		appendStruct := func() {
-			v := reflect.New(field.Struct.Type).Elem()
-			switch v.Interface().(type) {
-			case time.Time, *time.Time:
-				appendTime()
-			case sql.NullInt64:
-				appendInteger()
-			case sql.NullFloat64:
-				appendFloat()
-			case sql.NullString:
-				appendString()
-			case sql.NullBool:
-				appendBool()
-			default:
-				// if we don't recognize the struct type, just ignore it
-			}
-		}
-
-		switch field.Struct.Type.Kind() {
-		case reflect.String:
-			appendString()
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			appendInteger()
-		case reflect.Float32, reflect.Float64:
-			appendFloat()
-		case reflect.Bool:
-			appendBool()
-		case reflect.Struct, reflect.Ptr:
-			appendStruct()
-		default:
-			apply(keyword)
+			return result, nil
 		}
 	}
 
-	scope := db.NewScope(res.Value)
-	for _, field := range filterFields {
-		generateConditions(field, scope)
-	}
-
-	// join conditions
-	if len(joinConditionsMap) > 0 {
-		var joinConditions []string
-		for key, values := range joinConditionsMap {
-			joinConditions = append(joinConditions, fmt.Sprintf("%v %v", key, strings.Join(values, " AND ")))
-		}
-		db = db.Joins(strings.Join(joinConditions, " "))
-	}
-
-	// search conditions
-	if len(conditions) > 0 {
-		return db.Where(aorm.IQ(strings.Join(conditions, " OR ")), keywords...)
-	}
-
-	return db
+	return
 }

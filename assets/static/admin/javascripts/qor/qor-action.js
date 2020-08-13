@@ -11,18 +11,30 @@
     }
 })(function($) {
     'use strict';
+
+    $.extend({}, QOR.messages, {
+        action: {
+            bulk: {
+                pleaseSelectAnItem: "You must select at least one item."
+            },
+            form: {
+                areYouSure: "This action may not be undone. Are you sure you want to run anyway?"
+            }
+        }
+    }, true);
+
     let Mustache = window.Mustache,
         NAMESPACE = 'qor.action',
         EVENT_ENABLE = 'enable.' + NAMESPACE,
         EVENT_DISABLE = 'disable.' + NAMESPACE,
         EVENT_CLICK = 'click.' + NAMESPACE,
         EVENT_UNDO = 'undo.' + NAMESPACE,
-        ACTION_FORMS = '.qor-action-forms',
+        ACTION_FORMS = '.qor-actions-bulk',
         ACTION_HEADER = '.qor-page__header',
         ACTION_BODY = '.qor-page__body',
         ACTION_BUTTON = '.qor-action-button',
         MDL_BODY = '.mdl-layout__content',
-        ACTION_SELECTORS = '.qor-actions',
+        ACTION_SELECTORS = '.qor-actions-default',
         ACTION_LINK = 'a.qor-action--button',
         MENU_ACTIONS = '.qor-table__actions a[data-url],[data-url][data-method=POST],[data-url][data-method=PUT],[data-url][data-method=DELETE]',
         BUTTON_BULKS = '.qor-action-bulk-buttons',
@@ -30,6 +42,7 @@
         QOR_TABLE_BULK = '.qor-table--bulking',
         QOR_SEARCH = '.qor-search-container',
         CLASS_IS_UNDO = 'is_undo',
+        CLASS_BULK_EXIT = '.qor-action--exit-bulk',
         QOR_SLIDEOUT = '.qor-slideout',
         ACTION_FORM_DATA = 'primary_values[]';
 
@@ -51,6 +64,7 @@
 
         bind: function() {
             this.$element.on(EVENT_CLICK, $.proxy(this.click, this));
+            this.$wrap.find(CLASS_BULK_EXIT).on(EVENT_CLICK, $.proxy(this.click, this));
             $(document)
                 .on(EVENT_CLICK, '.qor-table--bulking tr', this.click)
                 .on(EVENT_CLICK, ACTION_LINK, this.actionLink);
@@ -115,6 +129,10 @@
             let $target = $($action);
             this.$actionButton = $target;
             if ($target.data().method) {
+                if ($target.data().ajaxForm) {
+                    this.collectFormData();
+                    this.ajaxForm.properties = $target.data();
+                }
                 this.submit();
                 return false;
             }
@@ -137,9 +155,6 @@
 
             if ($target.is('.qor-action--bulk')) {
                 this.$wrap.removeClass('hidden');
-                $(BUTTON_BULKS)
-                    .find('button')
-                    .toggleClass('hidden');
                 $('.qor-table__inner-list').remove();
                 this.appendTableCheckbox();
                 $(QOR_TABLE).addClass('qor-table--bulking');
@@ -154,11 +169,8 @@
                 }
             }
 
-            if ($target.is('.qor-action--exit-bulk')) {
+            if ($target.is(CLASS_BULK_EXIT)) {
                 this.$wrap.addClass('hidden');
-                $(BUTTON_BULKS)
-                    .find('button')
-                    .toggleClass('hidden');
                 this.removeTableCheckbox();
                 $(QOR_TABLE).removeClass('qor-table--bulking');
                 $(ACTION_HEADER)
@@ -228,19 +240,58 @@
                 undoUrl = properties.undoUrl,
                 isUndo = $actionButton.hasClass(CLASS_IS_UNDO),
                 isInSlideout = $actionButton.closest(QOR_SLIDEOUT).length,
-                needDisableButtons = $element && !isInSlideout;
+                isOne = properties.one,
+                needDisableButtons = $element && !isInSlideout,
+                headers = {};
 
-            if (properties.fromIndex && (!ajaxForm.formData || !ajaxForm.formData.length)) {
-                window.alert(ajaxForm.properties.errorNoItem);
+            if (properties.disableSuccessRedirection) {
+                headers['X-Disabled-Success-Redirection'] = 'true';
+            }
+
+            if (!properties.optional && (properties.fromIndex && (!ajaxForm.formData || !ajaxForm.formData.length))) {
+                QOR.alert(QOR.messages.action.bulk.pleaseSelectAnItem);
                 return;
             }
 
+            if (properties.passCurrentQuery) {
+                if (location.search.length) {
+                    url += url.indexOf('?') !== -1 ? '&' : '?'
+                    url += location.search.substring(1)
+                }
+            }
+
             if (properties.confirm && properties.ajaxForm && !properties.fromIndex) {
-                window.QOR.qorConfirm(properties, function(confirm) {
+                QOR.qorConfirm(properties, function(confirm) {
                     if (confirm) {
-                        $.post(properties.url, {_method: properties.method}, function() {
+                        let success = function(data, status, response) {
+                            // TODO: self reload if in resource object page (check slideout)
+
+                            let xLocation = response.getResponseHeader('X-Location');
+
+                            if (xLocation) {
+                                window.location.href = xLocation;
+                                return
+                            }
+
+                            let refreshUrl = properties.refreshUrl;
+
+                            if (refreshUrl) {
+                                window.location.href = refreshUrl;
+                                return;
+                            }
+
+                            if (isOne) {
+                                $actionButton.remove();
+                            }
                             window.location.reload();
-                        });
+                        };
+                        $.ajax(url, {
+                            method: "POST",
+                            data: {_method: properties.method},
+                            // TODO: process JSON data type {message?}
+                            //dataType: properties.datatype,
+                            headers: headers,
+                            success:success})
                     } else {
                         return;
                     }
@@ -250,10 +301,24 @@
                     url = properties.undoUrl;
                 }
 
+                if (properties.targetWindow) {
+                    let formS = '<form action="'+url+'" method="POST" target="_blank">';
+                    this.ajaxForm.formData.forEach(function(el) {
+                        formS += '<input type="hidden" name="'+el.name+'" value="'+el.value+'">'
+                    })
+                    formS += "</form>";
+                    let $form = $(formS);
+                    $('body').append($form);
+                    $form.submit();
+                    $form.remove();
+                    return;
+                }
+
                 $.ajax(url, {
                     method: properties.method,
                     data: ajaxForm.formData,
                     dataType: properties.datatype,
+                    headers: headers,
                     beforeSend: function() {
                         if (undoUrl) {
                             $actionButton.prop('disabled', true);
@@ -262,6 +327,20 @@
                         }
                     },
                     success: function(data, status, response) {
+                        let xLocation = response.getResponseHeader('X-Location');
+
+                        if (xLocation) {
+                            window.location.href = xLocation;
+                            return
+                        }
+
+                        let refreshUrl = properties.refreshUrl;
+
+                        if (refreshUrl) {
+                            window.location.href = refreshUrl;
+                            return;
+                        }
+
                         let contentType = response.getResponseHeader('content-type'),
                             // handle file download from form submit
                             disposition = response.getResponseHeader('Content-Disposition');
@@ -318,7 +397,7 @@
                         } else if (needDisableButtons) {
                             _this.switchButtons($element);
                         }
-                        window.alert([textStatus, errorThrown].join(': '));
+                        QOR.alert([textStatus, errorThrown].join(': '));
                     }
                 });
             }

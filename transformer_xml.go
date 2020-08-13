@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ecletus/core"
 	"github.com/ecletus/core/utils"
 	"github.com/ecletus/roles"
 	"github.com/jinzhu/inflection"
@@ -150,7 +149,7 @@ var XMLMarshalDefaultHandler = func(xmlStruct XMLStruct, e *xml.Encoder, start x
 			}
 
 			for _, meta := range metas {
-				if core.HasPermission(meta, roles.Read, context.Context) {
+				if context.HasPermission(meta, roles.Read) {
 					metaStart := xml.StartElement{
 						Name: xml.Name{
 							Space: "",

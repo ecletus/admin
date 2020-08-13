@@ -3,12 +3,12 @@ package admin
 import "fmt"
 
 // UseTheme use them for resource, will auto load the theme's javascripts, stylesheets for this resource
-func (res *Resource) UseDisplay(display interface{}) {
+func (this *Resource) UseDisplay(display interface{}) {
 	var displayInterface DisplayInterface
 	if ti, ok := display.(DisplayInterface); ok {
 		displayInterface = ti
 	} else if str, ok := display.(string); ok {
-		if res.GetDisplay(str) != nil {
+		if this.GetDisplay(str) != nil {
 			return
 		}
 
@@ -16,31 +16,31 @@ func (res *Resource) UseDisplay(display interface{}) {
 	}
 
 	if displayInterface != nil {
-		if res.Config.Displays == nil {
-			res.Config.Displays = make(map[string]DisplayInterface)
+		if this.Config.Displays == nil {
+			this.Config.Displays = make(map[string]DisplayInterface)
 		}
-		res.Config.Displays[displayInterface.GetName()] = displayInterface
-		displayInterface.ConfigAdminTheme(res)
+		this.Config.Displays[displayInterface.GetName()] = displayInterface
+		displayInterface.ConfigAdminTheme(this)
 	}
 }
 
-func (res *Resource) GetDefaultDisplayName() string {
-	if res.defaultDisplayName == "" {
+func (this *Resource) GetDefaultDisplayName() string {
+	if this.defaultDisplayName == "" {
 		return "default"
 	}
-	return res.defaultDisplayName
+	return this.defaultDisplayName
 }
 
-func (res *Resource) SetDefaultDisplay(displayName string) {
-	display := res.GetDisplay(displayName)
+func (this *Resource) SetDefaultDisplay(displayName string) {
+	display := this.GetDisplay(displayName)
 	if display == nil {
 		panic(fmt.Errorf("Display %q does not exists.", displayName))
 	}
-	res.defaultDisplayName = displayName
+	this.defaultDisplayName = displayName
 }
 
-func (res *Resource) GetDefaultDisplay() DisplayInterface {
-	display := res.GetDisplay(res.GetDefaultDisplayName())
+func (this *Resource) GetDefaultDisplay() DisplayInterface {
+	display := this.GetDisplay(this.GetDefaultDisplayName())
 	if display == nil {
 		return DefaultDisplay
 	}
@@ -48,9 +48,9 @@ func (res *Resource) GetDefaultDisplay() DisplayInterface {
 }
 
 // GetDisplay get registered theme with name
-func (res *Resource) GetDisplay(name string) DisplayInterface {
-	if res.Config.Displays != nil {
-		if d, ok := res.Config.Displays[name]; ok {
+func (this *Resource) GetDisplay(name string) DisplayInterface {
+	if this.Config.Displays != nil {
+		if d, ok := this.Config.Displays[name]; ok {
 			return d
 		}
 	}

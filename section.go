@@ -3,8 +3,6 @@ package admin
 import (
 	"fmt"
 	"strings"
-
-	"github.com/ecletus/core/utils"
 )
 
 // Section is used to structure forms, it could group your fields into sections, to make your form clean & tidy
@@ -24,9 +22,11 @@ import (
 //      "ColorVariations",
 //    }
 type Section struct {
-	Resource *Resource
-	Title    string
-	Rows     [][]string
+	Resource     *Resource
+	Title        string
+	Help         string
+	ReadOnlyHelp string
+	Rows         [][]string
 }
 
 type Sections []*Section
@@ -45,7 +45,7 @@ func (section *Section) String() string {
 }
 
 func (section *Section) AddPrefix(prefix string) *Section {
-	s := &Section{section.Resource, section.Title, make([][]string, len(section.Rows))}
+	s := &Section{Resource: section.Resource, Title: section.Title, Rows: make([][]string, len(section.Rows))}
 	for i, columns := range section.Rows {
 		s.Rows[i] = make([]string, len(columns))
 		for j, v := range columns {
@@ -100,7 +100,7 @@ func containsPositiveValue(values ...interface{}) bool {
 				return true
 			}
 		} else {
-			utils.ExitWithMsg(fmt.Sprintf("Qor Resource: attributes should be Section or String, but it is %+v", value))
+			panic(fmt.Errorf("Resource: attributes should be Section or String, but it is %+v", value))
 		}
 	}
 	return false

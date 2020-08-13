@@ -1,10 +1,14 @@
 {{$meta := .Meta}}
-{{$values := (raw_value_of .ResourceValue .Meta)}}
-{{range $index, $value := $values}}
-  {{$url := url_for $value}}
-  {{if (and $url (defined_resource_show_page $meta.Resource))}}
-    <a data-url="{{$url}}" href="{{$url}}">{{stringify $value}}</a>
-  {{else}}
-    {{stringify $value}}
-  {{end}}
+{{$values := (.Meta.Config.CurrentValues .Context .Record .Meta)}}
+{{range $values}}
+  {{- if (defined_resource_show_page $meta.Resource) -}}
+    {{$url := ($meta.URLFor (admin_context) .)}}
+    {{if $url}}
+      <a data-url="{{$url}}" href="{{$url}}">{{stringify .}}</a>
+    {{else}}
+      {{stringify .}}
+    {{end}}
+  {{- else}}
+    {{stringify .}}
+  {{- end}},
 {{end}}

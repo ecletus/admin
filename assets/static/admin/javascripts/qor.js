@@ -1,159 +1,141 @@
-// init for slideout after show event
-$.fn.qorSliderAfterShow = $.fn.qorSliderAfterShow || {};
-window.QOR = {
-    Xurl: function (url, $this) {
-        let $form = $this.parents('form'),
-            names = $this.attr('name').split('.').slice(0, -1),
-            depGet = function (name) {
-                let l = names.length,
-                    discovery = name[0] === '*',
-                    field,
-                    value;
-                if (discovery) {
-                    let tmpName;
-                    name = name.substring(1);
-                    do {
-                        tmpName = l > 0 ? names.slice(0, l) + '.' + name : name;
-                        field = $form.find(`[name='${tmpName}']`);
-                        l--;
-                    } while(l >= 0 && field.length === 0);
+(function (factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function ($) {
+    'use strict';
+    // init for slideout after show event
+    $.fn.qorSliderAfterShow = $.fn.qorSliderAfterShow || {};
 
-                    if (field.length === 0) {
-                        if (name !== 'ID' || !$form.data('id')) {
-                            value = '';
-                        } else {
-                            value = $form.data('id');
-                        }
-                    } else {
-                        value = field.val();
-                    }
-                } else {
-                    while (name !== "" && name[0] === '.') {
-                        l--;
-                        name = name.substring(1);
-                    }
-                    name = names.slice(0, l).join('.') + '.' + name;
-                    field = $form.find(`[name='${name}']`);
-                    if (field.length === 0) {
-                        return [null, false]
-                    }
-                    value = field.val();
-                }
-                return [value, true]
-            };
+    // change Mustache tags from {{}} to [[]]
+    window.Mustache && (window.Mustache.tags = ['[[', ']]']);
 
-        return new Xurl(url, depGet);
-    },
-
-    submitContinueEditing: function (e) {
-        let $form = $(e).parents('form'),
-            action = $form.attr('action') || window.location.href;
-        if (!/(\?|&)continue_editing=/.test(action)) {
-            let param = 'continue_editing=true';
-            if (action.indexOf('?') === -1) {
-                action += '?' + param
-            } else if (action[action.length-1] !== '?') {
-                action += '&' + param
-            } else {
-                action += param
+    // clear close alert after ajax complete
+    $(document).ajaxComplete(function (event, xhr, settings) {
+        if (settings.type === "POST" || settings.type === "PUT") {
+            if ($.fn.qorSlideoutBeforeHide) {
+                $.fn.qorSlideoutBeforeHide = null;
+                window.onbeforeunload = null;
             }
         }
-        $form.attr('action', action);
-        $form.submit();
-        return false;
-    }
-};
+    });
 
-// change Mustache tags from {{}} to [[]]
-window.Mustache && (window.Mustache.tags = ['[[', ']]']);
+    // select2 ajax common options
+    $.fn.select2 = $.fn.select2 || function () {};
+    $.fn.select2.ajaxCommonOptions = function (select2Data) {
+        let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey,
+            remoteDataDisplayKey = select2Data.remoteDataDisplayKey,
+            remoteDataIconKey = select2Data.remoteDataIconKey,
+            remoteDataCache = !(select2Data.remoteDataCache === 'false');
 
-// clear close alert after ajax complete
-$(document).ajaxComplete(function(event, xhr, settings) {
-    if (settings.type === "POST" || settings.type === "PUT") {
-        if ($.fn.qorSlideoutBeforeHide) {
-            $.fn.qorSlideoutBeforeHide = null;
-            window.onbeforeunload = null;
-        }
-    }
-});
+        return {
+            dataType: 'json',
+            cache: remoteDataCache,
+            delay: 250,
+            data: function (params) {
+                return {
+                    keyword: params.term || '', // search term
+                    page: params.page,
+                    per_page: 20
+                };
+            },
+            processResults: function (data, params) {
+                // parse the results into the format expected by Select2
+                // since we are using custom formatting functions we do not need to
+                // alter the remote JSON data, except to indicate that infinite
+                // scrolling can be used
+                params.page = params.page || 1;
 
-$(function () {
-    let $header = $('.qor-page__header');
-    if ($header.css('position') === 'fixed') {
-        $('.qor-page__body').css({marginTop:$header.height(), paddingTop:0});
-    }
-});
-
-// select2 ajax common options
-$.fn.select2 = $.fn.select2 || function(){};
-$.fn.select2.ajaxCommonOptions = function(select2Data) {
-    let remoteDataPrimaryKey = select2Data.remoteDataPrimaryKey,
-        remoteDataDisplayKey = select2Data.remoteDataDisplayKey,
-        remoteDataIconKey = select2Data.remoteDataIconKey,
-        remoteDataCache = !(select2Data.remoteDataCache === 'false');
-
-    return {
-        dataType: 'json',
-        cache: remoteDataCache,
-        delay: 250,
-        data: function(params) {
-            return {
-                keyword: params.term || '', // search term
-                page: params.page,
-                per_page: 20
-            };
-        },
-        processResults: function(data, params) {
-            // parse the results into the format expected by Select2
-            // since we are using custom formatting functions we do not need to
-            // alter the remote JSON data, except to indicate that infinite
-            // scrolling can be used
-            params.page = params.page || 1;
-
-            var processedData = $.map(data, function(obj) {
-                obj.id = obj[remoteDataPrimaryKey] || obj.primaryKey || obj.Id || obj.ID;
-                if (remoteDataDisplayKey) {
-                    obj.text = obj[remoteDataDisplayKey];
-                }
-                if (remoteDataIconKey) {
-                    obj.icon = obj[remoteDataIconKey];
-                    if (obj.icon && /\.svg/.test(obj.icon)) {
-                        obj.iconSVG = true;
+                var processedData = $.map(data, function (obj) {
+                    obj.id = obj[remoteDataPrimaryKey] || obj.primaryKey || obj.Id || obj.ID;
+                    if (!obj.text) {
+                        if (remoteDataDisplayKey) {
+                            obj.text = obj[remoteDataDisplayKey];
+                        } else if (!(obj.text = obj.text = obj.value || obj.Label || obj.Value)) {
+                            let parts = [];
+                            for (let key in obj) {
+                                if (key.toLowerCase() !== "id" && obj[key]) {
+                                    parts[parts.length] = obj[key]
+                                }
+                            }
+                            obj.text = parts.join(" ");
+                        }
                     }
-                }
-                return obj;
-            });
+                    if (remoteDataIconKey) {
+                        obj.icon = obj[remoteDataIconKey];
+                        if (obj.icon && /\.svg/.test(obj.icon)) {
+                            obj.iconSVG = true;
+                        }
+                    }
+                    return obj;
+                });
 
-            return {
-                results: processedData,
-                pagination: {
-                    more: processedData.length >= 20
-                }
-            };
-        }
+                return {
+                    results: processedData,
+                    pagination: {
+                        more: processedData.length >= 20
+                    }
+                };
+            }
+        };
+
     };
 
-};
+    // select2 ajax common options
+    // format ajax template data
+    $.fn.select2.ajaxFormatResult = function (data, tmpl) {
+        var result = "";
+        if (tmpl.length > 0) {
+            result = window.Mustache.render(tmpl.html().replace(/{{(.*?)}}/g, '[[$1]]'), data);
+        } else {
+            result = data.text || data.html || data.Name || data.Title || data.Code || data[Object.keys(data)[0]];
+        }
 
-// select2 ajax common options
-// format ajax template data
-$.fn.select2.ajaxFormatResult = function(data, tmpl) {
-    var result = "";
-    if (tmpl.length > 0) {
-        result = window.Mustache.render(tmpl.html().replace(/{{(.*?)}}/g, '[[$1]]'), data);
+        // if is HTML
+        if (/<(.*)(\/>|<\/.+>)/.test(result)) {
+            return $(result);
+        }
+        return result;
+    };
+});
+(function (factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
     } else {
-        result = data.text || data.html || data.Name || data.Title || data.Code || data[Object.keys(data)[0]];
+        // Browser globals.
+        factory(jQuery);
     }
+})(function ($) {
+    'use strict';
+    let QOR = {
+        messages: {
+            common:{
+                ajaxError: 'Server error, please try again later!',
+                alert: {
+                    ok: 'Ok'
+                },
+                confirm: {
+                    ok: 'Ok',
+                    cancel: 'Cancel'
+                }
+            }
+        }
+    };
+    window.QOR = QOR;
 
-    // if is HTML
-    if (/<(.*)(\/>|<\/.+>)/.test(result)) {
-        return $(result);
-    }
-    return result;
-};
-
-$(function() {
-    let html = `<div id="dialog" style="display: none;">
+    $(function () {
+        let html = `<div id="dialog" style="display: none;">
                   <div class="mdl-dialog-bg"></div>
                   <div class="mdl-dialog">
                       <div class="mdl-dialog__content">
@@ -171,133 +153,190 @@ $(function() {
                       </div>
                     </div>
                 </div>`,
-        _ = window._,
-        QOR = window.QOR,
-        $dialog = $(html).appendTo('body');
+            _ = window._,
+            $dialog = $(html).appendTo('body');
 
-    // ************************************ Refactor window.confirm ************************************
-    $(document)
-        .on('keyup.qor.confirm', function(e) {
-            if (e.which === 27) {
-                if ($dialog.is(':visible')) {
-                    setTimeout(function() {
-                        $dialog.hide();
-                    }, 100);
+        // ************************************ Refactor window.confirm ************************************
+        $(document)
+            .on('keyup.qor.confirm', function (e) {
+                if (e.which === 27) {
+                    if ($dialog.is(':visible')) {
+                        setTimeout(function () {
+                            $dialog.hide();
+                        }, 100);
+                    }
+                }
+            })
+            .on('click.qor.confirm', '.dialog-button', function () {
+                let value = $(this).data('type'),
+                    callback = QOR.qorConfirmCallback;
+
+                $dialog.hide();
+                QOR.qorConfirmCallback = undefined;
+                $.isFunction(callback) && callback(value);
+                return false;
+            });
+
+        QOR.qorConfirm = function (data, callback) {
+            let okBtn = $dialog.find('.dialog-ok'),
+                cancelBtn = $dialog.find('.dialog-cancel').show();
+
+            if (_.isString(data)) {
+                $dialog.find('.dialog-message').text(data);
+                okBtn.text(QOR.messages.common.confirm.ok);
+                cancelBtn.text(QOR.messages.common.confirm.cancel);
+            } else if (_.isObject(data)) {
+                if (data.confirmOk && data.confirmCancel) {
+                    okBtn.text(data.confirmOk);
+                    cancelBtn.text(data.confirmCancel);
+                } else {
+                    okBtn.text(QOR.messages.common.confirm.ok);
+                    cancelBtn.text(QOR.messages.common.confirm.cancel);
+                }
+
+                $dialog.find('.dialog-message').text(data.confirm);
+            }
+
+            $dialog.show();
+            QOR.qorConfirmCallback = callback;
+            return false;
+        };
+
+        QOR.alert = function (data, callback) {
+            let okBtn = $dialog.find('.dialog-ok');
+            $dialog.find('.dialog-cancel').hide();
+
+            if (_.isString(data)) {
+                $dialog.find('.dialog-message').html(data);
+                okBtn.text(QOR.messages.common.alert.ok);
+            } else if (data.jquery) {
+                okBtn.text(QOR.messages.common.alert.ok);
+                $dialog.find('.dialog-message').html(data);
+            } else if (_.isObject(data)) {
+                if (data.ok) {
+                    okBtn.text(data.ok);
+                } else {
+                    okBtn.text(QOR.messages.common.alert.ok);
+                }
+                $dialog.find('.dialog-message').html(data.message);
+            }
+
+            $dialog.show();
+            QOR.qorConfirmCallback = callback;
+            return false;
+        };
+
+        QOR.ajaxError = function(xhr, textStatus, errorThrown) {
+            QOR.alert(QOR.ajaxErrorString.apply(this, arguments));
+        };
+
+        QOR.ajaxErrorString = function(xhr, textStatus, errorThrown) {
+            return "<strong>"+QOR.messages.common.ajaxError + "<strong></strong>:<br/>"+ [textStatus, errorThrown].join(': ')
+        };
+
+        QOR.Xurl = function (url, $this) {
+            return new Xurl(url, $this.valuerOf());
+        };
+
+        QOR.submitContinueEditing = function (e) {
+            let $form = $(e).parents('form'),
+                action = $form.attr('action') || window.location.href;
+            if (!/(\?|&)continue_editing=/.test(action)) {
+                let param = 'continue_editing=true';
+                if (action.indexOf('?') === -1) {
+                    action += '?' + param
+                } else if (action[action.length - 1] !== '?') {
+                    action += '&' + param
+                } else {
+                    action += param
                 }
             }
-        })
-        .on('click.qor.confirm', '.dialog-button', function() {
-            let value = $(this).data('type'),
-                callback = QOR.qorConfirmCallback;
-
-            $.isFunction(callback) && callback(value);
-            $dialog.hide();
-            QOR.qorConfirmCallback = undefined;
+            $form.attr('action', action);
+            $form.submit();
             return false;
-        });
+        };
 
-    QOR.qorConfirm = function(data, callback) {
-        let okBtn = $dialog.find('.dialog-ok'),
-            cancelBtn = $dialog.find('.dialog-cancel');
+        QOR.SUBMITER = "qor.submiter";
 
-        if (_.isString(data)) {
-            $dialog.find('.dialog-message').text(data);
-            okBtn.text('ok');
-            cancelBtn.text('cancel');
-        } else if (_.isObject(data)) {
-            if (data.confirmOk && data.confirmCancel) {
-                okBtn.text(data.confirmOk);
-                cancelBtn.text(data.confirmCancel);
-            } else {
-                okBtn.text('ok');
-                cancelBtn.text('cancel');
+
+        // *******************************************************************************
+
+        // ****************Handle download file from AJAX POST****************************
+        let objectToFormData = function (obj, form) {
+            let formdata = form || new FormData(),
+                key;
+
+            for (var variable in obj) {
+                if (obj.hasOwnProperty(variable) && obj[variable]) {
+                    key = variable;
+                }
+
+                if (obj[variable] instanceof Date) {
+                    formdata.append(key, obj[variable].toISOString());
+                } else if (typeof obj[variable] === 'object' && !(obj[variable] instanceof File)) {
+                    objectToFormData(obj[variable], formdata);
+                } else {
+                    formdata.append(key, obj[variable]);
+                }
             }
 
-            $dialog.find('.dialog-message').text(data.confirm);
-        }
+            return formdata;
+        };
 
-        $dialog.show();
-        QOR.qorConfirmCallback = callback;
-        return false;
-    };
+        QOR.qorAjaxHandleFile = function (url, contentType, fileName, data) {
+            let request = new XMLHttpRequest();
 
-    // *******************************************************************************
+            request.responseType = 'arraybuffer';
+            request.open('POST', url, true);
+            request.onload = function () {
+                if (this.status === 200) {
+                    let blob = new Blob([this.response], {
+                            type: contentType
+                        }),
+                        url = window.URL.createObjectURL(blob),
+                        a = document.createElement('a');
 
-    // ****************Handle download file from AJAX POST****************************
-    let objectToFormData = function(obj, form) {
-        let formdata = form || new FormData(),
-            key;
+                    document.body.appendChild(a);
+                    a.href = url;
+                    a.download = fileName || 'download-' + $.now();
+                    a.click();
+                } else {
+                    window.alert('server error, please try again!');
+                }
+            };
 
-        for (var variable in obj) {
-            if (obj.hasOwnProperty(variable) && obj[variable]) {
-                key = variable;
-            }
+            if (_.isObject(data)) {
+                if (Object.prototype.toString.call(data) != '[object FormData]') {
+                    data = objectToFormData(data);
+                }
 
-            if (obj[variable] instanceof Date) {
-                formdata.append(key, obj[variable].toISOString());
-            } else if (typeof obj[variable] === 'object' && !(obj[variable] instanceof File)) {
-                objectToFormData(obj[variable], formdata);
-            } else {
-                formdata.append(key, obj[variable]);
-            }
-        }
-
-        return formdata;
-    };
-
-    QOR.qorAjaxHandleFile = function(url, contentType, fileName, data) {
-        let request = new XMLHttpRequest();
-
-        request.responseType = 'arraybuffer';
-        request.open('POST', url, true);
-        request.onload = function() {
-            if (this.status === 200) {
-                let blob = new Blob([this.response], {
-                        type: contentType
-                    }),
-                    url = window.URL.createObjectURL(blob),
-                    a = document.createElement('a');
-
-                document.body.appendChild(a);
-                a.href = url;
-                a.download = fileName || 'download-' + $.now();
-                a.click();
-            } else {
-                window.alert('server error, please try again!');
+                request.send(data);
             }
         };
 
-        if (_.isObject(data)) {
-            if (Object.prototype.toString.call(data) != '[object FormData]') {
-                data = objectToFormData(data);
+        // ********************************convert video link********************
+        // linkyoutube: /https?:\/\/(?:[0-9A-Z-]+\.)?(?:youtu\.be\/|youtube\.com\S*[^\w\-\s])([\w\-]{11})(?=[^\w\-]|$)(?![?=&+%\w.\-]*(?:['"][^<>]*>|<\/a>))[?=&+%\w.-]*/ig,
+        // linkvimeo: /https?:\/\/(www\.)?vimeo.com\/(\d+)($|\/)/,
+
+        let converVideoLinks = function () {
+            let $ele = $('.qor-linkify-object'),
+                linkyoutube = /https?:\/\/(?:[0-9A-Z-]+\.)?(?:youtu\.be\/|youtube\.com\S*[^\w\-\s])([\w\-]{11})(?=[^\w\-]|$)(?![?=&+%\w.\-]*(?:['"][^<>]*>|<\/a>))[?=&+%\w.-]*/gi;
+
+            if (!$ele.length) {
+                return;
             }
 
-            request.send(data);
-        }
-    };
+            $ele.each(function () {
+                let url = $(this).data('video-link');
+                if (url.match(linkyoutube)) {
+                    $(this).html(`<iframe width="100%" height="100%" src="//www.youtube.com/embed/${url.replace(linkyoutube, '$1')}" frameborder="0" allowfullscreen></iframe>`);
+                }
+            });
+        };
 
-    // ********************************convert video link********************
-    // linkyoutube: /https?:\/\/(?:[0-9A-Z-]+\.)?(?:youtu\.be\/|youtube\.com\S*[^\w\-\s])([\w\-]{11})(?=[^\w\-]|$)(?![?=&+%\w.\-]*(?:['"][^<>]*>|<\/a>))[?=&+%\w.-]*/ig,
-    // linkvimeo: /https?:\/\/(www\.)?vimeo.com\/(\d+)($|\/)/,
-
-    let converVideoLinks = function() {
-        let $ele = $('.qor-linkify-object'),
-            linkyoutube = /https?:\/\/(?:[0-9A-Z-]+\.)?(?:youtu\.be\/|youtube\.com\S*[^\w\-\s])([\w\-]{11})(?=[^\w\-]|$)(?![?=&+%\w.\-]*(?:['"][^<>]*>|<\/a>))[?=&+%\w.-]*/gi;
-
-        if (!$ele.length) {
-            return;
-        }
-
-        $ele.each(function() {
-            let url = $(this).data('video-link');
-            if (url.match(linkyoutube)) {
-                $(this).html(`<iframe width="100%" height="100%" src="//www.youtube.com/embed/${url.replace(linkyoutube, '$1')}" frameborder="0" allowfullscreen></iframe>`);
-            }
-        });
-    };
-
-    $.fn.qorSliderAfterShow.converVideoLinks = converVideoLinks;
-    converVideoLinks();
+        $.fn.qorSliderAfterShow.converVideoLinks = converVideoLinks;
+        converVideoLinks();
+    });
 });
 
 (function (factory) {
@@ -427,20 +466,20 @@ $(function() {
 
         for (i = 0; i < length; i++) {
             switch (parts[i]) {
-            case 'dd':
-            case 'd':
-                format.hasDay = true;
-                break;
+                case 'dd':
+                case 'd':
+                    format.hasDay = true;
+                    break;
 
-            case 'mm':
-            case 'm':
-                format.hasMonth = true;
-                break;
+                case 'mm':
+                case 'm':
+                    format.hasMonth = true;
+                    break;
 
-            case 'yyyy':
-            case 'yy':
-                format.hasYear = true;
-                break;
+                case 'yyyy':
+                case 'yy':
+                    format.hasYear = true;
+                    break;
 
                 // No default
             }
@@ -449,15 +488,84 @@ $(function() {
         return format;
     }
 
-    function Datepicker(element, options) {
-        options = $.isPlainObject(options) ? options : {};
+    function parseDate(format, date) {
+        var parts = [];
+        var length;
+        var year;
+        var day;
+        var month;
+        var val;
+        var i;
 
-        if (options.language) {
-            options = $.extend({}, Datepicker.LANGUAGES[options.language], options);
+        if (isDate(date)) {
+            return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        } else if (isString(date)) {
+            parts = date.match(REGEXP_DIGITS) || [];
         }
 
+        date = new Date();
+        year = date.getFullYear();
+        day = date.getDate();
+        month = date.getMonth();
+        length = format.parts.length;
+
+        if (parts.length === length) {
+            for (i = 0; i < length; i++) {
+                val = parseInt(parts[i], 10) || 1;
+
+                switch (format.parts[i]) {
+                    case 'dd':
+                    case 'd':
+                        day = val;
+                        break;
+
+                    case 'mm':
+                    case 'm':
+                        month = val - 1;
+                        break;
+
+                    case 'yy':
+                        year = 2000 + val;
+                        break;
+
+                    case 'yyyy':
+                        year = val;
+                        break;
+
+                    // No default
+                }
+            }
+        }
+
+        return new Date(year, month, day);
+    }
+
+    $.extend(true, QOR.messages, {
+        datepicker: {
+            // The date string format
+            format: 'yyyy-mm-dd',
+
+            // Days' name of the week.
+            days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+
+            // Shorter days' name
+            daysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+
+            // Shortest days' name
+            daysMin: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+
+            // Months' name
+            months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+
+            // Shorter months' name
+            monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        }
+    });
+
+    function Datepicker(element, options) {
+        options = $.isPlainObject(options) ? options : {};
         this.$element = $(element);
-        this.options = $.extend({}, Datepicker.DEFAULTS, options);
+        this.options = $.extend({}, Datepicker.DEFAULTS, QOR.messages.datepicker, options);
         this.isBuilt = false;
         this.isShown = false;
         this.isInput = false;
@@ -468,6 +576,43 @@ $(function() {
         this.endDate = null;
         this.init();
     }
+
+    Datepicker.formatDate = function (date, format) {
+        if (!format) {
+            format = QOR.messages.datepicker.format
+        }
+        if (isString(format)) {
+            format = parseFormat(format)
+        }
+        var formated = '';
+        var length;
+        var year;
+        var part;
+        var val;
+        var i;
+
+        if (isDate(date)) {
+            formated = format.source;
+            year = date.getFullYear();
+            val = {
+                d: date.getDate(),
+                m: date.getMonth() + 1,
+                yy: year.toString().substring(2),
+                yyyy: year
+            };
+
+            val.dd = (val.d < 10 ? '0' : '') + val.d;
+            val.mm = (val.m < 10 ? '0' : '') + val.m;
+            length = format.parts.length;
+
+            for (i = 0; i < length; i++) {
+                part = format.parts[i];
+                formated = formated.replace(part, val[part]);
+            }
+        }
+
+        return formated;
+    };
 
     Datepicker.prototype = {
         constructor: Datepicker,
@@ -641,46 +786,46 @@ $(function() {
 
             if (format.hasYear || format.hasMonth || format.hasDay) {
                 switch (Number(view)) {
-                case 2:
-                case 'years':
-                    $monthsPicker.addClass(CLASS_HIDE);
-                    $daysPicker.addClass(CLASS_HIDE);
+                    case 2:
+                    case 'years':
+                        $monthsPicker.addClass(CLASS_HIDE);
+                        $daysPicker.addClass(CLASS_HIDE);
 
-                    if (format.hasYear) {
-                        this.fillYears();
-                        $yearsPicker.removeClass(CLASS_HIDE);
-                    } else {
-                        this.showView(0);
-                    }
+                        if (format.hasYear) {
+                            this.fillYears();
+                            $yearsPicker.removeClass(CLASS_HIDE);
+                        } else {
+                            this.showView(0);
+                        }
 
-                    break;
+                        break;
 
-                case 1:
-                case 'months':
-                    $yearsPicker.addClass(CLASS_HIDE);
-                    $daysPicker.addClass(CLASS_HIDE);
+                    case 1:
+                    case 'months':
+                        $yearsPicker.addClass(CLASS_HIDE);
+                        $daysPicker.addClass(CLASS_HIDE);
 
-                    if (format.hasMonth) {
-                        this.fillMonths();
-                        $monthsPicker.removeClass(CLASS_HIDE);
-                    } else {
-                        this.showView(2);
-                    }
+                        if (format.hasMonth) {
+                            this.fillMonths();
+                            $monthsPicker.removeClass(CLASS_HIDE);
+                        } else {
+                            this.showView(2);
+                        }
 
-                    break;
+                        break;
 
                     // case 0:
                     // case 'days':
-                default:
-                    $yearsPicker.addClass(CLASS_HIDE);
-                    $monthsPicker.addClass(CLASS_HIDE);
+                    default:
+                        $yearsPicker.addClass(CLASS_HIDE);
+                        $monthsPicker.addClass(CLASS_HIDE);
 
-                    if (format.hasDay) {
-                        this.fillDays();
-                        $daysPicker.removeClass(CLASS_HIDE);
-                    } else {
-                        this.showView(1);
-                    }
+                        if (format.hasDay) {
+                            this.fillDays();
+                            $daysPicker.removeClass(CLASS_HIDE);
+                        } else {
+                            this.showView(1);
+                        }
                 }
             }
         },
@@ -752,7 +897,7 @@ $(function() {
                 '<' + itemTag + ' ' +
                 (defaults.disabled ? 'class="' + options.disabledClass + '"' :
                     defaults.picked ? 'class="' + options.pickedClass + '"' :
-                    defaults.muted ? 'class="' + options.mutedClass + '"' : '') +
+                        defaults.muted ? 'class="' + options.mutedClass + '"' : '') +
                 (defaults.view ? ' data-view="' + defaults.view + '"' : '') +
                 '>' +
                 defaults.text +
@@ -844,9 +989,7 @@ $(function() {
 
             this.$yearsPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$yearsNext.toggleClass(disabledClass, isNextDisabled);
-            this.$yearsCurrent.
-            toggleClass(disabledClass, true).
-            html((viewYear + start) + suffix + ' - ' + (viewYear + end) + suffix);
+            this.$yearsCurrent.toggleClass(disabledClass, true).html((viewYear + start) + suffix + ' - ' + (viewYear + end) + suffix);
             this.$years.html(list);
         },
 
@@ -900,9 +1043,7 @@ $(function() {
 
             this.$yearPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$yearNext.toggleClass(disabledClass, isNextDisabled);
-            this.$yearCurrent.
-            toggleClass(disabledClass, isPrevDisabled && isNextDisabled).
-            html(viewYear + options.yearSuffix || '');
+            this.$yearCurrent.toggleClass(disabledClass, isPrevDisabled && isNextDisabled).html(viewYear + options.yearSuffix || '');
             this.$months.html(list);
         },
 
@@ -1063,12 +1204,10 @@ $(function() {
 
             this.$monthPrev.toggleClass(disabledClass, isPrevDisabled);
             this.$monthNext.toggleClass(disabledClass, isNextDisabled);
-            this.$monthCurrent.
-            toggleClass(disabledClass, isPrevDisabled && isNextDisabled).
-            html(
+            this.$monthCurrent.toggleClass(disabledClass, isPrevDisabled && isNextDisabled).html(
                 options.yearFirst ?
-                viewYear + suffix + ' ' + months[viewMonth] :
-                months[viewMonth] + ' ' + viewYear + suffix
+                    viewYear + suffix + ' ' + months[viewMonth] :
+                    months[viewMonth] + ' ' + viewYear + suffix
             );
             this.$days.html(prevItems.join('') + items.join(' ') + nextItems.join(''));
         },
@@ -1096,125 +1235,125 @@ $(function() {
             view = $target.data('view');
 
             switch (view) {
-            case 'years prev':
-            case 'years next':
-                viewYear = view === 'years prev' ? viewYear - 10 : viewYear + 10;
-                year = $target.text();
-                isYear = REGEXP_YEAR.test(year);
+                case 'years prev':
+                case 'years next':
+                    viewYear = view === 'years prev' ? viewYear - 10 : viewYear + 10;
+                    year = $target.text();
+                    isYear = REGEXP_YEAR.test(year);
 
-                if (isYear) {
-                    viewYear = parseInt(year, 10);
+                    if (isYear) {
+                        viewYear = parseInt(year, 10);
+                        this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    }
+
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    this.fillYears();
+
+                    if (isYear) {
+                        this.showView(1);
+                        this.pick('year');
+                    }
+
+                    break;
+
+                case 'year prev':
+                case 'year next':
+                    viewYear = view === 'year prev' ? viewYear - 1 : viewYear + 1;
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    this.fillMonths();
+                    break;
+
+                case 'year current':
+
+                    if (this.format.hasYear) {
+                        this.showView(2);
+                    }
+
+                    break;
+
+                case 'year picked':
+
+                    if (this.format.hasMonth) {
+                        this.showView(1);
+                    } else {
+                        this.hideView();
+                    }
+
+                    break;
+
+                case 'year':
+                    viewYear = parseInt($target.text(), 10);
                     this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                }
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
 
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.fillYears();
+                    if (this.format.hasMonth) {
+                        this.showView(1);
+                    } else {
+                        this.hideView();
+                    }
 
-                if (isYear) {
-                    this.showView(1);
                     this.pick('year');
-                }
+                    break;
 
-                break;
+                case 'month prev':
+                case 'month next':
+                    viewMonth = view === 'month prev' ? viewMonth - 1 : view === 'month next' ? viewMonth + 1 : viewMonth;
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    this.fillDays();
+                    break;
 
-            case 'year prev':
-            case 'year next':
-                viewYear = view === 'year prev' ? viewYear - 1 : viewYear + 1;
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.fillMonths();
-                break;
+                case 'month current':
 
-            case 'year current':
+                    if (this.format.hasMonth) {
+                        this.showView(1);
+                    }
 
-                if (this.format.hasYear) {
-                    this.showView(2);
-                }
+                    break;
 
-                break;
+                case 'month picked':
 
-            case 'year picked':
+                    if (this.format.hasDay) {
+                        this.showView(0);
+                    } else {
+                        this.hideView();
+                    }
 
-                if (this.format.hasMonth) {
-                    this.showView(1);
-                } else {
+                    break;
+
+                case 'month':
+                    viewMonth = $.inArray($target.text(), this.options.monthsShort);
+                    this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
+                    this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
+
+                    if (this.format.hasDay) {
+                        this.showView(0);
+                    } else {
+                        this.hideView();
+                    }
+
+                    this.pick('month');
+                    break;
+
+                case 'day prev':
+                case 'day next':
+                case 'day':
+                    viewMonth = view === 'day prev' ? viewMonth - 1 : view === 'day next' ? viewMonth + 1 : viewMonth;
+                    viewDay = parseInt($target.text(), 10);
+                    this.date = new Date(viewYear, viewMonth, viewDay);
+                    this.viewDate = new Date(viewYear, viewMonth, viewDay);
+                    this.fillDays();
+
+                    if (view === 'day') {
+                        this.hideView();
+                    }
+
+                    this.pick('day');
+                    break;
+
+                case 'day picked':
                     this.hideView();
-                }
-
-                break;
-
-            case 'year':
-                viewYear = parseInt($target.text(), 10);
-                this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-
-                if (this.format.hasMonth) {
-                    this.showView(1);
-                } else {
-                    this.hideView();
-                }
-
-                this.pick('year');
-                break;
-
-            case 'month prev':
-            case 'month next':
-                viewMonth = view === 'month prev' ? viewMonth - 1 : view === 'month next' ? viewMonth + 1 : viewMonth;
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.fillDays();
-                break;
-
-            case 'month current':
-
-                if (this.format.hasMonth) {
-                    this.showView(1);
-                }
-
-                break;
-
-            case 'month picked':
-
-                if (this.format.hasDay) {
-                    this.showView(0);
-                } else {
-                    this.hideView();
-                }
-
-                break;
-
-            case 'month':
-                viewMonth = $.inArray($target.text(), this.options.monthsShort);
-                this.date = new Date(viewYear, viewMonth, min(viewDay, 28));
-                this.viewDate = new Date(viewYear, viewMonth, min(viewDay, 28));
-
-                if (this.format.hasDay) {
-                    this.showView(0);
-                } else {
-                    this.hideView();
-                }
-
-                this.pick('month');
-                break;
-
-            case 'day prev':
-            case 'day next':
-            case 'day':
-                viewMonth = view === 'day prev' ? viewMonth - 1 : view === 'day next' ? viewMonth + 1 : viewMonth;
-                viewDay = parseInt($target.text(), 10);
-                this.date = new Date(viewYear, viewMonth, viewDay);
-                this.viewDate = new Date(viewYear, viewMonth, viewDay);
-                this.fillDays();
-
-                if (view === 'day') {
-                    this.hideView();
-                }
-
-                this.pick('day');
-                break;
-
-            case 'day picked':
-                this.hideView();
-                this.pick('day');
-                break;
+                    this.pick('day');
+                    break;
 
                 // No default
             }
@@ -1339,9 +1478,9 @@ $(function() {
             var date = this.date;
 
             if (this.trigger(EVENT_PICK, {
-                    view: _view || '',
-                    date: date
-                }).isDefaultPrevented()) {
+                view: _view || '',
+                date: date
+            }).isDefaultPrevented()) {
                 return;
             }
 
@@ -1428,6 +1567,15 @@ $(function() {
         },
 
         /**
+         * Get the current date format
+         *
+         * @return {String} (format)
+         */
+        getDateFormat: function () {
+            return this.options.format;
+        },
+
+        /**
          * Set the current date with a new date
          *
          * @param {Date} date
@@ -1493,56 +1641,7 @@ $(function() {
          * @return {Date} (parsed date)
          */
         parseDate: function (date) {
-            var format = this.format;
-            var parts = [];
-            var length;
-            var year;
-            var day;
-            var month;
-            var val;
-            var i;
-
-            if (isDate(date)) {
-                return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            } else if (isString(date)) {
-                parts = date.match(REGEXP_DIGITS) || [];
-            }
-
-            date = new Date();
-            year = date.getFullYear();
-            day = date.getDate();
-            month = date.getMonth();
-            length = format.parts.length;
-
-            if (parts.length === length) {
-                for (i = 0; i < length; i++) {
-                    val = parseInt(parts[i], 10) || 1;
-
-                    switch (format.parts[i]) {
-                    case 'dd':
-                    case 'd':
-                        day = val;
-                        break;
-
-                    case 'mm':
-                    case 'm':
-                        month = val - 1;
-                        break;
-
-                    case 'yy':
-                        year = 2000 + val;
-                        break;
-
-                    case 'yyyy':
-                        year = val;
-                        break;
-
-                        // No default
-                    }
-                }
-            }
-
-            return new Date(year, month, day);
+            return parseDate(this.format, date)
         },
 
         /**
@@ -1552,35 +1651,7 @@ $(function() {
          * @return {String} (formated date)
          */
         formatDate: function (date) {
-            var format = this.format;
-            var formated = '';
-            var length;
-            var year;
-            var part;
-            var val;
-            var i;
-
-            if (isDate(date)) {
-                formated = format.source;
-                year = date.getFullYear();
-                val = {
-                    d: date.getDate(),
-                    m: date.getMonth() + 1,
-                    yy: year.toString().substring(2),
-                    yyyy: year
-                };
-
-                val.dd = (val.d < 10 ? '0' : '') + val.d;
-                val.mm = (val.m < 10 ? '0' : '') + val.m;
-                length = format.parts.length;
-
-                for (i = 0; i < length; i++) {
-                    part = format.parts[i];
-                    formated = formated.replace(part, val[part]);
-                }
-            }
-
-            return formated;
+            return Datepicker.formatDate(date, this.format);
         },
 
         // Destroy the datepicker and remove the instance from the target element
@@ -1590,8 +1661,6 @@ $(function() {
             this.$element.removeData(NAMESPACE);
         }
     };
-
-    Datepicker.LANGUAGES = {};
 
     Datepicker.DEFAULTS = {
         // Show the datepicker automatically when initialized
@@ -1611,12 +1680,6 @@ $(function() {
 
         // A element (or selector) for triggering the datepicker
         trigger: null,
-
-        // The ISO language code (built-in: en-US)
-        language: '',
-
-        // The date string format
-        format: 'yyyy-mm-dd',
 
         // The initial date
         date: null,
@@ -1638,21 +1701,6 @@ $(function() {
 
         // A string suffix to the year number.
         yearSuffix: '',
-
-        // Days' name of the week.
-        days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-
-        // Shorter days' name
-        daysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-
-        // Shortest days' name
-        daysMin: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
-
-        // Months' name
-        months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-
-        // Shorter months' name
-        monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
 
         // A element tag for each item of years, months and days
         itemTag: 'li',
@@ -1748,8 +1796,11 @@ $(function() {
     };
 
     $.fn.qorDatepicker.Constructor = Datepicker;
-    $.fn.qorDatepicker.languages = Datepicker.LANGUAGES;
     $.fn.qorDatepicker.setDefaults = Datepicker.setDefaults;
+    $.fn.qorDatepicker.formatDate = Datepicker.formatDate;
+    $.fn.qorDatepicker.parseDate = function (format, date) {
+        return parseDate(parseFormat(format), date)
+    };
 
     // No conflict
     $.fn.qorDatepicker.noConflict = function () {
@@ -1757,6 +1808,217 @@ $(function() {
         return this;
     };
 
+    $document.data('datepicker', function (cb) {
+        return cb.call($.fn.qorDatepicker)
+    })
+});
+
+(function (factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define('formValidator', ['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function ($) {
+
+    'use strict';
+
+    let NAMESPACE = 'remoteFormValidator',
+        EVENT_SUBMIT = 'submit.' + NAMESPACE,
+        VALIDATING = 1,
+        OK = 2,
+        FAILED = 3;
+
+
+    function FormValidator(element, options) {
+        options = $.isPlainObject(options) ? options : {};
+        this.$el = $(element);
+        this.options = $.extend({}, FormValidator.DEFAULTS, options);
+        this.key = 0;
+        this.validators = {};
+        this.validating = {};
+        this.phase = 0;
+        this.running = 0;
+        this.destroyed = false;
+        this.errors = [];
+        this.init();
+    }
+
+    FormValidator.prototype = {
+        constructor: FormValidator,
+
+        init: function () {
+            this.bind();
+        },
+
+        bind: function () {
+            this.$el.on(EVENT_SUBMIT, this.validateOnSubmit.bind(this));
+        },
+
+        submit: function (e) {
+            let submiter = this.$el.data(QOR.SUBMITER);
+            if (submiter) {
+                submiter(e)
+            } else {
+                this.unbind();
+                this.$el.submit();
+                this.bind();
+            }
+        },
+
+        unbind: function () {
+            this.$el.off(EVENT_SUBMIT);
+        },
+        validateOnSubmit: function(e) {
+            if (Object.keys(this.validators).length === 0) {
+                return true;
+            }
+            return this.validate(this.submit.bind(this, e), e)
+        },
+        validate: function(okCallback) {
+            let key, count = 0, ok;
+            if (Object.keys(this.validating).length > 0) {
+                return false;
+            }
+            for (key in this.validators) {
+                count++;
+                this.validating[key] = true;
+            }
+            ok = count === 0;
+            if (ok) {
+                // must submit
+                return true;
+            }
+            this.phase = VALIDATING;
+
+            for (key in this.validators) {
+                this.validating[key] = true;
+                this._callValidator(key, okCallback);
+            }
+
+            return false;
+        },
+
+        callValidator: function (key, validatorCallback) {
+            this._callValidator(key, null, validatorCallback)
+        },
+
+        _callValidator: function (key, mainOkCallback, validatorCallback) {
+            if (this.destroyed) {
+                return;
+            }
+            this.validators[key](this.validatorDone.bind(this, key, mainOkCallback, validatorCallback));
+        },
+
+        // validation done
+        done: function (mainOkCallback) {
+            if (this.errors.length === 0) {
+                if (mainOkCallback) {
+                    mainOkCallback()
+                }
+            } else {
+                QOR.alert(this.errors.join('<hr />'));
+                this.errors = [];
+            }
+            //this.$el.show();
+        },
+
+        validatorDone: function (key, mainOkCallback, validatorCallback, err) {
+            if (this.destroyed) {
+                return;
+            }
+            if (err) {
+                if ((key in this.validating)) {
+                    this.errors.push(err);
+                }
+            }
+            // anonymous validate
+            if (validatorCallback) {
+                validatorCallback(err);
+                return;
+            }
+            // all validate
+            delete this.validating[key];
+            for (key in this.validating) {
+                // is running
+                return
+            }
+            // done
+            this.done(mainOkCallback);
+        },
+
+        // Methods
+        // -------------------------------------------------------------------------
+
+
+        // Register register new validator and return done callback
+        register: function (validator, callback) {
+            let key = this.key++;
+            this.validators[key] = validator;
+            if (callback) {
+                callback(this.callValidator.bind(this, key))
+            }
+        },
+
+        // Destroy the datepicker and remove the instance from the target element
+        destroy: function () {
+            this.destroyed = true;
+            this.unbind();
+            this.$el.removeData(NAMESPACE);
+        }
+    };
+
+    FormValidator.DEFAULTS = {
+    };
+
+    FormValidator.setDefaults = function (options) {
+        $.extend(FormValidator.DEFAULTS, $.isPlainObject(options) && options);
+    };
+
+    // Save the other
+    FormValidator.other = $.fn.formValidator;
+
+    // Register as jQuery plugin
+    $.fn.formValidator = function (option) {
+        let args = Array.prototype.slice.call(arguments, 1),
+            result;
+
+        this.each(function () {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var options;
+            var fn;
+
+            if (!data) {
+                if (/destroy/.test(option)) {
+                    return;
+                }
+
+                options = $.extend({}, $this.data(), $.isPlainObject(option) && option);
+                $this.data(NAMESPACE, (data = new FormValidator(this, options)));
+            }
+
+            if ((typeof option === "string") && $.isFunction(fn = data[option])) {
+                result = fn.apply(data, args);
+            }
+        });
+
+        return (typeof result === 'undefined') ? this : result;
+    };
+
+    $.fn.formValidator.Constructor = FormValidator;
+    $.fn.formValidator.setDefaults = FormValidator.setDefaults;
+
+    // No conflict
+    $.fn.formValidator.noConflict = function () {
+        $.fn.formValidator = FormValidator.other;
+        return this;
+    };
 });
 
 (function(factory) {
@@ -1772,18 +2034,30 @@ $(function() {
     }
 })(function($) {
     'use strict';
+
+    $.extend({}, QOR.messages, {
+        action: {
+            bulk: {
+                pleaseSelectAnItem: "You must select at least one item."
+            },
+            form: {
+                areYouSure: "This action may not be undone. Are you sure you want to run anyway?"
+            }
+        }
+    }, true);
+
     let Mustache = window.Mustache,
         NAMESPACE = 'qor.action',
         EVENT_ENABLE = 'enable.' + NAMESPACE,
         EVENT_DISABLE = 'disable.' + NAMESPACE,
         EVENT_CLICK = 'click.' + NAMESPACE,
         EVENT_UNDO = 'undo.' + NAMESPACE,
-        ACTION_FORMS = '.qor-action-forms',
+        ACTION_FORMS = '.qor-actions-bulk',
         ACTION_HEADER = '.qor-page__header',
         ACTION_BODY = '.qor-page__body',
         ACTION_BUTTON = '.qor-action-button',
         MDL_BODY = '.mdl-layout__content',
-        ACTION_SELECTORS = '.qor-actions',
+        ACTION_SELECTORS = '.qor-actions-default',
         ACTION_LINK = 'a.qor-action--button',
         MENU_ACTIONS = '.qor-table__actions a[data-url],[data-url][data-method=POST],[data-url][data-method=PUT],[data-url][data-method=DELETE]',
         BUTTON_BULKS = '.qor-action-bulk-buttons',
@@ -1791,6 +2065,7 @@ $(function() {
         QOR_TABLE_BULK = '.qor-table--bulking',
         QOR_SEARCH = '.qor-search-container',
         CLASS_IS_UNDO = 'is_undo',
+        CLASS_BULK_EXIT = '.qor-action--exit-bulk',
         QOR_SLIDEOUT = '.qor-slideout',
         ACTION_FORM_DATA = 'primary_values[]';
 
@@ -1812,6 +2087,7 @@ $(function() {
 
         bind: function() {
             this.$element.on(EVENT_CLICK, $.proxy(this.click, this));
+            this.$wrap.find(CLASS_BULK_EXIT).on(EVENT_CLICK, $.proxy(this.click, this));
             $(document)
                 .on(EVENT_CLICK, '.qor-table--bulking tr', this.click)
                 .on(EVENT_CLICK, ACTION_LINK, this.actionLink);
@@ -1876,6 +2152,10 @@ $(function() {
             let $target = $($action);
             this.$actionButton = $target;
             if ($target.data().method) {
+                if ($target.data().ajaxForm) {
+                    this.collectFormData();
+                    this.ajaxForm.properties = $target.data();
+                }
                 this.submit();
                 return false;
             }
@@ -1898,9 +2178,6 @@ $(function() {
 
             if ($target.is('.qor-action--bulk')) {
                 this.$wrap.removeClass('hidden');
-                $(BUTTON_BULKS)
-                    .find('button')
-                    .toggleClass('hidden');
                 $('.qor-table__inner-list').remove();
                 this.appendTableCheckbox();
                 $(QOR_TABLE).addClass('qor-table--bulking');
@@ -1915,11 +2192,8 @@ $(function() {
                 }
             }
 
-            if ($target.is('.qor-action--exit-bulk')) {
+            if ($target.is(CLASS_BULK_EXIT)) {
                 this.$wrap.addClass('hidden');
-                $(BUTTON_BULKS)
-                    .find('button')
-                    .toggleClass('hidden');
                 this.removeTableCheckbox();
                 $(QOR_TABLE).removeClass('qor-table--bulking');
                 $(ACTION_HEADER)
@@ -1989,19 +2263,58 @@ $(function() {
                 undoUrl = properties.undoUrl,
                 isUndo = $actionButton.hasClass(CLASS_IS_UNDO),
                 isInSlideout = $actionButton.closest(QOR_SLIDEOUT).length,
-                needDisableButtons = $element && !isInSlideout;
+                isOne = properties.one,
+                needDisableButtons = $element && !isInSlideout,
+                headers = {};
 
-            if (properties.fromIndex && (!ajaxForm.formData || !ajaxForm.formData.length)) {
-                window.alert(ajaxForm.properties.errorNoItem);
+            if (properties.disableSuccessRedirection) {
+                headers['X-Disabled-Success-Redirection'] = 'true';
+            }
+
+            if (!properties.optional && (properties.fromIndex && (!ajaxForm.formData || !ajaxForm.formData.length))) {
+                QOR.alert(QOR.messages.action.bulk.pleaseSelectAnItem);
                 return;
             }
 
+            if (properties.passCurrentQuery) {
+                if (location.search.length) {
+                    url += url.indexOf('?') !== -1 ? '&' : '?'
+                    url += location.search.substring(1)
+                }
+            }
+
             if (properties.confirm && properties.ajaxForm && !properties.fromIndex) {
-                window.QOR.qorConfirm(properties, function(confirm) {
+                QOR.qorConfirm(properties, function(confirm) {
                     if (confirm) {
-                        $.post(properties.url, {_method: properties.method}, function() {
+                        let success = function(data, status, response) {
+                            // TODO: self reload if in resource object page (check slideout)
+
+                            let xLocation = response.getResponseHeader('X-Location');
+
+                            if (xLocation) {
+                                window.location.href = xLocation;
+                                return
+                            }
+
+                            let refreshUrl = properties.refreshUrl;
+
+                            if (refreshUrl) {
+                                window.location.href = refreshUrl;
+                                return;
+                            }
+
+                            if (isOne) {
+                                $actionButton.remove();
+                            }
                             window.location.reload();
-                        });
+                        };
+                        $.ajax(url, {
+                            method: "POST",
+                            data: {_method: properties.method},
+                            // TODO: process JSON data type {message?}
+                            //dataType: properties.datatype,
+                            headers: headers,
+                            success:success})
                     } else {
                         return;
                     }
@@ -2011,10 +2324,24 @@ $(function() {
                     url = properties.undoUrl;
                 }
 
+                if (properties.targetWindow) {
+                    let formS = '<form action="'+url+'" method="POST" target="_blank">';
+                    this.ajaxForm.formData.forEach(function(el) {
+                        formS += '<input type="hidden" name="'+el.name+'" value="'+el.value+'">'
+                    })
+                    formS += "</form>";
+                    let $form = $(formS);
+                    $('body').append($form);
+                    $form.submit();
+                    $form.remove();
+                    return;
+                }
+
                 $.ajax(url, {
                     method: properties.method,
                     data: ajaxForm.formData,
                     dataType: properties.datatype,
+                    headers: headers,
                     beforeSend: function() {
                         if (undoUrl) {
                             $actionButton.prop('disabled', true);
@@ -2023,6 +2350,20 @@ $(function() {
                         }
                     },
                     success: function(data, status, response) {
+                        let xLocation = response.getResponseHeader('X-Location');
+
+                        if (xLocation) {
+                            window.location.href = xLocation;
+                            return
+                        }
+
+                        let refreshUrl = properties.refreshUrl;
+
+                        if (refreshUrl) {
+                            window.location.href = refreshUrl;
+                            return;
+                        }
+
                         let contentType = response.getResponseHeader('content-type'),
                             // handle file download from form submit
                             disposition = response.getResponseHeader('Content-Disposition');
@@ -2079,7 +2420,7 @@ $(function() {
                         } else if (needDisableButtons) {
                             _this.switchButtons($element);
                         }
-                        window.alert([textStatus, errorThrown].join(': '));
+                        QOR.alert([textStatus, errorThrown].join(': '));
                     }
                 });
             }
@@ -2841,28 +3182,33 @@ $(function() {
             var $bottomsheets = this.$bottomsheets,
                 _this = this;
 
-            $.get(url, $.proxy(function(response) {
-                var $response = $(response).find(CLASS_MAIN_CONTENT),
-                    $responseHeader = $response.find(CLASS_BODY_HEAD),
-                    $responseBody = $response.find(CLASS_BODY_CONTENT);
+            $.ajax({
+                url: url,
+                headers: {
+                    'X-Layout': 'lite'
+                },
+                success: function (response) {
+                    var $response = $(response).find(CLASS_MAIN_CONTENT),
+                        $responseHeader = $response.find(CLASS_BODY_HEAD),
+                        $responseBody = $response.find(CLASS_BODY_CONTENT);
 
-                if ($responseBody.length) {
-                    $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html());
+                    if ($responseBody.length) {
+                        $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html());
 
-                    if ($responseHeader.length) {
-                        this.$body
-                            .find(CLASS_BODY_HEAD)
-                            .html($responseHeader.html())
-                            .trigger('enable');
-                        this.addHeaderClass();
+                        if ($responseHeader.length) {
+                            this.$body
+                                .find(CLASS_BODY_HEAD)
+                                .html($responseHeader.html())
+                                .trigger('enable');
+                            this.addHeaderClass();
+                        }
+                        // will trigger this event(relaod.qor.bottomsheets) when bottomsheets reload complete: like pagination, filter, action etc.
+                        $bottomsheets.trigger(EVENT_RELOAD);
+                    } else {
+                        this.reload(url);
                     }
-                    // will trigger this event(relaod.qor.bottomsheets) when bottomsheets reload complete: like pagination, filter, action etc.
-                    $bottomsheets.trigger(EVENT_RELOAD);
-                } else {
-                    this.reload(url);
-                }
-            }, this)).fail(function() {
-                window.alert('server error, please try again later!');
+                }.bind(this),
+                error: QOR.ajaxError
             });
         },
 
@@ -2888,7 +3234,7 @@ $(function() {
         },
 
         addHeaderClass: function() {
-            this.$body.find(CLASS_BODY_HEAD).hide();
+            this.$body.find(CLASS_BODY_HEAD).remove();
             if (this.$bottomsheets.find(CLASS_BODY_HEAD).children(CLASS_BOTTOMSHEETS_FILTER).length) {
                 this.$body
                     .addClass('has-header')
@@ -2969,6 +3315,9 @@ $(function() {
                 dataType: ajaxType ? ajaxType : 'html',
                 processData: false,
                 contentType: false,
+                headers: {
+                    'X-Layout': 'lite'
+                },
                 beforeSend: function() {
                     $submit.prop('disabled', true);
                 },
@@ -3025,15 +3374,14 @@ $(function() {
                     $(document).trigger(EVENT_BOTTOMSHEET_SUBMIT);
                 },
                 error: function(xhr, textStatus, errorThrown) {
-                    var $error;
-
                     if (xhr.status === 422) {
                         $body.find('.qor-error').remove();
-                        $error = $(xhr.responseText).find('.qor-error');
+                        let $error = $(xhr.responseText).find('.qor-error');
                         $form.before($error);
                         $('.qor-bottomsheets .qor-page__body').scrollTop(0);
+                        QOR.alert($error)
                     } else {
-                        window.alert([textStatus, errorThrown].join(': '));
+                        QOR.ajaxError.apply(this, arguments)
                     }
                 },
                 complete: function() {
@@ -3076,6 +3424,9 @@ $(function() {
 
             load = $.proxy(function() {
                 $.ajax(url, {
+                    headers: {
+                        'X-Layout': 'lite'
+                    },
                     method: method,
                     dataType: dataType,
                     success: $.proxy(function(response) {
@@ -3159,13 +3510,13 @@ $(function() {
                                 $bottomsheets.addClass(resourseData.bottomsheetClassname);
                             }
 
+                            this.addHeaderClass();
+
                             $bottomsheets.trigger('enable');
 
                             $bottomsheets.one(EVENT_HIDDEN, function() {
                                 $(this).trigger('disable');
                             });
-
-                            this.addHeaderClass();
                             $bottomsheets.data(data);
 
                             // handle after opened callback
@@ -3189,18 +3540,17 @@ $(function() {
                         if (!$('.qor-bottomsheets').is(':visible')) {
                             $('body').removeClass(CLASS_OPEN);
                         }
-                        var errors;
                         if ($('.qor-error span').length > 0) {
-                            errors = $('.qor-error span')
+                            let errors = $('.qor-error span')
                                 .map(function() {
                                     return $(this).text();
                                 })
                                 .get()
                                 .join(', ');
+                            QOR.alert(errors);
                         } else {
-                            errors = 'Server error, please try again later!';
+                            QOR.ajaxError.apply(this, arguments)
                         }
-                        window.alert(errors);
                     }, this)
                 });
             }, this);
@@ -3356,15 +3706,22 @@ $(function() {
 
             if (select2Data.remoteData) {
                 option.ajax = $.fn.select2.ajaxCommonOptions(select2Data);
-                let xurl = QOR.Xurl(select2Data["ajax-Url"], $this);
+                let url = select2Data.ajaxUrl || select2Data.originalAjaxUrl
+                let xurl = QOR.Xurl(url, $this);
+                let primaryKey = select2Data.remoteDataPrimaryKey;
+                delete select2Data["ajaxUrl"];
+                $this.removeAttr('data-ajax-url');
+                $this.attr('data-original-ajax-url', url);
 
-                delete select2Data["ajax-Url"];
                 option.ajax.url = function (params) {
                     xurl.query.keyword = [params.term];
                     xurl.query.page = params.page;
                     xurl.query.per_page = 20;
-                    let url = xurl.toString();
-                    return url
+                    let result = xurl.build();
+                    if (!result.notFound.length && !result.empties.length) {
+                        return result.url
+                    }
+                    return 'https://unsolvedy.dependency.localhost/' + result.notFound.concat(result.empties).toString()
                 };
 
                 option.templateResult = function(data) {
@@ -3385,6 +3742,13 @@ $(function() {
                     if (data.loading) return data.text;
                     data.QorChooserOptions = dataOptions;
                     let tmpl = $this.parents('.qor-field').find('[name="select2-selection-template"]');
+                    if (data.element) {
+                        if (primaryKey) {
+                            $(data.element).attr('data-value', data[primaryKey]);
+                        } else {
+                            $(data.element).attr('data-value', data.id);
+                        }
+                    }
                     if (tmpl.length > 0 && tmpl.data("raw")) {
                         var f = tmpl.data("func");
                         if (!f) {
@@ -3469,6 +3833,117 @@ $(function() {
 
 });
 
+(function(factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function($) {
+    'use strict';
+
+    let location = window.location,
+        NAMESPACE = 'qor.content_copy',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_CLICK = 'click.' + NAMESPACE;
+
+    function QorContentCopy(element, options) {
+        this.$element = $(element);
+        this.options = $.extend({}, QorContentCopy.DEFAULTS, $.isPlainObject(options) && options);
+        this.init();
+    }
+
+    QorContentCopy.prototype = {
+        constructor: QorContentCopy,
+
+        init: function() {
+            this.bind();
+        },
+
+        bind: function() {
+            var options = this.options;
+            this.$element.attr('href', 'javascript:void(0);')
+                .html('<i class="material-icons">content_copy</i>')
+                .on(EVENT_CLICK, options.label, $.proxy(this.do, this));
+        },
+
+        unbind: function() {
+            this.$element.off(EVENT_CLICK, this.do);
+        },
+
+        do: function(e) {
+            let $this = $(e.currentTarget),
+                value = $this.data('value');
+            if (!value) {
+                value = $this.data('value-b64');
+                if (value) {
+                    value = atob(value)
+                }
+            }
+            if (!value) {
+                let $el = $(this).parent().find("[data-content-copy-value]");
+                if ($el.length === 0) {
+                    return
+                }
+                value = $el.text()
+            }
+            let $temp = $("<input style='position: absolute; top: -200px'>");
+            $("body").append($temp);
+            $temp.val(value).select();
+            document.execCommand("copy");
+            $temp.remove();
+        },
+
+        destroy: function() {
+            this.unbind();
+            this.$element.removeData(NAMESPACE);
+        }
+    };
+
+    QorContentCopy.DEFAULTS = {};
+
+    QorContentCopy.plugin = function(options) {
+        return this.each(function() {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var fn;
+
+            if (!data) {
+                if (/destroy/.test(options)) {
+                    return;
+                }
+
+                $this.data(NAMESPACE, (data = new QorContentCopy(this, options)));
+            }
+
+            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+                fn.apply(data);
+            }
+        });
+    };
+
+    $(function() {
+        var selector = '[data-content-copy]';
+        var options = {};
+
+        $(document)
+            .on(EVENT_DISABLE, function(e) {
+                QorContentCopy.plugin.call($(selector, e.target), 'destroy');
+            })
+            .on(EVENT_ENABLE, function(e) {
+                QorContentCopy.plugin.call($(selector, e.target), options);
+            })
+            .triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorContentCopy;
+});
 (function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
@@ -4217,7 +4692,7 @@ $(function() {
     return QorCropper;
 });
 
-(function(factory) {
+(function (factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -4228,7 +4703,7 @@ $(function() {
         // Browser globals.
         factory(jQuery);
     }
-})(function($) {
+})(function ($) {
     'use strict';
 
     var NAMESPACE = 'qor.datepicker';
@@ -4244,7 +4719,7 @@ $(function() {
     function replaceText(str, data) {
         if (typeof str === 'string') {
             if (typeof data === 'object') {
-                $.each(data, function(key, val) {
+                $.each(data, function (key, val) {
                     str = str.replace('$[' + String(key).toLowerCase() + ']', val);
                 });
             }
@@ -4253,9 +4728,23 @@ $(function() {
         return str;
     }
 
+    $.extend(true, QOR.messages, {
+        datepicker: {
+            datepicker: {
+                title: 'Pick a date',
+                ok: 'OK',
+                cancel: 'Cancel'
+            }
+        }
+    });
+
     function QorDatepicker(element, options) {
         this.$element = $(element);
-        this.options = $.extend(true, {}, QorDatepicker.DEFAULTS, $.isPlainObject(options) && options);
+        this.options = $.extend(true, {}, {
+                text: QOR.messages.datepicker.datepicker
+            },
+            ($.isPlainObject(options) && options)
+        );
         this.date = null;
         this.formatDate = null;
         this.built = false;
@@ -4264,19 +4753,19 @@ $(function() {
     }
 
     QorDatepicker.prototype = {
-        init: function() {
+        init: function () {
             this.bind();
         },
 
-        bind: function() {
+        bind: function () {
             this.$element.on(EVENT_CLICK, $.proxy(this.show, this));
         },
 
-        unbind: function() {
+        unbind: function () {
             this.$element.off(EVENT_CLICK, this.show);
         },
 
-        build: function() {
+        build: function () {
             let $modal,
                 $ele = this.$element,
                 data = this.pickerData,
@@ -4285,8 +4774,12 @@ $(function() {
                     date: date,
                     inline: true
                 },
-                parent = $ele.closest(CLASS_PARENT),
-                $targetInput = parent.find(data.targetInput);
+                parent = $ele.closest(CLASS_PARENT);
+            if (data.format) {
+                datepickerOptions.format = data.format
+            }
+
+            let $targetInput = parent.find(data.targetInput);
 
             if (this.built) {
                 return;
@@ -4295,7 +4788,12 @@ $(function() {
             this.$modal = $modal = $(replaceText(QorDatepicker.TEMPLATE, this.options.text)).appendTo('body');
 
             if ($targetInput.length) {
-                datepickerOptions.date = $targetInput.val() ? new Date($targetInput.val()) : new Date();
+                let val = $targetInput.val(), date;
+                if (val.length) {
+                    datepickerOptions.date = datepickerOptions.format ? $.fn.qorDatepicker.parseDate(datepickerOptions.format, val): new Date(val);
+                } else {
+                    datepickerOptions.date = new Date();
+                }
             }
 
             if (data.targetInput && $targetInput.data('start-date')) {
@@ -4309,7 +4807,7 @@ $(function() {
             this.built = true;
         },
 
-        unbuild: function() {
+        unbuild: function () {
             if (!this.built) {
                 return;
             }
@@ -4317,7 +4815,7 @@ $(function() {
             this.$modal.find(CLASS_EMBEDDED).off(EVENT_CHANGE, this.change).qorDatepicker('destroy').end().find(CLASS_SAVE).off(EVENT_CLICK, this.pick).end().remove();
         },
 
-        change: function(e) {
+        change: function (e) {
             var $modal = this.$modal;
             var $target = $(e.target);
             var date;
@@ -4333,7 +4831,7 @@ $(function() {
                 );
         },
 
-        show: function() {
+        show: function () {
             if (!this.built) {
                 this.build();
             }
@@ -4341,7 +4839,7 @@ $(function() {
             this.$modal.qorModal('show');
         },
 
-        pick: function() {
+        pick: function () {
             let targetInputClass = this.pickerData.targetInput,
                 $element = this.$element,
                 $parent = $element.closest(CLASS_PARENT),
@@ -4360,23 +4858,14 @@ $(function() {
                     newValue = newValue + ' 00:00';
                 }
             }
-
             $targetInput.val(newValue).trigger('change');
             this.$modal.qorModal('hide');
         },
 
-        destroy: function() {
+        destroy: function () {
             this.unbind();
             this.unbuild();
             this.$element.removeData(NAMESPACE);
-        }
-    };
-
-    QorDatepicker.DEFAULTS = {
-        text: {
-            title: 'Pick a date',
-            ok: 'OK',
-            cancel: 'Cancel'
         }
     };
 
@@ -4399,8 +4888,8 @@ $(function() {
             </div>
         </div>`;
 
-    QorDatepicker.plugin = function(option) {
-        return this.each(function() {
+    QorDatepicker.plugin = function (option) {
+        return this.each(function () {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var options;
@@ -4425,14 +4914,20 @@ $(function() {
         });
     };
 
-    $(function() {
+    let $document = $(document);
+
+    $document.data('qor.datepicker', function (cb) {
+        return cb.call(QorDatepicker);
+    });
+
+    $(function () {
         var selector = '[data-toggle="qor.datepicker"]';
 
-        $(document)
-            .on(EVENT_DISABLE, function(e) {
+        $document
+            .on(EVENT_DISABLE, function (e) {
                 QorDatepicker.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function(e) {
+            .on(EVENT_ENABLE, function (e) {
                 QorDatepicker.plugin.call($(selector, e.target));
             })
             .triggerHandler(EVENT_ENABLE);
@@ -4876,31 +5371,16 @@ $(function() {
         CLASS_IS_ACTIVE = 'is-active',
         CLASS_BOTTOMSHEETS = '.qor-bottomsheets';
 
-    function encodeSearch(data, detached) {
-        var search = decodeURI(location.search);
-        var params;
+    let re = /([^&=]+)(=([^&]*))?/g;
+    let decodeRE = /\+/g;  // Regex for replacing addition symbol with a space
 
-        if ($.isArray(data)) {
-            params = decodeSearch(search);
-
-            $.each(data, function(i, param) {
-                i = $.inArray(param, params);
-
-                if (i === -1) {
-                    params.push(param);
-                } else if (detached) {
-                    params.splice(i, 1);
-                }
-            });
-
-            search = '?' + params.join('&');
-        }
-
-        return search;
+    function decode(str) {
+        return decodeURIComponent( str.replace(decodeRE, " ") )
     }
 
+
     function decodeSearch(search) {
-        var data = [];
+        let data = [];
 
         if (search && search.indexOf('?') > -1) {
             search = search.replace(/\+/g, ' ').split('?')[1];
@@ -4912,8 +5392,8 @@ $(function() {
             if (search) {
                 // search = search.toLowerCase();
                 data = $.map(search.split('&'), function(n) {
-                    var param = [];
-                    var value;
+                    let param = [];
+                    let value;
 
                     n = n.split('=');
                     if (/page/.test(n[0])) {
@@ -4936,6 +5416,53 @@ $(function() {
         }
 
         return data;
+    }
+
+    function parseParams(data) {
+        let query = decodeURI(data === undefined ? location.search : data),
+            params = {}, e, search;
+        if (query && query[0] === '?') {
+            query = query.substring(1)
+        }
+        while ( e = re.exec(query) ) {
+            let k = decode( e[1] ), v = decode( e[3] );
+            if (k.substring(k.length - 2) === '[]') {
+                (params[k] || (params[k] = [])).push(v);
+            }
+            else params[k] = v;
+        }
+        return {
+            params: params,
+            isArray: function(key) {
+                return key.substring(key.length - 2) === '[]'
+            },
+            remove: function (key) {
+                delete (this.params[key])
+            },
+            set: function(key, value) {
+                if (key.substring(key.length - 2) === '[]') {
+                    this.params[key] = this.params[key] || []
+                    this.params[key].push(value);
+                }
+                else this.params[key] = value;
+            },
+            removeAny: function (key, values) {
+                if (!this.params.hasOwnProperty(key)) return;
+                this.params[key] = this.params[key].filter(val => values.indexOf(val) < 0);
+                if (!this.params[key].length)
+                    this.remove(key)
+            },
+            removeItem: function (key, item) {
+                if (!this.params.hasOwnProperty(key)) return;
+                this.params[key] = this.params[key].filter(val => val !== item);
+                if (!this.params[key].length)
+                    this.remove(key)
+            },
+            encode: function () {
+                const search = $.param(this.params);
+                return search.length ? '?' + search : '';
+            }
+        }
     }
 
     function QorFilter(element, options) {
@@ -4966,68 +5493,48 @@ $(function() {
 
         toggle: function(e) {
             let $target = $(e.currentTarget),
-                data = [],
-                params,
-                param,
-                search,
-                name,
+                params = parseParams(),
+                paramName,
                 value,
-                index,
-                matched,
-                paramName;
+                search;
 
             if ($target.is('select')) {
-                params = decodeSearch(decodeURI(location.search));
-
-                paramName = name = $target.attr('name');
+                paramName = $target.attr('name');
                 value = $target.val();
-                param = [name];
-
-                if (value) {
-                    param.push(value);
-                }
-
-                param = param.join('=');
-
-                if (value) {
-                    data.push(param);
-                }
-
-                $target.children().each(function() {
-                    var $this = $(this);
-                    var param = [name];
-                    var value = $.trim($this.prop('value'));
-
+                if (params.isArray(paramName)) {
+                    let values = [];
+                    $target.children().each((_, el) => values[values.length] = $(el).prop('value'));
+                    params.removeAny(paramName, values);
                     if (value) {
-                        param.push(value);
+                        params.set(paramName, value)
                     }
-
-                    param = param.join('=');
-                    index = $.inArray(param, params);
-
-                    if (index > -1) {
-                        matched = param;
-                        return false;
-                    }
-                });
-
-                if (matched) {
-                    data.push(matched);
-                    search = encodeSearch(data, true);
                 } else {
-                    search = encodeSearch(data);
+                    if (value) params.set(paramName, value)
+                    else params.remove(paramName)
                 }
+                search = params.encode()
             } else if ($target.is('a')) {
                 e.preventDefault();
-                paramName = $target.data().paramName;
-                data = decodeSearch($target.attr('href'));
-                if ($target.hasClass(CLASS_IS_ACTIVE)) {
-                    search = encodeSearch(data, true); // set `true` to detach
+                let uri = $target.attr('href'),
+                    pos = uri.indexOf('?');
+                if (pos >= 0) {
+                    search = uri.substring(0, pos)
                 } else {
-                    search = encodeSearch(data);
+                    search = "?"
                 }
+            } else if ($target.is('input')) {
+                paramName = $target.attr('name');
+                value = $target.val();
+                if (value)
+                    params.set(paramName, value);
+                else
+                    params.remove(paramName);
+                search = params.encode()
             }
+            this.applySearch(search, paramName)
+        },
 
+        applySearch: function(search, paramName) {
             if (this.$element.closest(CLASS_BOTTOMSHEETS).length) {
                 $(CLASS_BOTTOMSHEETS).trigger(EVENT_FILTER_CHANGE, [search, paramName]);
             } else {
@@ -5070,7 +5577,7 @@ $(function() {
         var selector = '[data-toggle="qor.filter"]';
         var options = {
             label: 'a',
-            group: 'select'
+            group: 'select,input'
         };
 
         $(document)
@@ -5112,6 +5619,7 @@ $(function() {
     var CLASS_IS_HIDDEN = 'is-hidden';
     var CLASS_IS_FIXED = 'is-fixed';
     var CLASS_HEADER = '.qor-page__header';
+    var CLASS_BODY = '.qor-page__body';
 
     function QorFixer(element, options) {
         this.$element = $(element);
@@ -5138,7 +5646,6 @@ $(function() {
             this.paddingHeight = options.paddingHeight;
             this.fixedHeaderWidth = [];
             this.isEqualed = false;
-
             this.resize();
             this.bind();
         },
@@ -5301,6 +5808,346 @@ $(function() {
     });
 
     return QorFixer;
+
+});
+(function(factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function($) {
+    'use strict';
+
+    let NAMESPACE = 'qor.asyncFormSubmiter',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_SUBMIT = 'submit.' + NAMESPACE;
+
+    function QorAsyncFormSubmiter(element, options) {
+        this.$el = $(element);
+        this.options = $.extend({}, QorAsyncFormSubmiter.DEFAULTS, $.isPlainObject(options) && options);
+        this.init();
+    }
+
+    QorAsyncFormSubmiter.prototype = {
+        constructor: QorAsyncFormSubmiter,
+
+        init: function() {
+            this.bind();
+        },
+
+        bind: function() {
+            this.$el.bind(EVENT_SUBMIT, this.submit)
+        },
+
+        unbind: function() {
+            this.$el.off(EVENT_SUBMIT, this.submit);
+        },
+
+        destroy: function() {
+            this.unbind();
+            this.$el.removeData(NAMESPACE);
+        },
+
+        submit: function (e) {
+            var form = e.target;
+            var $form = $(form);
+            var _this = this;
+            var $submit = $form.find(':submit');
+
+            if (window.FormData) {
+                e.preventDefault();
+                let action = $form.prop('action'),
+                    continueEditing = /[?|&]continue_editing=true/.test(action);
+
+                if (continueEditing) {
+                    action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
+                }
+                $.ajax(action, {
+                    method: $form.prop('method'),
+                    data: new FormData(form),
+                    dataType: 'html',
+                    processData: false,
+                    contentType: false,
+                    headers: {
+                        'X-Layout': 'lite'
+                    },
+                    beforeSend: function () {
+                        $submit.prop('disabled', true);
+                    },
+                    success: function (html, statusText, jqXHR) {
+                        $form.parent().find('.qor-error').remove();
+                        let xLocation = jqXHR.getResponseHeader('X-Location');
+
+                        if (xLocation) {
+                            window.location.href = xLocation;
+                            return
+                        }
+
+                        let returnUrl = $form.data('returnUrl'),
+                            refreshUrl = $form.data('refreshUrl');
+
+                        if (refreshUrl) {
+                            window.location.href = refreshUrl;
+                            return;
+                        }
+
+                        if (returnUrl !== '') {
+                            location.href = returnUrl
+                            return;
+                        }
+
+                        var prefix = '/' + location.pathname.split('/')[1];
+                        var flashStructs = [];
+                        $(html)
+                            .find('.qor-alert')
+                            .each(function (i, e) {
+                                var message = $(e)
+                                    .find('.qor-alert-message')
+                                    .text()
+                                    .trim();
+                                var type = $(e).data('type');
+                                if (message !== '') {
+                                    flashStructs.push({
+                                        Type: type,
+                                        Message: message,
+                                        Keep: true
+                                    });
+                                }
+                            });
+                        if (flashStructs.length > 0) {
+                            document.cookie = 'qor-flashes=' + btoa(unescape(encodeURIComponent(JSON.stringify(flashStructs)))) + '; path=' + prefix;
+                        }
+                    }.bind(this),
+                    error: function (xhr, textStatus, errorThrown) {
+                        $form.parent().find('.qor-error').remove();
+
+                        var $error;
+
+                        if (xhr.status === 422) {
+                            $form
+                                .find('.qor-field')
+                                .removeClass('is-error')
+                                .find('.qor-field__error')
+                                .remove();
+
+                            $error = $(xhr.responseText).find('.qor-error');
+                            $form.before($error);
+
+                            $error.find('> li > label').each(function () {
+                                var $label = $(this);
+                                var id = $label.attr('for');
+
+                                if (id) {
+                                    $form
+                                        .find('#' + id)
+                                        .closest('.qor-field')
+                                        .addClass('is-error')
+                                        .append($label.clone().addClass('qor-field__error'));
+                                }
+                            });
+
+                            $('main').scrollTop($('main').scrollTop()+$form.siblings('.qor-error').offset().top)
+                        } else {
+                            QOR.ajaxError.apply(this, arguments)
+                        }
+                    }.bind(this),
+                    complete: function () {
+                        $submit.prop('disabled', false);
+                    }
+                });
+            }
+        }
+    };
+
+    QorAsyncFormSubmiter.DEFAULTS = {};
+
+    QorAsyncFormSubmiter.plugin = function(options) {
+        return this.each(function() {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var fn;
+
+            if (!data) {
+                if (/destroy/.test(options)) {
+                    return;
+                }
+                data = new QorAsyncFormSubmiter(this, options);
+                if (("asyncSubmiter" in data)) {
+                    $this.data(NAMESPACE, data);
+                } else {
+                    return
+                }
+            }
+
+            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+                fn.apply(data);
+            }
+        });
+    };
+
+    $(function() {
+        var selector = 'form[data-async="true"]';
+        var options = {};
+
+        $(document)
+            .on(EVENT_DISABLE, function(e) {
+                let $form = $(selector, e.target);
+                if ($form.parents('.qor-slideout').length) {
+                    return
+                }
+                QorAsyncFormSubmiter.plugin.call($form, 'destroy');
+            })
+            .on(EVENT_ENABLE, function(e) {
+                let $form = $(selector, e.target);
+                if ($form.parents('.qor-slideout').length) {
+                    return
+                }
+                QorAsyncFormSubmiter.plugin.call($(selector, e.target), options);
+            })
+            .triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorAsyncFormSubmiter;
+});
+(function(factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function($) {
+
+    'use strict';
+
+    var $window = $(window);
+    var _ = window._;
+    var NAMESPACE = 'qor.head-fixer';
+    var EVENT_ENABLE = 'enable.' + NAMESPACE;
+    var EVENT_DISABLE = 'disable.' + NAMESPACE;
+    var EVENT_RESIZE = 'resize.' + NAMESPACE;
+    var EVENT_BEFORE_PRINT = 'beforeprint.' + NAMESPACE;
+    var EVENT_AFTER_PRINT = 'afterprint.' + NAMESPACE;
+    var CLASS_HEADER = '.qor-page__header';
+    var CLASS_BODY = '.qor-page__body';
+
+    function QorHeadFixer(element, options) {
+        this.$element = $(element);
+        this.options = $.extend({}, QorHeadFixer.DEFAULTS, $.isPlainObject(options) && options);
+        this.$clone = null;
+        this.init();
+    }
+
+    QorHeadFixer.prototype = {
+        constructor: QorHeadFixer,
+
+        init: function() {
+            this.bind();
+            this.fix();
+        },
+
+        bind: function() {
+            $window.on(EVENT_RESIZE, this.fix.bind(this))
+                .on(EVENT_AFTER_PRINT, this.afterPrint.bind(this))
+                .on(EVENT_BEFORE_PRINT, this.beforePrint.bind(this));
+        },
+
+        unbind: function() {
+            $window.off(EVENT_RESIZE, this.fix)
+                .off(EVENT_AFTER_PRINT, this.afterPrint)
+                .off(EVENT_BEFORE_PRINT, this.beforePrint);
+        },
+
+        beforePrint: function() {
+            $(CLASS_BODY).each(function () {
+                $(this).removeAttr('style');
+            })
+        },
+
+        afterPrint: function() {
+            this.fix()
+        },
+
+        fix: function() {
+            $(CLASS_BODY).each(function () {
+                let $this = $(this),
+                    $header = $this.siblings(CLASS_HEADER);
+                if ($header.length === 0) return;
+                $this.css('paddingTop', 0);
+                if ($header.css('position') !== 'fixed') {
+                    $this.css('marginTop', 0);
+                } else {
+                    $this.css('marginTop', $header.height());
+                }
+                if ($header.children(':visible').length) {
+                    $header.removeClass('no-visibile-items', true).show()
+                } else {
+                    $header.addClass('no-visibile-items', true).hide()
+                }
+            })
+        },
+
+        destroy: function() {
+            this.unbind();
+            this.$element.removeData(NAMESPACE);
+        }
+    };
+
+    QorHeadFixer.DEFAULTS = {
+        header: false,
+        content: false
+    };
+
+    QorHeadFixer.plugin = function(options) {
+        return this.each(function() {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var fn;
+
+            if (!data) {
+                $this.data(NAMESPACE, (data = new QorHeadFixer(this, options)));
+            }
+
+            if (typeof options === 'string' && $.isFunction(fn = data[options])) {
+                fn.call(data);
+            }
+        });
+    };
+
+    $(function() {
+        if (/[?&]prin(t&|t$)/.test(location.search)) {
+            return
+        }
+        var selector = '.qor-js-table';
+        var options = {
+            header: '.mdl-layout__header',
+            subHeader: '.qor-page__header',
+            content: '.mdl-layout__content',
+            paddingHeight: 2 // Fix sub header height bug
+        };
+
+        $(document).
+        on(EVENT_DISABLE, function(e) {
+            QorHeadFixer.plugin.call($(e.target), 'destroy');
+        }).
+        on(EVENT_ENABLE, function(e) {
+            QorHeadFixer.plugin.call($(e.target), options);
+        }).
+        triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorHeadFixer;
 
 });
 (function(factory) {
@@ -5487,6 +6334,10 @@ $(function() {
     };
 
     $(function() {
+        if (/\/admin\//.test(location.href)) {
+            return this
+        }
+
         let selector = '[data-toggle="qor.inlineEdit"]',
             options = {};
 
@@ -5503,6 +6354,451 @@ $(function() {
     return QorInlineEdit;
 });
 
+(function(factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function($) {
+    'use strict';
+
+    let NAMESPACE = 'qor.input_mask',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE;
+
+    function QorInputMask(element, options) {
+        let $el = $(element);
+        let value = $el.data('masker');
+        if (value) {
+            this.$el = $el;
+            this.masker = atob(value);
+            this.options = $.extend({}, QorInputMask.DEFAULTS, $.isPlainObject(options) && options);
+            this.init();
+        } else {
+            this.maker = null;
+        }
+    }
+
+    QorInputMask.prototype = {
+        constructor: QorInputMask,
+
+        init: function() {
+            this.bind();
+        },
+
+        bind: function() {
+            (function (masker) {
+                eval(masker)
+            }).call(this.$el, this.masker);
+        },
+
+        unbind: function() {
+            this.$el.unmask();
+        },
+
+        destroy: function() {
+            this.unbind();
+            this.$el.removeData(NAMESPACE);
+        }
+    };
+
+    QorInputMask.DEFAULTS = {};
+
+    QorInputMask.plugin = function(options) {
+        return this.each(function() {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var fn;
+
+            if (!data) {
+                if (/destroy/.test(options)) {
+                    return;
+                }
+                data = new QorInputMask(this, options);
+                if (("masker" in data)) {
+                    $this.data(NAMESPACE, data);
+                } else {
+                    return
+                }
+            }
+
+            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+                fn.apply(data);
+            }
+        });
+    };
+
+    $(function() {
+        var selector = '[data-masker]';
+        var options = {};
+
+        $(document)
+            .on(EVENT_DISABLE, function(e) {
+                QorInputMask.plugin.call($(selector, e.target), 'destroy');
+            })
+            .on(EVENT_ENABLE, function(e) {
+                QorInputMask.plugin.call($(selector, e.target), options);
+            })
+            .triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorInputMask;
+});
+(function (factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function ($) {
+    'use strict';
+
+    let NAMESPACE = 'qor.input_money',
+        SELECTOR = 'input.input-money',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE;
+
+    function QorInputMoney(element, options) {
+        this.$el = $(element);
+        this.init();
+    }
+
+    QorInputMoney.prototype = {
+        constructor: QorInputMoney,
+
+        init: function () {
+            this.bind();
+        },
+
+        bind: function () {
+            this.$el.maskMoney();
+        },
+
+        destroy: function () {
+            this.$el.maskMoney('destroy');
+            this.$el.removeData(NAMESPACE);
+        }
+    };
+
+    QorInputMoney.DEFAULTS = {};
+
+    QorInputMoney.plugin = function (options) {
+        let args = Array.prototype.slice.call(arguments, 1),
+            result;
+
+        return this.each(function () {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var fn;
+
+            if (!data) {
+                if (/destroy/.test(options)) {
+                    return;
+                }
+                data = new QorInputMoney(this, options);
+                if (("$el" in data)) {
+                    $this.data(NAMESPACE, data);
+                } else {
+                    return
+                }
+            }
+
+            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+                result = fn.apply(data, args);
+            }
+        });
+
+        return (typeof result === 'undefined') ? this : result;
+    };
+
+    $(function () {
+        var options = {};
+
+        $(document)
+            .on(EVENT_DISABLE, function (e) {
+                QorInputMoney.plugin.call($(SELECTOR, e.target), 'destroy');
+            })
+            .on(EVENT_ENABLE, function (e) {
+                QorInputMoney.plugin.call($(SELECTOR, e.target), options);
+            })
+            .triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorInputMoney;
+});
+(function (factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function ($) {
+    'use strict';
+
+    let NAMESPACE = 'qor.input_remote_validation',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_CHANGE = 'change.' + NAMESPACE;
+
+    function QorInputValidator(element, options) {
+        let $el = $(element),
+            $form = $el.parents('form'),
+            validator = $el.data('validator');
+        options = $.extend({}, QorInputValidator.DEFAULTS, $.isPlainObject(options) && options)
+        
+        if (!(validator)) {
+            return
+        }
+        eval('validator = function(){'+atob(validator)+'};');
+        this.validator = validator.call(this);
+        if (!$.isFunction(this.validator)) {
+            alert("ERROR: BAD input validator for '"+$el.attr('name')+"'");
+            return;
+        }
+        this.$el = $el;
+        this.$form = $form;
+        this.options = options;
+        this.init();
+    }
+
+    QorInputValidator.prototype = {
+        constructor: QorInputValidator,
+
+        init: function () {
+            this.bind();
+        },
+
+        _do: function() {},
+
+        bind: function () {
+            this.$el.on(EVENT_CHANGE, this.validate.bind(this));
+            this.$form.formValidator('register', this._validateByForm.bind(this), function (validator) {
+                this._do = validator;
+            }.bind(this));
+        },
+
+        _validateByForm: function(done, e) {
+            this.validator(done, e)
+        },
+
+        validator: function(e, done) {},
+
+        validate: function(e) {
+            if (this.$el.val() === this.$el[0].defaultValue) {
+                return true;
+            }
+            this._do(function (err) {
+                if (err) {
+                    QOR.alert(err, function () {
+                        this.$el.focus();
+                    }.bind(this));
+                }
+            }.bind(this), e);
+            return false
+        },
+
+        unbind: function () {
+            this.$el.off(EVENT_CHANGE);
+        },
+
+        destroy: function () {
+            this.unbind();
+            this.$el.removeData(NAMESPACE);
+        }
+    };
+
+    QorInputValidator.DEFAULTS = {};
+
+    QorInputValidator.plugin = function (options) {
+        let args = Array.prototype.slice.call(arguments, 1),
+            result;
+
+        return this.each(function () {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var fn;
+
+            if (!data) {
+                if (/destroy/.test(options)) {
+                    return;
+                }
+                data = new QorInputValidator(this, options);
+                if (("$el" in data)) {
+                    $this.data(NAMESPACE, data);
+                } else {
+                    return
+                }
+            }
+
+            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+                result = fn.apply(data, args);
+            }
+        });
+
+        return (typeof result === 'undefined') ? this : result;
+    };
+
+    $(function () {
+        var selector = '[data-validator]';
+        var options = {};
+
+        $(document)
+            .on(EVENT_DISABLE, function (e) {
+                QorInputValidator.plugin.call($(selector, e.target), 'destroy');
+            })
+            .on(EVENT_ENABLE, function (e) {
+                QorInputValidator.plugin.call($(selector, e.target), options);
+            })
+            .triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorInputValidator;
+});
+(function (factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function ($) {
+    'use strict';
+
+    let NAMESPACE = 'qor.logo',
+        SELECTOR = '.qor-logo[data-src]',
+        EVENT_LOAD = 'load.'+NAMESPACE,
+        EVENT_ERROR = 'error.'+NAMESPACE,
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE;
+
+    function QorLogo(element, options) {
+        this.$el = $(element);
+        this.data = this.$el.data();
+        this.$img = $("<img />");
+        this.fallback = false;
+        this.init();
+    }
+
+    QorLogo.prototype = {
+        constructor: QorLogo,
+
+        init: function () {
+            this.build();
+        },
+
+        build: function () {
+            this.$img
+                .attr('src', this.data.src)
+                .on(EVENT_LOAD, this.onload.bind(this))
+                .on(EVENT_ERROR, this.onerror.bind(this));
+
+            if (this.data.alt) {
+                this.$img.attr('alt', this.data.alt)
+            }
+            if (this.data.title) {
+                this.$img.attr('title', this.data.title)
+            }
+
+            this.$el.show().append(this.$img);
+        },
+
+        onerror: function(e) {
+            if (this.fallback) {
+                this.destroy();
+                return
+            }
+            if (this.data.fallback) {
+                this.fallback = true;
+                this.$img.attr('src', this.data.fallback);
+            } else {
+                this.destroy();
+            }
+        },
+
+        onload: function(e) {
+            this.unbind();
+        },
+
+        unbind: function () {
+            this.$img
+                .off(EVENT_LOAD, this.onload)
+                .off(EVENT_ERROR, this.onerror);
+        },
+
+        destroy: function () {
+            this.unbind();
+            this.$el.removeData(NAMESPACE);
+            this.$el.hide();
+            this.$img.remove();
+        }
+    };
+
+    QorLogo.DEFAULTS = {};
+
+    QorLogo.plugin = function (options) {
+        let args = Array.prototype.slice.call(arguments, 1),
+            result;
+
+        return this.each(function () {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var fn;
+
+            if (!data) {
+                if (/destroy/.test(options)) {
+                    return;
+                }
+                data = new QorLogo(this, options);
+                if (("$el" in data)) {
+                    $this.data(NAMESPACE, data);
+                } else {
+                    return
+                }
+            }
+
+            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+                result = fn.apply(data, args);
+            }
+        });
+
+        return (typeof result === 'undefined') ? this : result;
+    };
+
+    $(function () {
+        var options = {};
+
+        $(document)
+            .on(EVENT_DISABLE, function (e) {
+                QorLogo.plugin.call($(SELECTOR, e.target), 'destroy');
+            })
+            .on(EVENT_ENABLE, function (e) {
+                QorLogo.plugin.call($(SELECTOR, e.target), options);
+            })
+            .triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorLogo;
+});
 (function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
@@ -5836,7 +7132,6 @@ $(function() {
     unbind: function () {
       this.$element.off(EVENT_CLICK, CLASS_TAB, this.switchTab);
     },
-
 
     switchTab: function (e) {
       var $target = $(e.target),
@@ -6420,7 +7715,7 @@ $(function() {
 
         init: function() {
             let $element = this.$element,
-                $template = $element.find('> .qor-field__block > .qor-fieldset--new'),
+                $template = $element.find('> .qor-field__block > [type="qor-collection-edit-new/html"]'),
                 fieldsetName;
 
             this.isInSlideout = $element.closest('.qor-slideout').length;
@@ -6428,12 +7723,9 @@ $(function() {
             this.maxitems = $element.data('maxItem');
             this.isSortable = $element.hasClass('qor-fieldset-sortable');
 
-            if (!$template.length || $element.closest('.qor-fieldset--new').length) {
+            if (!$template.length) {
                 return;
             }
-
-            // Should destroy all components here
-            $template.trigger('disable');
 
             // if have isMultiple data value or template length large than 1
             this.isMultipleTemplate = $element.data('isMultiple');
@@ -6446,18 +7738,17 @@ $(function() {
                 $template.each((i, ele) => {
                     fieldsetName = $(ele).data('fieldsetName');
                     if (fieldsetName) {
-                        this.template[fieldsetName] = $(ele).prop('outerHTML');
+                        this.template[fieldsetName] = $(ele).html();
                         this.fieldsetName.push(fieldsetName);
                     }
                 });
 
                 this.parseMultiple();
             } else {
-                this.template = $template.prop('outerHTML');
-                this.parse();
+                this.template = $template.html();
+                this.index = $template.data("next-index");
             }
 
-            $template.hide();
             this.bind();
             this.resetButton();
             this.resetPositionButton();
@@ -6476,7 +7767,7 @@ $(function() {
         },
 
         getCurrentItems: function() {
-            return this.$element.find('> .qor-field__block > .qor-fieldset').not('.qor-fieldset--new,.is-deleted').length;
+            return this.$element.find('> .qor-field__block > .qor-fieldset').not('.is-deleted').length;
         },
 
         toggleButton: function(isHide) {
@@ -6497,17 +7788,6 @@ $(function() {
             }
         },
 
-        parse: function() {
-            let template;
-
-            if (!this.template) {
-                return;
-            }
-            template = this.initTemplate(this.template);
-            this.template = template.template;
-            this.index = template.index;
-        },
-
         parseMultiple: function() {
             let template,
                 name,
@@ -6523,43 +7803,10 @@ $(function() {
             this.multipleIndex = _.max(this.index);
         },
 
-        initTemplate: function(template) {
-            let i,
-                hasInlineReplicator = this.hasInlineReplicator;
-
-            template = template.replace(/(\w+)\="(\S*\[\d+\]\S*)"/g, function(attribute, name, value) {
-                value = value.replace(/^(\S*)\[(\d+)\]([^\[\]]*)$/, function(input, prefix, index, suffix) {
-                    if (input === value) {
-                        if (name === 'name' && !i) {
-                            i = index;
-                        }
-
-                        if (hasInlineReplicator && /\[\d+\]/.test(prefix)) {
-                            return input.replace(/\[\d+\]/, '[{{index}}]');
-                        } else {
-                            return prefix + '[{{index}}]' + suffix;
-                        }
-                    }
-                });
-
-                return name + '="' + value + '"';
-            });
-
-            return {
-                template: template,
-                index: parseFloat(i)
-            };
-        },
-
         bind: function() {
             let options = this.options;
 
             this.$element.on(EVENT_CLICK, options.addClass, $.proxy(this.add, this)).on(EVENT_CLICK, options.delClass, $.proxy(this.del, this));
-
-            !this.isInSlideout && $(document).on(EVENT_SUBMIT, 'form', this.removeData.bind(this));
-            $(document)
-                .on(EVENT_SLIDEOUTBEFORESEND, '.qor-slideout', this.removeData.bind(this))
-                .on(EVENT_SELECTCOREBEFORESEND, this.removeData.bind(this));
         },
 
         unbind: function() {
@@ -6569,10 +7816,6 @@ $(function() {
             $(document)
                 .off(EVENT_SLIDEOUTBEFORESEND, '.qor-slideout')
                 .off(EVENT_SELECTCOREBEFORESEND);
-        },
-
-        removeData: function() {
-            $('.qor-fieldset--new').remove();
         },
 
         add: function(e, data, isAutomatically) {
@@ -6649,10 +7892,11 @@ $(function() {
             let $item,
                 $element = this.$element;
 
-            $item = $(this.template.replace(/\{\{index\}\}/g, this.index));
+            $item = $(this.template.replace(/(="\S*)(\{\{index\}\})/g, (input, prefix) => prefix+this.index));
+
             // add order property for sortable fieldset
             if (this.isSortable) {
-                let order = $element.find('> .qor-field__block > .qor-sortable__item').not('.qor-fieldset--new').length;
+                let order = $element.find('> .qor-field__block > .qor-sortable__item').length;
                 $item.attr('order-index', order).css('order', order);
             }
 
@@ -6982,7 +8226,8 @@ $(function() {
                 options = this.options,
                 onSelect = options.onSelect;
 
-            data = $.extend({}, data, $this.data());
+            data = $this.data();
+            data = $.extend({}, {}, data);
             data.$clickElement = $this;
 
             url = data.mediaLibraryUrl || data.url;
@@ -7383,9 +8628,9 @@ $(function() {
                     return keys[1];
                 }
                 return keys[0];
-            }
+            };
 
-            data.displayName = data.Text || data.Name || data.Title || data.Code || data[firstKey()];
+            data.displayName = data.Text || data.Name || data.Title || data.Code || data.Value || data[firstKey()];
 
             if (isNewData) {
                 this.addItem(data, true);
@@ -7486,6 +8731,7 @@ $(function() {
   function QorSelectOne(element, options) {
     this.$element = $(element);
     this.options = $.extend({}, QorSelectOne.DEFAULTS, $.isPlainObject(options) && options);
+    this.selectedRender = null;
     this.init();
   }
 
@@ -7507,6 +8753,10 @@ $(function() {
     constructor: QorSelectOne,
 
     init: function() {
+      let selectedRender = this.$element.data().selectedRender;
+      if (selectedRender) {
+        eval('this.selectedRender = function(data){'+atob(selectedRender)+'};');
+      }
       this.$selectOneSelectedTemplate = this.$element.find('[name="select-one-selected-template"]');
       this.$selectOneSelectedIconTemplate = this.$element.find('[name="select-one-selected-icon"]');
       this.bind();
@@ -7634,7 +8884,7 @@ $(function() {
           $selectFeild = $parent.find(CLASS_SELECT_FIELD);
 
       data.displayName = lock.displayField ? data[lock.displayField] :
-          (data.Text || data.Name || data.Title || data.Code || firstTextKey(data));
+          (data.Text || data.Name || data.Title || data.Value || data.Code || firstTextKey(data));
       data.selectoneValue = lock.primaryField ? data[lock.primaryField] : (data.primaryKey || data.ID);
 
       if (lock.iconField) {
@@ -7649,6 +8899,9 @@ $(function() {
         return;
       }
 
+      if (this.selectedRender) {
+        data.displayText = this.selectedRender(data)
+      }
       template = this.renderSelectOne(data);
 
       if ($selectFeild.length) {
@@ -7678,10 +8931,11 @@ $(function() {
   QorSelectOne.SELECT_ONE_OPTION_TEMPLATE = '<option value="[[ selectoneValue ]]" selected>[[ displayName ]]</option>';
 
   QorSelectOne.plugin = function(options) {
+    let args = Array.prototype.slice.call(arguments, 1);
     return this.each(function() {
-      var $this = $(this);
-      var data = $this.data(NAMESPACE);
-      var fn;
+      let $this = $(this),
+        data = $this.data(NAMESPACE),
+        fn;
 
       if (!data) {
         if (/destroy/.test(options)) {
@@ -7692,7 +8946,7 @@ $(function() {
       }
 
       if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
-        fn.apply(data);
+        fn.apply(data, args);
       }
     });
   };
@@ -7983,7 +9237,7 @@ $(function() {
     return QorSelector;
 
 });
-(function(factory) {
+(function (factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -7994,7 +9248,7 @@ $(function() {
         // Browser globals.
         factory(jQuery);
     }
-})(function($) {
+})(function ($) {
     'use strict';
 
     let $document = $(document),
@@ -8020,7 +9274,9 @@ $(function() {
         CLASS_IS_SELECTED = 'is-selected',
         CLASS_MAIN_CONTENT = '.mdl-layout__content.qor-page',
         CLASS_HEADER_LOCALE = '.qor-actions__locale',
-        CLASS_BODY_LOADING = '.qor-body__loading';
+        CLASS_BODY_LOADING = '.qor-body__loading',
+        CLASS_ACTION_BUTTON = '.qor-action-button',
+        CLASS_FOOTER_COPYRIGTH = '.qor-page__footer_copy-rigth';
 
     function replaceHtml(el, html) {
         let oldEl = typeof el === 'string' ? document.getElementById(el) : el,
@@ -8035,7 +9291,7 @@ $(function() {
             prop = 'href';
 
         isScript && (prop = 'src');
-        $ele.each(function() {
+        $ele.each(function () {
             array.push($(this).attr(prop));
         });
         return _.uniq(array);
@@ -8058,7 +9314,7 @@ $(function() {
         for (let i = 0, len = srcs.length; i < len; i++) {
             let script = document.createElement('script');
 
-            script.onload = function() {
+            script.onload = function () {
                 scriptsLoaded++;
 
                 if (scriptsLoaded === srcs.length) {
@@ -8083,7 +9339,7 @@ $(function() {
 
         ss.type = 'text/css';
         ss.rel = 'stylesheet';
-        ss.onload = function() {
+        ss.onload = function () {
             if (srcs.length) {
                 loadStyles(srcs);
             }
@@ -8112,6 +9368,7 @@ $(function() {
     function QorSlideout(element, options) {
         this.$element = $(element);
         this.options = $.extend({}, QorSlideout.DEFAULTS, $.isPlainObject(options) && options);
+        this.options.language = this.options.language || this.$element.attr("lang") || $('html').attr('lang');
         this.slided = false;
         this.disabled = false;
         this.slideoutType = false;
@@ -8121,23 +9378,23 @@ $(function() {
     QorSlideout.prototype = {
         constructor: QorSlideout,
 
-        init: function() {
+        init: function () {
             this.build();
             this.bind();
         },
 
-        build: function() {
+        build: function () {
             var $slideout;
 
             this.$slideout = $slideout = $(QorSlideout.TEMPLATE).appendTo('body');
             this.$slideoutTemplate = $slideout.html();
         },
 
-        unbuild: function() {
+        unbuild: function () {
             this.$slideout.remove();
         },
 
-        bind: function() {
+        bind: function () {
             this.$slideout
                 .on(EVENT_SUBMIT, 'form', this.submit.bind(this))
                 .on(EVENT_CLICK, '.qor-slideout__fullscreen', this.toggleSlideoutMode.bind(this))
@@ -8146,13 +9403,13 @@ $(function() {
             $document.on(EVENT_KEYUP, $.proxy(this.keyup, this));
         },
 
-        unbind: function() {
+        unbind: function () {
             this.$slideout.off(EVENT_SUBMIT, this.submit).off(EVENT_CLICK);
 
             $document.off(EVENT_KEYUP, this.keyup);
         },
 
-        keyup: function(e) {
+        keyup: function (e) {
             if (e.which === 27) {
                 if ($('.qor-bottomsheets').is(':visible') || $('.qor-modal').is(':visible') || $('#redactor-modal-box').length || $('#dialog').is(':visible')) {
                     return;
@@ -8163,7 +9420,7 @@ $(function() {
             }
         },
 
-        loadExtraResource: function(data) {
+        loadExtraResource: function (data) {
             let styleDiff = compareLinks(data.$links),
                 scriptDiff = compareScripts(data.$scripts);
 
@@ -8176,24 +9433,24 @@ $(function() {
             }
         },
 
-        removeSelectedClass: function() {
+        removeSelectedClass: function () {
             this.$element.find('[data-url]').removeClass(CLASS_IS_SELECTED);
         },
 
-        addLoading: function() {
+        addLoading: function () {
             $(CLASS_BODY_LOADING).remove();
             var $loading = $(QorSlideout.TEMPLATE_LOADING);
             $loading.appendTo($('body')).trigger('enable');
         },
 
-        toggleSlideoutMode: function() {
+        toggleSlideoutMode: function () {
             this.$slideout
                 .toggleClass('qor-slideout__fullscreen')
                 .find('.qor-slideout__fullscreen i')
                 .toggle();
         },
 
-        submit: function(e) {
+        submit: function (e) {
             var $slideout = this.$slideout;
             var $body = this.$body;
             var form = e.target;
@@ -8206,10 +9463,15 @@ $(function() {
             if (FormData) {
                 e.preventDefault();
                 let action = $form.prop('action'),
-                    continueEditing = /[?|&]continue_editing=true/.test(action);
+                    continueEditing = /[?|&]continue_editing=true/.test(action),
+                    headers = {
+                        'X-Layout': 'lite'
+                    };
 
                 if (continueEditing) {
                     action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
+                } else {
+                    headers["X-Redirection-Disabled"] = "true"
                 }
                 $.ajax(action, {
                     method: $form.prop('method'),
@@ -8217,15 +9479,24 @@ $(function() {
                     dataType: 'html',
                     processData: false,
                     contentType: false,
-                    beforeSend: function() {
+                    headers: headers,
+                    beforeSend: function () {
                         $submit.prop('disabled', true);
                         $.fn.qorSlideoutBeforeHide = null;
                     },
-                    success: function(html, statusText, jqXHR) {
+                    success: function (html, statusText, jqXHR) {
+                        $form.parent().find('.qor-error').remove();
                         $slideout.trigger(EVENT_SLIDEOUT_SUBMIT_COMPLEMENT);
                         let xLocation = jqXHR.getResponseHeader('X-Location');
 
                         if (xLocation) {
+                            if (e.originalEvent && e.originalEvent.explicitOriginalTarget) {
+                                let data = $(e.originalEvent.explicitOriginalTarget).data();
+                                if (data.submitSuccessTarget === "window") {
+                                    window.location.href = xLocation;
+                                    return;
+                                }
+                            }
                             _this.load(xLocation);
                             return
                         }
@@ -8250,7 +9521,7 @@ $(function() {
                             var flashStructs = [];
                             $(html)
                                 .find('.qor-alert')
-                                .each(function(i, e) {
+                                .each(function (i, e) {
                                     var message = $(e)
                                         .find('.qor-alert-message')
                                         .text()
@@ -8270,11 +9541,12 @@ $(function() {
                             _this.refresh();
                         }
                     },
-                    error: function(xhr, textStatus, errorThrown) {
+                    error: function (xhr, textStatus, errorThrown) {
+                        $form.parent().find('.qor-error').remove();
+
                         var $error;
 
                         if (xhr.status === 422) {
-                            $body.find('.qor-error').remove();
                             $form
                                 .find('.qor-field')
                                 .removeClass('is-error')
@@ -8284,7 +9556,7 @@ $(function() {
                             $error = $(xhr.responseText).find('.qor-error');
                             $form.before($error);
 
-                            $error.find('> li > label').each(function() {
+                            $error.find('> li > label').each(function () {
                                 var $label = $(this);
                                 var id = $label.attr('for');
 
@@ -8299,17 +9571,36 @@ $(function() {
 
                             $slideout.scrollTop(0);
                         } else {
-                            window.alert([textStatus, errorThrown].join(': '));
+                            QOR.ajaxError.apply(this, arguments)
                         }
                     },
-                    complete: function() {
+                    complete: function () {
                         $submit.prop('disabled', false);
                     }
                 });
             }
         },
 
-        load: function(url, data) {
+        showOnLoad: function(url, response) {
+            this.show();
+
+            // callback for after slider loaded HTML
+            // this callback is deprecated, use slideoutLoaded.qor.slideout event.
+            var qorSliderAfterShow = $.fn.qorSliderAfterShow;
+            if (qorSliderAfterShow) {
+                for (var name in qorSliderAfterShow) {
+                    if (qorSliderAfterShow.hasOwnProperty(name) && $.isFunction(qorSliderAfterShow[name])) {
+                        qorSliderAfterShow[name]['isLoaded'] = true;
+                        qorSliderAfterShow[name].call(this, url, response);
+                    }
+                }
+            }
+
+            // will trigger slideoutLoaded.qor.slideout event after slideout loaded
+            this.$slideout.trigger(EVENT_SLIDEOUT_LOADED, [url, response]);
+        },
+
+        load: function (url, data) {
             var options = this.options;
             var method;
             var dataType;
@@ -8323,28 +9614,63 @@ $(function() {
 
             data = $.isPlainObject(data) ? data : {};
 
+            if (data.image) {
+                // reset slideout header and body
+                $slideout.html(this.$slideoutTemplate);
+                let $title = $slideout.find('.qor-slideout__title');
+                if (data.title) {
+                    $title.html(data.title)
+                } else {
+                    $title.remove();
+                }
+                this.$body = $slideout.find('.qor-slideout__body')
+                let response = '<div class="center-text"><img src="'+url+'"></div>';
+                this.$body.html(response);
+
+                $(CLASS_BODY_LOADING).remove();
+                $slideout
+                    .one(EVENT_SHOWN, function () {
+                        $(this).trigger('enable');
+                    })
+                    .one(EVENT_HIDDEN, function () {
+                        $(this).trigger('disable');
+                    });
+                this.showOnLoad(url, response, false);
+                return;
+            }
+
             method = data.method ? data.method : 'GET';
             dataType = data.datatype ? data.datatype : 'html';
 
-            load = $.proxy(function() {
+            load = $.proxy(function () {
                 $.ajax(url, {
                     method: method,
                     dataType: dataType,
                     cache: true,
                     ifModified: true,
-                    success: $.proxy(function(response) {
-                        let $response, $content, $qorFormContainer, $scripts, $links, bodyClass;
+                    headers: {
+                        'X-Layout': 'lite'
+                    },
+                    success: $.proxy(function (response) {
+                        let $response, $content, $qorFormContainer, $form, $scripts, $links, bodyClass;
 
                         $(CLASS_BODY_LOADING).remove();
 
                         if (method === 'GET') {
                             $response = $(response);
                             $content = $response.find(CLASS_MAIN_CONTENT);
+                            if (!$content.length) {
+                                return;
+                            }
+
+                            $content.find(CLASS_ACTION_BUTTON).attr('data-disable-success-redirection', 'true');
+                            $content.find(CLASS_FOOTER_COPYRIGTH).remove();
                             $qorFormContainer = $content.find('.qor-form-container');
                             this.slideoutType = $qorFormContainer.length && $qorFormContainer.data().slideoutType;
 
-                            if (!$content.length) {
-                                return;
+                            $form = $qorFormContainer.find('form');
+                            if ($form.length === 1) {
+                                $form.data(QOR.SUBMITER, this.submit.bind(this));
                             }
 
                             let bodyHtml = response.match(/<\s*body.*>[\s\S]*<\s*\/body\s*>/gi);
@@ -8380,7 +9706,8 @@ $(function() {
                                     response: response
                                 };
 
-                                loadScripts($scripts, data, function() {});
+                                loadScripts($scripts, data, function () {
+                                });
                             }
 
                             if ($links.length) {
@@ -8399,30 +9726,15 @@ $(function() {
                             this.$body.find(CLASS_HEADER_LOCALE).remove();
 
                             $slideout
-                                .one(EVENT_SHOWN, function() {
+                                .one(EVENT_SHOWN, function () {
                                     $(this).trigger('enable');
                                 })
-                                .one(EVENT_HIDDEN, function() {
+                                .one(EVENT_HIDDEN, function () {
                                     $(this).trigger('disable');
                                 });
 
                             $slideout.find('.qor-slideout__opennew').attr('href', url);
-                            this.show();
-
-                            // callback for after slider loaded HTML
-                            // this callback is deprecated, use slideoutLoaded.qor.slideout event.
-                            var qorSliderAfterShow = $.fn.qorSliderAfterShow;
-                            if (qorSliderAfterShow) {
-                                for (var name in qorSliderAfterShow) {
-                                    if (qorSliderAfterShow.hasOwnProperty(name) && $.isFunction(qorSliderAfterShow[name])) {
-                                        qorSliderAfterShow[name]['isLoaded'] = true;
-                                        qorSliderAfterShow[name].call(this, url, response);
-                                    }
-                                }
-                            }
-
-                            // will trigger slideoutLoaded.qor.slideout event after slideout loaded
-                            $slideout.trigger(EVENT_SLIDEOUT_LOADED, [url, response]);
+                            this.showOnLoad(url, response);
                         } else {
                             if (data.returnUrl) {
                                 this.load(data.returnUrl);
@@ -8432,20 +9744,19 @@ $(function() {
                         }
                     }, this),
 
-                    error: $.proxy(function() {
-                        var errors;
+                    error: $.proxy(function () {
                         $(CLASS_BODY_LOADING).remove();
                         if ($('.qor-error span').length > 0) {
-                            errors = $('.qor-error span')
-                                .map(function() {
+                            let errors = $('.qor-error span')
+                                .map(function () {
                                     return $(this).text();
                                 })
                                 .get()
                                 .join(', ');
+                            QOR.alert(errors)
                         } else {
-                            errors = 'Server error, please try again later!';
+                            QOR.ajaxError.apply(this, arguments)
                         }
-                        window.alert(errors);
                     }, this)
                 });
             }, this);
@@ -8458,17 +9769,17 @@ $(function() {
             }
         },
 
-        open: function(options) {
+        open: function (options) {
             this.addLoading();
-            this.load(options.url, options.data);
+            return this.load(options.url, options.data || options);
         },
 
-        reload: function(url) {
+        reload: function (url) {
             this.hide(true);
             this.load(url);
         },
 
-        show: function() {
+        show: function () {
             var $slideout = this.$slideout;
             var showEvent;
 
@@ -8493,7 +9804,7 @@ $(function() {
                 .scrollTop(0);
         },
 
-        shown: function() {
+        shown: function () {
             this.slided = true;
             // Disable to scroll body element
             $('body').addClass(CLASS_OPEN);
@@ -8503,19 +9814,16 @@ $(function() {
                 .trigger('afterEnable.qor.slideout');
         },
 
-        closeSlideout: function() {
+        closeSlideout: function () {
             this.hide();
         },
 
-        hide: function(isReload) {
+        hide: function (isReload) {
             let _this = this,
-                message = {
-                    confirm:
-                        'You have unsaved changes on this slideout. If you close this slideout, you will lose all unsaved changes. Are you sure you want to close the slideout?'
-                };
+                message = QOR.messages.slideout;
 
             if ($.fn.qorSlideoutBeforeHide) {
-                window.QOR.qorConfirm(message, function(confirm) {
+                window.QOR.qorConfirm(message, function (confirm) {
                     if (confirm) {
                         _this.hideSlideout(isReload);
                     }
@@ -8527,7 +9835,7 @@ $(function() {
             this.removeSelectedClass();
         },
 
-        hideSlideout: function(isReload) {
+        hideSlideout: function (isReload) {
             var $slideout = this.$slideout;
             var hideEvent;
             var $datePicker = $('.qor-datepicker').not('.hidden');
@@ -8555,7 +9863,7 @@ $(function() {
             !isReload && $slideout.trigger(EVENT_SLIDEOUT_CLOSED);
         },
 
-        hidden: function() {
+        hidden: function () {
             this.slided = false;
 
             // Enable to scroll body element
@@ -8564,20 +9872,27 @@ $(function() {
             this.$slideout.removeClass(CLASS_IS_SHOWN).trigger(EVENT_HIDDEN);
         },
 
-        refresh: function() {
+        refresh: function () {
             this.hide();
 
-            setTimeout(function() {
+            setTimeout(function () {
                 window.location.reload();
             }, 350);
         },
 
-        destroy: function() {
+        destroy: function () {
             this.unbind();
             this.unbuild();
             this.$element.removeData(NAMESPACE);
         }
     };
+
+    $.extend({}, QOR.messages, {
+        slideout:{
+            confirm: 'You have unsaved changes on this slideout. If you close this slideout, you will lose all ' +
+                'unsaved changes. Are you sure you want to close the slideout?'
+        }
+    }, true);
 
     QorSlideout.DEFAULTS = {
         title: '.qor-form-title, .mdl-layout-title',
@@ -8605,8 +9920,8 @@ $(function() {
             <div><div class="mdl-spinner mdl-js-spinner is-active qor-layout__bottomsheet-spinner"></div></div>
         </div>`;
 
-    QorSlideout.plugin = function(options) {
-        return this.each(function() {
+    QorSlideout.plugin = function (options) {
+        return this.each(function () {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
             var fn;
@@ -8626,6 +9941,10 @@ $(function() {
     };
 
     $.fn.qorSlideout = QorSlideout.plugin;
+
+    $document.data('qor.slideout', function (cb) {
+        return cb.call(QorSlideout);
+    });
 
     return QorSlideout;
 });
@@ -8686,7 +10005,7 @@ $(function() {
       }
 
       if (/order_by/.test(search)) {
-        search = search.replace(/order_by(=\w+)?/, function () {
+        search = search.replace(/order_by(=[.\w:]+)?/, function () {
           return param;
         });
       } else {

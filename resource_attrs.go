@@ -20,7 +20,7 @@ func (this *Resource) allAttrs() []string {
 			continue
 		}
 
-		if field.IsPrimaryKey || field.IsForeignKey || field.StructIndex == nil || aorm.IsAuditedSdField(field.Name) {
+		if field.IsPrimaryKey || field.IsForeignKey || aorm.IsAuditedSdField(field.Name) {
 			continue
 		}
 

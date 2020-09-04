@@ -61,7 +61,7 @@ func (this *Controller) Edit(context *Context) {
 		cfg := ParseUpdateConfig(context)
 		if cfg.Prepare != nil {
 			cfg.Prepare(context)
-			if context.Writer.Writed() {
+			if context.Writer.WroteHeader() {
 				return false
 			}
 		}
@@ -103,7 +103,7 @@ func (this *Controller) Update(context *Context) {
 		context.Result = recorde
 		if cfg.Prepare != nil {
 			cfg.Prepare(context)
-			if context.Writer.Writed() {
+			if context.Writer.WroteHeader() {
 				return
 			}
 		}
@@ -141,7 +141,7 @@ done:
 	if context.HasError() {
 		if cfg.ErrorCallback != nil {
 			cfg.ErrorCallback(context, context.Errors)
-			if context.Writer.Writed() {
+			if context.Writer.WroteHeader() {
 				return
 			}
 		}
@@ -156,7 +156,7 @@ done:
 			"{{.}} was successfully updated"))
 		if cfg.SuccessCallback != nil {
 			cfg.SuccessCallback(context, old, recorde, &message)
-			if context.Writer.Writed() {
+			if context.Writer.WroteHeader() {
 				return
 			}
 		}
@@ -206,6 +206,6 @@ done:
 				return
 			}
 			context.Encode(recorde)
-		}).Respond(context.Request)
+		}).XAccept().Respond(context.Request)
 	}
 }

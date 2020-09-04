@@ -1,4 +1,4 @@
-(function(factory) {
+(function (factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -9,7 +9,7 @@
         // Browser globals.
         factory(jQuery);
     }
-})(function($) {
+})(function ($) {
     'use strict';
 
     let FormData = window.FormData,
@@ -30,19 +30,42 @@
     QorSelectCore.prototype = {
         constructor: QorSelectCore,
 
-        init: function() {
+        init: function () {
             this.bind();
         },
 
-        bind: function() {
-            this.$element.on(EVENT_CLICK, CLASS_CLICK_TABLE, this.processingData.bind(this)).on(EVENT_SUBMIT, 'form', this.submit.bind(this));
+        bind: function () {
+            this.$element.on(EVENT_CLICK, CLASS_CLICK_TABLE, this.processingData.bind(this));
+            //.on(EVENT_SUBMIT, 'form', this.submit.bind(this));
+            //this.$element.on('enable.qor.asyncFormSubmiter', 'form', this.newFormHandle.bind(this))
         },
 
-        unbind: function() {
+        unbind: function () {
             this.$element.off(EVENT_CLICK, '.qor-table tbody tr').off(EVENT_SUBMIT, 'form');
         },
 
-        processingData: function(e) {
+        newFormHandle: function ($form, openPage) {
+            $form.qorAsyncFormSubmiter('updateOptions', {
+                onBeforeSubmit: function (jqXHR, cfg) {
+                    if (!cfg.continueEditing) {
+                        cfg.headers['X-Redirection-Disabled'] = true;
+                        cfg.headers['X-Accept'] = 'json';
+                    }
+                    cfg.headers['X-Flash-Messages-Disabled'] = true;
+                }.bind(this),
+                onSubmitSuccess: function (data, statusText, jqXHR) {
+                    let onSelect = this.options.onSelect;
+                    data = JSON.parse(data);
+                    if (onSelect && $.isFunction(onSelect)) {
+                        onSelect(data, undefined);
+                        $(document).trigger(EVENT_ONSELECT);
+                    }
+                }.bind(this),
+                openPage: openPage
+            });
+        },
+
+        processingData: function (e) {
             let $this = $(e.target).closest('tr'),
                 data = {},
                 url,
@@ -56,7 +79,7 @@
             url = data.mediaLibraryUrl || data.url;
 
             if (url) {
-                $.getJSON(url, function(json) {
+                $.getJSON(url, function (json) {
                     json.MediaOption && (json.MediaOption = JSON.parse(json.MediaOption));
                     data = $.extend({}, json, data);
                     if (onSelect && $.isFunction(onSelect)) {
@@ -73,13 +96,17 @@
             return false;
         },
 
-        submit: function(e) {
+        submit: function (e) {
             let form = e.target,
                 $form = $(form),
                 _this = this,
                 $submit = $form.find(':submit'),
                 data,
                 onSubmit = this.options.onSubmit;
+
+            if ($form.parents('.qor-page__new').length) {
+                return
+            }
 
             $(document).trigger(EVENT_SELECTCORE_BEFORESEND);
 
@@ -92,14 +119,18 @@
                     dataType: 'json',
                     processData: false,
                     contentType: false,
-                    beforeSend: function() {
+                    headers: {
+                        'X-Layout': 'lite',
+                        'X-Redirection-Disabled': true
+                    },
+                    beforeSend: function () {
                         $form
                             .parent()
                             .find('.qor-error')
                             .remove();
                         $submit.prop('disabled', true);
                     },
-                    success: function(json) {
+                    success: function (json) {
                         data = json;
                         data.primaryKey = data.ID;
 
@@ -112,7 +143,7 @@
                             _this.refresh();
                         }
                     },
-                    error: function(xhr, textStatus, errorThrown) {
+                    error: function (xhr, textStatus, errorThrown) {
                         let error;
 
                         if (xhr.responseJSON) {
@@ -136,26 +167,27 @@
                             window.alert([textStatus, errorThrown].join(': '));
                         }
                     },
-                    complete: function() {
+                    complete: function () {
                         $submit.prop('disabled', false);
                     }
                 });
             }
         },
 
-        refresh: function() {
-            setTimeout(function() {
+        refresh: function () {
+            setTimeout(function () {
                 window.location.reload();
             }, 350);
         },
 
-        destroy: function() {
+        destroy: function () {
             this.unbind();
         }
     };
 
-    QorSelectCore.plugin = function(options) {
-        return this.each(function() {
+    QorSelectCore.plugin = function (options) {
+        let args = Array.prototype.slice.call(arguments, 1);
+        return this.each(function () {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 fn;
@@ -168,7 +200,7 @@
             }
 
             if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
-                fn.apply(data);
+                fn.apply(data, args);
             }
         });
     };

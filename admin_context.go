@@ -41,7 +41,6 @@ func (this *Admin) NewContext(args ...interface{}) (c *Context) {
 		}
 		c.Settings = map[string]interface{}{}
 		c.Admin = this
-		c.Context.SetValue(CONTEXT_KEY, c)
 
 		if c.Request != nil {
 			if v := c.Request.URL.Query().Get(P_DISPLAY); v != "" {

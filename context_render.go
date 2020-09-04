@@ -19,18 +19,29 @@ func (this *Context) renderWithF(out io.Writer, name string, data interface{}) (
 		return fmt.Errorf("bad template name %q", name)
 	}
 	defer this.templatesStack.Add(pth)()
-	defer func() {
-		if r := recover(); r != nil {
-			err = tracederror.TracedWrap(r, this.templatesStack.StringMessage("panic at"))
-		} else if err != nil && len(*this.templatesStack) > 0 {
-			err = errors.Wrap(err, this.templatesStack.String())
-		}
-	}()
 	var executor *template.Executor
 	if executor, err = this.GetTemplate(pth); err != nil {
 		return errors.Wrapf(err, "get template %q", pth)
 	}
 	return errors.Wrapf(executor.Execute(out, data), "execute template %q", pth)
+}
+// renderWithF render template based on data
+func (this *Context) renderExecutor(executor *template.Executor, out io.Writer, data interface{}) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			msg := this.templatesStack.StringMessage("panic at")
+			if et, ok := r.(tracederror.TracedError); ok {
+				err = tracederror.Wrap(et, msg)
+			} else if err2, ok := r.(error); ok {
+				err = tracederror.New(errors.Wrap(err2, msg), et.Trace())
+			} else {
+				err = tracederror.New(errors.Wrap(fmt.Errorf("recoverd_error %T: %v", r, r), msg))
+			}
+		} else if err != nil && len(*this.templatesStack) > 0 {
+			err = errors.Wrap(err, this.templatesStack.String())
+		}
+	}()
+	return executor.Execute(out, data)
 }
 
 // renderWith render template based on data

@@ -163,11 +163,7 @@ func (this *Admin) HasContextPermission(mode roles.PermissionMode, context *Cont
 
 func (this *Admin) Init() {
 	if this.Config.MountPath == "" {
-		if this.SiteName == "" {
-			this.Config.MountPath = "/admin"
-		} else {
-			this.Config.MountPath = "/admin/" + this.SiteName
-		}
+		this.Config.MountPath = "/admin"
 	}
 }
 

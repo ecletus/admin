@@ -1,0 +1,13 @@
+{{- wrap strip -}}
+    {{- load_actions (admin_context).Action "default/left" -}}
+
+    {{- wrap strip -}}
+        {{- load_actions (admin_context).Action "default/rigth" -}}
+    {{- begin -}}
+        <div class="mdl-layout-spacer"></div>
+    {{- end -}}
+{{- begin -}}
+    <div class="qor-actions-default">
+{{- after -}}
+    </div>
+{{- end -}}

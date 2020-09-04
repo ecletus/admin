@@ -19,13 +19,13 @@ type RedactorPlugin struct {
 }
 
 // ConfigureQorMeta configure rich editor meta
-func (richEditorConfig *RichEditorConfig) ConfigureQorMeta(metaor resource.Metaor) {
+func (this *RichEditorConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	if meta, ok := metaor.(*Meta); ok {
 		meta.Type = "rich_editor"
 
 		// Compatible with old rich editor setting
 		if meta.Resource != nil {
-			richEditorConfig.AssetManager = meta.Resource
+			this.AssetManager = meta.Resource
 			meta.Resource = nil
 		}
 
@@ -35,14 +35,25 @@ func (richEditorConfig *RichEditorConfig) ConfigureQorMeta(metaor resource.Metao
 			return setter(resource, metaValue, context)
 		})
 
-		if richEditorConfig.Settings == nil {
-			richEditorConfig.Settings = map[string]interface{}{}
+		if this.Settings == nil {
+			this.Settings = map[string]interface{}{}
 		}
 
 		plugins := []string{"source"}
-		for _, plugin := range richEditorConfig.Plugins {
+		for _, plugin := range this.Plugins {
 			plugins = append(plugins, plugin.Name)
 		}
-		richEditorConfig.Settings["plugins"] = plugins
+		this.Settings["plugins"] = plugins
 	}
+}
+
+func init() {
+	cfg := func(meta *Meta) {
+		if meta.Config == nil {
+			cfg := &RichEditorConfig{}
+			meta.Config = cfg
+			cfg.ConfigureQorMeta(meta)
+		}
+	}
+	RegisterMetaConfigor("rich_editor", cfg)
 }

@@ -14,10 +14,10 @@ import (
 
 func (this *Resource) configure() {
 	if f, ok := indirectType(this.ModelStruct.Type).FieldByName("_"); ok && len(f.Index) == 1 {
-		if tags := ParseResourceTags(f.Tag); len(this.Tags.TagSetting) == 0 {
+		if tags := ParseResourceTags(f.Tag); len(this.Tags.Tags) == 0 {
 			this.Tags = &tags
 		} else {
-			this.Tags.TagSetting.Update(tags.TagSetting)
+			this.Tags.Tags.Update(tags.Tags)
 		}
 		tags := this.Tags
 
@@ -115,6 +115,12 @@ func (this *Resource) configure() {
 			}
 		} else if err != nil {
 			log.Fatal(err)
+		}
+		if attrs := tags.Search(); attrs != nil {
+			this.SearchAttrs(attrs...)
+		}
+		if attrs := tags.Order(); attrs != nil {
+			this.SetOrder(attrs)
 		}
 	}
 

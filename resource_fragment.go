@@ -51,7 +51,7 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 				Name:              AttrFragmentEnabled,
 				SectionNotAllowed: true,
 			}
-			if cfg.Is {
+			if cfg.Mode.Cast() {
 				meta.SkipDefaultLabel = true
 				if cfg.IsLabel != "" {
 					meta.Label = cfg.IsLabel
@@ -71,7 +71,7 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 				meta.SkipDefaultLabel = true
 				meta.Label = fragRes.SingularLabelKey()
 			}
-			fragRes.SetMeta(meta, true)
+			fragRes.SetMeta(meta, true).DisableSiblingsRequirement = true
 			this.Fragments.AddForm(fragRes, cfg)
 		} else {
 			this.Fragments.Add(fragRes, cfg)
@@ -84,25 +84,27 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 		}
 	}
 
-	if !isForm {
-		cfg.Config.Invisible = true
-	} else {
-		if cfg.Is || cfg.NotInline {
-			old := cfg.Config.MenuEnabled
-			if old == nil {
-				old = func(menu *Menu, ctx *Context) bool { return true }
-			}
-			cfg.Config.MenuEnabled = func(menu *Menu, ctx *Context) bool {
-				if r, ok := ctx.Result.(fragment.FragmentedModelInterface); ok {
-					if f := r.GetFormFragment(menu.Resource.Fragment.ID); f != nil {
-						return f.Enabled() && (menu.Resource.Fragment.Config.Is || menu.Resource.Fragment.Config.NotInline)
-					} else if menu == menu.Resource.defaultMenu {
-						return false
-					}
-				}
-				return old(menu, ctx)
+	if isForm {
+		old := cfg.Config.MenuEnabled
+		if old == nil {
+			old = func(menu *Menu, ctx *Context) bool {
+				return true
 			}
 		}
+		cfg.Config.MenuEnabled = func(menu *Menu, ctx *Context) bool {
+			if r, ok := ctx.Result.(fragment.FragmentedModelInterface); ok {
+				if f := r.GetFormFragment(menu.Resource.Fragment.ID); f != nil {
+					return f.Enabled() && (menu.Resource.Fragment.Config.Mode.Cast() || !menu.Resource.Fragment.Config.Mode.Inline())
+				} else if menu == menu.Resource.defaultMenu {
+					return false
+				}
+
+				return old(menu, ctx)
+			}
+			return false
+		}
+	} else {
+		cfg.Config.Invisible = true
 	}
 
 	fragRes := this.AddResourceConfig(value, cfg.Config)
@@ -126,7 +128,8 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 					for id, fr := range r.GetFormFragments() {
 						fragRes := this.Fragments.Get(id).Resource
 						if ID := aorm.IdOf(fr); ID.IsZero() {
-							aorm.IdOf(r).SetTo(fr)
+							ID, _ = aorm.CopyIdTo(aorm.IdOf(r), ID)
+							ID.SetTo(fr)
 						}
 						if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
 							return errwrap.Wrap(err, "Fragment "+id)
@@ -197,14 +200,22 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 			Name: metaName,
 			Type: "fragment",
 			Enabled: func(recorde interface{}, context *Context, meta *Meta) bool {
-				if recorde != nil {
-					if _, ok := recorde.(fragment.FragmentedModelInterface); ok {
-						return fragRes.Fragment.Enabled(recorde.(fragment.FragmentedModelInterface), context.Context)
-					}
+				if recorde == nil {
+					return true
+				}
+
+				if _, ok := recorde.(fragment.FragmentedModelInterface); ok {
+					return fragRes.Fragment.Enabled(recorde.(fragment.FragmentedModelInterface), context.Context)
 				}
 				return false
 			},
 			ContextMetas: func(record interface{}, ctx *Context) []*Meta {
+				f := fragRes.Fragment
+				if f.IsForm {
+					if ctx.Type.Has(NEW) {
+						return fragRes.ConvertSectionToMetas([]*Section{{Rows: [][]string{{AttrFragmentEnabled}}}})
+					}
+				}
 				return fragRes.ConvertSectionToMetas(fragRes.ContextSections(ctx, record))
 			},
 			Setter: func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {

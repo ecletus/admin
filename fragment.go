@@ -14,6 +14,35 @@ import (
 var NotFragmentableError = errors.New("Not fragmentable")
 var FRAGMENT_KEY = PKG + ".fragment"
 
+/*
+Tipos de Fragmentos:
+
+- Fields:
+	Apenas adiciona novos campos no formulario Pai
+- Form:
+	Adiciona um novo formulario ao formulario Pai.
+
+	Flags:
+	- INLINE: Apenas controle Visual (veja abaixo)
+	- CAST: Trata os dados um sendo outro objeto.
+			Por exemplo: Fragmento "Dados Pessoais" em "Usuario", se "Dados Pessoais" for habilitado,
+						 trata "Usuario" como "Pessoa".
+
+	Para formularios NEW adiciona o campo boobleano ENABLED.
+
+	Para formularios SHOW ou EDIT segue a seguinte regra:
+		se ENABLED=TRUE:
+			se INLINE:
+				Renderiza o campo ENABLED + campos, no formulário Pai
+			caso contrário:
+				Renderiza apenas o campo ENABLED no formulário Pai e
+                adiciona o menu de acesso aos campos do fragmento
+		caso contrário:
+			- em SHOW: não renderiza nada
+			- em EDIT: Renderiza apenas o campo ENABLED
+
+ */
+
 type FormFragmentRecordState struct {
 	*Fragment
 	Enabled bool
@@ -22,27 +51,41 @@ type FormFragmentRecordState struct {
 }
 
 func (f *FormFragmentRecordState) EditSections(context *Context) (sections []*Section) {
-	if !f.Config.NotInline && (f.Value != nil && f.Value.Enabled()) {
+	if f.Config.Mode.Inline() && (f.Value != nil && f.Value.Enabled()) {
 		sections = append(sections, f.Resource.EditAttrs()...)
 	}
 	sections = f.Resource.allowedSections(f.Value, sections, context, roles.Update)
 
 	return append([]*Section{{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}}}, sections...)
 }
+
 func (f *FormFragmentRecordState) ShowSections(context *Context) (sections []*Section) {
-	if f.Config.NotInline {
+	if !f.Config.Mode.Inline() {
 		sections = append(sections, &Section{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
 	} else {
 		sections = f.Resource.allowedSections(f.Value, f.Resource.ShowAttrs(), context, roles.Read)
 	}
 	return
 }
-func (f *FormFragmentRecordState) OnlyEnabledField(context *Context) bool {
-	if f.Config.NotInline {
+
+func (f *FormFragmentRecordState) EnabledFieldValue() bool {
+	if f.Value == nil {
+		return false
+	}
+	if f.Value.Enabled() {
 		return true
 	}
-	if context.Type.Has(EDIT) {
-		return f.Value == nil || !f.Value.Enabled()
+	return false
+}
+
+func (f *FormFragmentRecordState) OnlyEnabledField(context *Context) bool {
+	if f.IsForm {
+		if context.Type.Has(NEW) {
+			return true
+		}
+		if context.Type.Has(EDIT) {
+			return f.Value == nil || !f.Value.Enabled()
+		}
 	}
 	return false
 }
@@ -53,22 +96,18 @@ type FragmentCategoryConfig struct {
 }
 
 type FragmentConfig struct {
-	Config      *Config
-	NotInline   bool
-	Priority    int
-	Category    *FragmentCategoryConfig
-	IsLabel     string
-	Is          bool
-	Enabled     func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
-	Available   func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
-	SchemeSetup func(s *Scheme)
-	Schemes     []*Scheme
-	Sections    []*Section
+	Config         *Config
+	Mode           FragmentMode
+	Priority       int
+	Category       *FragmentCategoryConfig
+	IsLabel        string
+	Is             bool
+	Enabled        func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
+	Available      func(record fragment.FragmentedModelInterface, ctx *core.Context) bool
+	SchemeSetup    func(s *Scheme)
+	Schemes        []*Scheme
+	Sections       []*Section
 	LoadInFindMany bool
-}
-
-func (fc *FragmentConfig) Inline() bool {
-	return !fc.NotInline
 }
 
 type Fragment struct {
@@ -253,7 +292,7 @@ func (f *Fragment) Parents() (parents []*Fragment) {
 func (f *Fragment) Enabled(record fragment.FragmentedModelInterface, ctx *core.Context) bool {
 	if !f.IsForm {
 		return true
-	} else if f.Config.NotInline && record.GetFormFragment(f.ID) != nil {
+	} else if !f.Config.Mode.Inline() && record.GetFormFragment(f.ID) != nil {
 		fv := record.GetFormFragment(f.ID)
 		if GetContext(ctx).Type.Has(SHOW) {
 			if fv.Enabled() && (f.Config.Enabled == nil || f.Config.Enabled(record, ctx)) {
@@ -265,6 +304,9 @@ func (f *Fragment) Enabled(record fragment.FragmentedModelInterface, ctx *core.C
 	}
 
 	fv := record.GetFormFragment(f.ID)
+	if fv == nil {
+		return true
+	}
 	if GetContext(ctx).Type.Has(SHOW) && (fv == nil || !fv.Enabled()) {
 		return false
 	}

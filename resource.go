@@ -344,7 +344,7 @@ func (this *Resource) URLFor(recorde interface{}, parentkeys ...aorm.ID) string 
 
 // GetURL
 func (this *Resource) GetContextIndexURI(context *core.Context, parentkeys ...aorm.ID) string {
-	if len(parentkeys) == 0 && this.ParentResource != nil {
+	if parentkeys == nil && this.ParentResource != nil {
 		parentkeys = context.ParentResourceID
 		if len(parentkeys) == 0 {
 			parentkeys = make([]aorm.ID, len(this.Parents))
@@ -358,7 +358,9 @@ func (this *Resource) GetContextIndexURI(context *core.Context, parentkeys ...ao
 // GetURL
 func (this *Resource) GetContextURI(context *core.Context, key aorm.ID, parentkeys ...aorm.ID) string {
 	base := this.GetContextIndexURI(context, parentkeys...)
-	if key == nil {
+	if this.Fragment != nil {
+		return base
+	} else if key == nil {
 		if s := context.URLParam(this.ParamIDName()); s != "" {
 			key = resource.MustParseID(this, s)
 		}

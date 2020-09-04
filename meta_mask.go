@@ -62,7 +62,7 @@ func init() {
 		if meta.Config != nil {
 			return
 		}
-		if maskTags := tags.Tags("MASK"); maskTags != nil {
+		if maskTags := tags.Tags.GetTags("MASK"); maskTags != nil {
 			var code = fmt.Sprintf("this.mask(%q", maskTags["code"])
 			if maskTags.Flag("reverse") {
 				code += ", {reverse: true}"
@@ -73,7 +73,7 @@ func init() {
 			m := &MaskConfig{JsCode: code}
 			meta.Config = m
 			m.ConfigureQorMeta(meta)
-		} else if mask := tags.TagSetting["MASK"]; mask != "" {
+		} else if mask := tags.Tags["MASK"]; mask != "" {
 			if m := GetMask(mask); m != nil {
 				meta.Config = m
 				m.ConfigureQorMeta(meta)

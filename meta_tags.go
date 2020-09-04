@@ -1,79 +1,174 @@
 package admin
 
-var MetaConfigureTagsHandlers []func(meta *Meta, tags *MetaTags)
+import (
+	"reflect"
 
-func RegisterMetaConfigureTagsHandler(f func(meta *Meta, tags *MetaTags)) {
-	MetaConfigureTagsHandlers = append(MetaConfigureTagsHandlers, f)
+	"github.com/moisespsena-go/aorm"
+	tag_scanner "github.com/unapu-go/tag-scanner"
+)
+
+type Tags = aorm.TagSetting
+
+type MetaTags struct {
+	Tags
+	typeOptions aorm.TagSetting
 }
 
-func (this *Meta) tagsConfigure() {
-	if this.FieldStruct == nil {
-		return
+func (this MetaTags) DefaultInvisible() bool {
+	return this.Flag("DEFAULT_INVISIBLE") || this.Flag("--")
+}
+func (this MetaTags) Hidden() bool {
+	return this.Flag("-")
+}
+func (this MetaTags) Readonly() bool {
+	return this.Flag("RO")
+}
+func (this MetaTags) Managed() bool {
+	return this.Flag("MANAGED")
+}
+func (this MetaTags) Required() bool {
+	return this.Flag("REQUIRED")
+}
+func (this MetaTags) Help() string {
+	return this.GetString("HELP")
+}
+func (this MetaTags) ShowHelp() (s string) {
+	if s := this.GetString("SHOW_HELP"); s == "" {
+		// read only
+		s = this.GetString("RO_HELP")
 	}
-	var tags = ParseMetaTags(this.FieldStruct.Tag)
-	if tags.Empty() {
-		return
+	return
+}
+func (this MetaTags) Label() string {
+	return this.GetString("LABEL")
+}
+func (this MetaTags) Type() string {
+	return this.Tags["TYPE"]
+}
+func (this MetaTags) TypeOptions() (opt aorm.TagSetting) {
+	if this.typeOptions == nil {
+		if v, ok := this.Tags["TYPE_OPT"]; ok {
+			opt.ParseString(v)
+			this.typeOptions = opt
+		}
 	}
-	if this.Label == "" {
-		this.Label = tags.Label()
-	}
-	if this.Type == "" {
-		this.Type = tags.Type()
-	}
-	if tags.DefaultInvisible() {
-		this.DefaultInvisible = true
-	}
-	if tags.Required() {
-		this.Meta.Required = true
-		this.Required = true
-	}
-	if tags.Readonly() {
-		this.ReadOnly = true
-	}
-	if tags.NilAsZero() {
-		this.NilAsZero = true
-	}
-	if tags.Filter() {
-		// TODO
-	}
-	if tags.Sort() {
-		// TODO
-	}
-	if tags.Search() {
-		// TODO
-	}
-	if this.Help == "" {
-		this.Help = tags.Help()
-	}
-	if this.Config == nil {
-		if cfg, resID := tags.SelectOne(); cfg != nil {
-			if resID != "" {
-				this.BaseResource.Admin.OnResourcesAdded(func(e *ResourceEvent) error {
-					this.Config = cfg
-					this.Resource = e.Resource
-					this.updateMeta()
-					return nil
-				}, resID)
-			} else {
-				this.Config = cfg
+	return this.typeOptions
+}
+func (this MetaTags) Section() (sec *struct{ Title, Help, ReadOnlyHelp string }) {
+	if v, ok := this.Tags["SECTION"]; ok {
+		var opt aorm.TagSetting
+		opt.ParseString(v)
+		if len(opt) > 0 {
+			sec = &struct{ Title, Help, ReadOnlyHelp string }{
+				opt["TITLE"],
+				tag_scanner.Default.String(opt["HELP"]),
+				tag_scanner.Default.String(opt["RO_HELP"]),
 			}
 		}
+	}
+	return
+}
+func (this MetaTags) NilAsZero() bool {
+	return this.Tags.Flag("NILZ")
+}
+func (this MetaTags) Sort() bool {
+	return this.Tags.Flag("SORT")
+}
+func (this MetaTags) Search() bool {
+	return this.Tags.Flag("SEARCH")
+}
+func (this MetaTags) Filter() bool {
+	return this.Tags.Flag("FILTER")
+}
+func (this MetaTags) SelectOne() (cfg *SelectOneConfig, resID string, advanced bool, opts SelectConfigOption) {
+	if value := this.Tags["SELECT_ONE"]; value != "" {
+		cfg = &SelectOneConfig{}
+		if value == "SELECT_ONE" {
+			return
+		}
+		if tgs := this.TagsOf(value); len(tgs) == 1 && tgs["RES"] != "" {
+			resID = tgs["RES"]
+			if tgs = this.TagsOf(resID); tgs != nil {
+				advanced = true
+				resID = tgs["ID"]
 
-		if cfg, resID := tags.SelectMany(); cfg != nil {
-			if resID != "" {
-				this.BaseResource.Admin.OnResourcesAdded(func(e *ResourceEvent) error {
-					this.Config = cfg
-					this.Resource = e.Resource
-					this.updateMeta()
-					return nil
-				}, resID)
-			} else {
-				this.Config = cfg
+				if tgs.Flag("NOT_ICON") {
+					opts |= SelectConfigOptionNotIcon
+				}
+				if tgs.Flag("BLANK") {
+					opts |= SelectConfigOptionAllowBlank
+				}
+				if tgs.Flag("BS") {
+					opts |= SelectConfigOptionBottonSheet
+				}
 			}
+			cfg.DisplayField = tgs["DISPLAY"]
+		} else {
+			cfg.Collection = tag_scanner.KeyValuePairs(this.Scanner(), value)
 		}
 	}
-	for _, f := range MetaConfigureTagsHandlers {
-		f(this, &tags)
+	return
+}
+
+func (this MetaTags) SelectMany() (cfg *SelectManyConfig, resID string, advanced bool, opts SelectConfigOption) {
+	if value := this.Tags["SELECT_MANY"]; value != "" {
+		cfg = &SelectManyConfig{}
+		if value == "SELECT_MANY" {
+			return
+		}
+		if tgs := this.TagsOf(value); len(tgs) == 1 && tgs["RES"] != "" {
+			resID = tgs["RES"]
+			if tgs = this.TagsOf(resID); tgs != nil {
+				advanced = true
+				resID = tgs["ID"]
+
+				if tgs.Flag("NOT_ICON") {
+					opts |= SelectConfigOptionNotIcon
+				}
+				if tgs.Flag("BLANK") {
+					opts |= SelectConfigOptionAllowBlank
+				}
+				if tgs.Flag("BS") {
+					opts |= SelectConfigOptionBottonSheet
+				}
+			}
+			var (
+				display     = tgs["DISPLAY"]
+				displayTags = this.Scanner().IsTags(display)
+			)
+			if displayTags {
+				cfg.BottomSheetSelectedTemplate = display
+			} else {
+				cfg.DisplayField = display
+			}
+		} else {
+			cfg.Collection = tag_scanner.KeyValuePairs(this.Scanner(), value)
+		}
 	}
-	this.Tags = tags
+	return
+}
+
+func (this MetaTags) UI() Tags {
+	tags := this.GetTags("UI")
+	if tags == nil {
+		tags = make(Tags)
+	}
+	return tags
+}
+
+func ParseMetaTags(tag reflect.StructTag) (tags MetaTags) {
+	tags.ParseCallback(aorm.StructTag(tag), []string{"admin"}, func(dest map[string]string, n tag_scanner.Node) {
+		if n.Type() == tag_scanner.KeyValue {
+			kv := n.(tag_scanner.NodeKeyValue)
+			switch kv.Key {
+			case "type":
+				// "type:number:zero:-"
+				if len(kv.KeyArgs) == 2 {
+					dest["TYPE_OPT"] = kv.KeyArgs[1] + ":" + kv.Value
+					kv.Value = kv.KeyArgs[0]
+				}
+			}
+		}
+	})
+	return
 }

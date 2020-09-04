@@ -126,9 +126,14 @@ func getFormats(request *http.Request) (formats []string) {
 		formats = append(formats, format)
 	}
 
+	for _, ext := range strings.Split(request.Header.Get("X-Accept"), ",") {
+		formats = append(formats, "."+ext)
+	}
+
 	if extensions, err := mime.ExtensionsByType(request.Header.Get("Accept")); err == nil {
 		formats = append(formats, extensions...)
 	} else {
+		// get request format from Accept
 		for _, accept := range strings.FieldsFunc(request.Header.Get("Accept"), func(s rune) bool { return string(s) == "," || string(s) == ";" }) {
 			if extensions, err := mime.ExtensionsByType(accept); err == nil {
 				formats = append(formats, extensions...)

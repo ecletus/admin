@@ -271,7 +271,7 @@
                         $responseBody = $response.find(CLASS_BODY_CONTENT);
 
                     if ($responseBody.length) {
-                        $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html());
+                        $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html()).trigger('enable');
 
                         if ($responseHeader.length) {
                             this.$body
@@ -370,7 +370,7 @@
                 $submit = $form.find(':submit');
 
             // will ingore submit event if need handle with other submit event: like select one, many...
-            if (resourseData.ingoreSubmit) {
+            if (resourseData.ignoreSubmit) {
                 return;
             }
 
@@ -473,10 +473,11 @@
                 method,
                 dataType,
                 load,
+                data = data || {},
                 actionData = data.actionData,
                 resourseData = this.resourseData,
                 selectModal = resourseData.selectModal,
-                ingoreSubmit = resourseData.ingoreSubmit,
+                ignoreSubmit = resourseData.ignoreSubmit,
                 $bottomsheets = this.$bottomsheets,
                 $header = this.$header,
                 $body = this.$body;
@@ -538,7 +539,7 @@
 
                             this.loadExtraResource(loadExtraResourceData);
 
-                            if (ingoreSubmit) {
+                            if (ignoreSubmit) {
                                 $content.find(CLASS_BODY_HEAD).remove();
                             }
 
@@ -556,7 +557,7 @@
                             if (selectModal) {
                                 $body
                                     .find('.qor-button--new')
-                                    .data('ingoreSubmit', true)
+                                    .data('ignoreSubmit', true)
                                     .data('selectId', resourseData.selectId)
                                     .data('loadInline', true);
                                 if (
@@ -591,6 +592,16 @@
                             this.addHeaderClass();
 
                             $bottomsheets.trigger('enable');
+
+                            let $form = $bottomsheets.find('.qor-bottomsheets__body form');
+                            if ($form.length) {
+                                this.$bottomsheets.qorSelectCore('newFormHandle', $form, this.load.bind(this));
+                            }
+
+                            $body.find('form .qor-button--cancel:last').click(function (){
+                                this.hide(e);
+                                return false;
+                            }.bind(this));
 
                             $bottomsheets.one(EVENT_HIDDEN, function() {
                                 $(this).trigger('disable');
@@ -660,7 +671,7 @@
 
             $bottomsheets.qorSelectCore('destroy');
 
-            $bottomsheets.trigger(EVENT_BOTTOMSHEET_CLOSED).remove();
+            $bottomsheets.trigger(EVENT_BOTTOMSHEET_CLOSED).trigger('disable').remove();
             if (!$('.qor-bottomsheets').is(':visible')) {
                 $('body').removeClass(CLASS_OPEN);
             }

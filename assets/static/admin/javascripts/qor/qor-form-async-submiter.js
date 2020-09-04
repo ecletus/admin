@@ -31,11 +31,12 @@
         },
 
         bind: function() {
-            this.$el.bind(EVENT_SUBMIT, this.submit)
+            this.$el.off(EVENT_SUBMIT, this.submit.bind(this));
+            this.$el.bind(EVENT_SUBMIT, this.submit.bind(this))
         },
 
         unbind: function() {
-            this.$el.off(EVENT_SUBMIT, this.submit);
+            this.$el.off(EVENT_SUBMIT, this.submit.bind(this));
         },
 
         destroy: function() {
@@ -43,21 +44,30 @@
             this.$el.removeData(NAMESPACE);
         },
 
+        updateOptions: function(options) {
+            this.options = $.extend(this.options, options);
+        },
+
         submit: function (e) {
-            var form = e.target;
-            var $form = $(form);
-            var _this = this;
-            var $submit = $form.find(':submit');
+            let form = e.target,
+                $form = $(form),
+                $submit = $form.find(':submit'),
+                beforeSubmit = this.options.onBeforeSubmit,
+                submitSuccess = this.options.onSubmitSuccess,
+                openPage = this.options.openPage;
 
             if (window.FormData) {
                 e.preventDefault();
                 let action = $form.prop('action'),
-                    continueEditing = /[?|&]continue_editing=true/.test(action);
+                    continueEditing = /[?|&]continue_editing=true/.test(action),
+                    cfg;
 
                 if (continueEditing) {
                     action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
                 }
-                $.ajax(action, {
+
+                cfg = {
+                    continueEditing: continueEditing,
                     method: $form.prop('method'),
                     data: new FormData(form),
                     dataType: 'html',
@@ -66,14 +76,19 @@
                     headers: {
                         'X-Layout': 'lite'
                     },
-                    beforeSend: function () {
+                    beforeSend: function (jqXHR, cfg) {
                         $submit.prop('disabled', true);
                     },
                     success: function (html, statusText, jqXHR) {
                         $form.parent().find('.qor-error').remove();
+
                         let xLocation = jqXHR.getResponseHeader('X-Location');
 
                         if (xLocation) {
+                            if ($.isFunction(openPage)) {
+                                openPage(xLocation)
+                                return;
+                            }
                             window.location.href = xLocation;
                             return
                         }
@@ -86,8 +101,17 @@
                             return;
                         }
 
-                        if (returnUrl !== '') {
+                        if (returnUrl) {
+                            if ($.isFunction(openPage)) {
+                                openPage(returnUrl)
+                                return;
+                            }
                             location.href = returnUrl
+                            return;
+                        }
+
+                        if ($.isFunction(submitSuccess)) {
+                            submitSuccess(html, statusText, jqXHR)
                             return;
                         }
 
@@ -149,7 +173,13 @@
                     complete: function () {
                         $submit.prop('disabled', false);
                     }
-                });
+                };
+
+                if ($.isFunction(beforeSubmit)) {
+                    beforeSubmit(this, cfg);
+                }
+
+                $.ajax(action, cfg);
             }
         }
     };
@@ -157,6 +187,7 @@
     QorAsyncFormSubmiter.DEFAULTS = {};
 
     QorAsyncFormSubmiter.plugin = function(options) {
+        let args = Array.prototype.slice.call(arguments, 1);
         return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
@@ -166,19 +197,23 @@
                 if (/destroy/.test(options)) {
                     return;
                 }
-                data = new QorAsyncFormSubmiter(this, options);
-                if (("asyncSubmiter" in data)) {
-                    $this.data(NAMESPACE, data);
+
+                if (typeof options === 'string') {
+                    data = new QorAsyncFormSubmiter(this, {});
                 } else {
-                    return
+                    data = new QorAsyncFormSubmiter(this, options);
                 }
+
+                $this.data(NAMESPACE, data);
             }
 
             if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
-                fn.apply(data);
+                fn.apply(data, args);
             }
         });
     };
+
+    $.fn.qorAsyncFormSubmiter = QorAsyncFormSubmiter.plugin;
 
     $(function() {
         var selector = 'form[data-async="true"]';
@@ -187,6 +222,9 @@
         $(document)
             .on(EVENT_DISABLE, function(e) {
                 let $form = $(selector, e.target);
+                if (!$form.length) {
+                    return
+                }
                 if ($form.parents('.qor-slideout').length) {
                     return
                 }
@@ -194,10 +232,13 @@
             })
             .on(EVENT_ENABLE, function(e) {
                 let $form = $(selector, e.target);
+                if (!$form.length) {
+                    return
+                }
                 if ($form.parents('.qor-slideout').length) {
                     return
                 }
-                QorAsyncFormSubmiter.plugin.call($(selector, e.target), options);
+                QorAsyncFormSubmiter.plugin.call($form, options);
             })
             .triggerHandler(EVENT_ENABLE);
     });

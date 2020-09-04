@@ -124,8 +124,8 @@ func (this *MoneyConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	meta := metaor.(*Meta)
 	meta.Type = "money"
 
-	tags := meta.Tags.Tags("TYPE_OPT")
-	if zero, ok := tags.Get("ZERO"); ok {
+	tags := meta.Tags.GetTags("TYPE_OPT")
+	if zero, ok := tags.GetOk("ZERO"); ok {
 		this.Zero = zero
 	}
 

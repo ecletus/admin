@@ -172,8 +172,14 @@ func (this *Resource) setSections(sections *[]*Section, values ...interface{}) {
 			} else if section, ok := value.(*Section); ok {
 				flattenValues = append(flattenValues, section)
 			} else if column, ok := value.(string); ok {
+				// old replaces: "~a:b" (replaces a to b)
 				if column[0] == '~' {
 					replaces = append(replaces, strings.Split(column[1:], ":"))
+					continue
+				}
+				// new replaces: 'a->b' (replaces a to b)
+				if strings.Contains(column, "->") {
+					replaces = append(replaces, strings.Split(column, "->"))
 					continue
 				}
 				flattenValues = append(flattenValues, column)

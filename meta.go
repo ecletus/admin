@@ -143,8 +143,16 @@ type Meta struct {
 	// if require specify to show
 	DefaultInvisible bool
 
-	Tags      MetaTags
+	Tags            MetaTags
+	tagsInitialized bool
+
 	NilAsZero bool
+
+	afterUpdate []func()
+
+	UITags Tags
+
+	AdminData maps.SyncedMap
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -157,6 +165,10 @@ func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
 		}
 	}
 	return m
+}
+
+func (this *Meta) AfterUpdate(f ...func()) {
+	this.afterUpdate = append(this.afterUpdate, f...)
 }
 
 func (this *Meta) IsReadOnly(ctx *Context, recorde interface{}) bool {
@@ -736,6 +748,10 @@ func (this *Meta) Proxier() bool {
 	return this.ProxyTo != nil
 }
 
+func (this *Meta) IsAlone() bool {
+	return this.SectionNotAllowed
+}
+
 func (this *Meta) ID() string {
 	return this.BaseResource.FullID() + "#" + this.Name
 }
@@ -747,12 +763,16 @@ type MetaEventError struct {
 }
 
 func (this MetaEventError) Translate(ctx i18nmod.Context) string {
-	err := this.Err
-	return fmt.Sprintf("%s: %s: %s %s: %s",
+	var errMsg string
+	if et, ok := this.Err.(i18nmod.Translater); ok {
+		errMsg = et.Translate(ctx)
+	} else {
+		errMsg = this.Err.Error()
+	}
+	return fmt.Sprintf("%s: %s: %s",
 		this.Meta.BaseResource.TranslateLabel(ctx),
 		this.Meta.TranslateLabel(ctx),
-		ctx.T(I18NGROUP+".event").String(),
-		this.Event, err)
+		errMsg)
 }
 
 func (this MetaEventError) Error() string {

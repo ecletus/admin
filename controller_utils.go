@@ -16,43 +16,47 @@ func (this *Controller) showOrEdit(context *Context, onRecorde func(record inter
 		}
 	}
 
-	responder.With("html", func() {
-		if context.LoadDisplayOrError() {
-			recorde := this.LoadShowData(context)
-			if !context.HasError() {
-				if recorde == nil {
-					context.NotFound = true
-					http.NotFound(context.Writer, context.Request)
-					return
-				}
-				//if !context.Type.Has(DELETED) && context.Resource.IsSoftDeleted(recorde) {
-				//	http.Redirect(context.Writer, context.Request, context.Resource.GetContextIndexURI(context.Context), http.StatusSeeOther)
-				//	return
-				//}
-				if onRecorde(recorde) {
-					context.Execute("", recorde)
-				}
-			} else {
-				context.Execute("shared/errors", recorde)
-			}
-		}
-	}).With([]string{"json", "xml"}, func() {
-		if context.ValidateLayoutOrError() {
-			recorde := this.LoadShowData(context)
-			if !context.HasError() {
-				if recorde == nil {
-					context.NotFound = true
-					http.NotFound(context.Writer, context.Request)
-					return
-				} else {
-					if onRecorde(recorde) {
-						context.Encode(recorde)
+	responder.
+		With("html", func() {
+			if context.LoadDisplayOrError() {
+				recorde := this.LoadShowData(context)
+				if !context.HasError() {
+					if recorde == nil {
+						context.NotFound = true
+						http.NotFound(context.Writer, context.Request)
+						return
 					}
+					// if !context.Type.Has(DELETED) && context.Resource.IsSoftDeleted(recorde) {
+					//	http.Redirect(context.Writer, context.Request, context.Resource.GetContextIndexURI(context.Context), http.StatusSeeOther)
+					//	return
+					// }
+					if onRecorde(recorde) {
+						context.Execute("", recorde)
+					}
+				} else {
+					context.Execute("shared/errors", recorde)
 				}
-			} else {
-				context.Writer.WriteHeader(http.StatusBadGateway)
-				context.Writer.Write([]byte(context.Error()))
 			}
-		}
-	}).Respond(context.Request)
+		}).
+		With([]string{"json", "xml"}, func() {
+			if context.ValidateLayoutOrError() {
+				recorde := this.LoadShowData(context)
+				if !context.HasError() {
+					if recorde == nil {
+						context.NotFound = true
+						http.NotFound(context.Writer, context.Request)
+						return
+					} else {
+						if onRecorde(recorde) {
+							context.Encode(recorde)
+						}
+					}
+				} else {
+					context.Writer.WriteHeader(http.StatusBadGateway)
+					context.Writer.Write([]byte(context.Error()))
+				}
+			}
+		}).
+		XAccept().
+		Respond(context.Request)
 }

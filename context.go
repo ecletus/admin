@@ -23,11 +23,12 @@ import (
 	"github.com/ecletus/responder"
 	"github.com/ecletus/roles"
 	"github.com/ecletus/session"
+
 	"github.com/moisespsena/template/html/template"
 
-	"github.com/ecletus/core"
 	"github.com/moisespsena-go/assetfs/assetfsapi"
-	"github.com/moisespsena-go/xroute"
+
+	"github.com/ecletus/core"
 )
 
 type ContextType uint8
@@ -712,6 +713,8 @@ func (this *Context) WithTransactionE(f func() (err error)) error {
 }
 
 func (this *Context) Transaction(f ...func(commit func())) func() {
+	return func() {
+	}
 	oldDB := this.DB()
 	DB := oldDB.Begin()
 	this.SetRawDB(DB)
@@ -786,14 +789,15 @@ func (this *Admin) RenderContext(s *template.State) *Context {
 
 const CONTEXT_KEY = contextKey("admin.context")
 
-func ContextFromChain(chain *xroute.ChainHandler) *Context {
-	return ContextFromRouteContext(chain.Context)
-}
 func ContextFromCoreContext(ctx *core.Context) *Context {
 	if i := ctx.GetValue(CONTEXT_KEY); i != nil {
 		return i.(*Context)
 	}
 	return nil
+}
+
+func ContextFromRequest(r *http.Request) *Context {
+	return core.ContextFromRequest(r).Value(CONTEXT_KEY).(*Context)
 }
 
 func ContextFromContext(ctx context.Context) *Context {
@@ -810,22 +814,6 @@ func ContextFromContext(ctx context.Context) *Context {
 		}
 		return nil
 	}
-}
-
-func SetContextToChain(chain *xroute.ChainHandler, context *Context) {
-	SetContextToRouteContext(chain.Context, context)
-}
-
-func ContextFromRouteContext(rctx *xroute.RouteContext) *Context {
-	v, ok := rctx.Data[CONTEXT_KEY]
-	if ok {
-		return v.(*Context)
-	}
-	return nil
-}
-
-func SetContextToRouteContext(rctx *xroute.RouteContext, context *Context) {
-	rctx.Data[CONTEXT_KEY] = context
 }
 
 type contextKey string

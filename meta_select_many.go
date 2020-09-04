@@ -5,10 +5,11 @@ import (
 	"html/template"
 	"reflect"
 
+	"github.com/moisespsena-go/assetfs"
+
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/core/utils"
-	"github.com/moisespsena-go/assetfs"
 )
 
 // SelectManyConfig meta configuration used for select many
@@ -35,11 +36,21 @@ func (selectManyConfig SelectManyConfig) GetTemplate(context *Context, metaType 
 // ConfigureQorMeta configure select many meta
 func (selectManyConfig *SelectManyConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	if meta, ok := metaor.(*Meta); ok {
-		selectManyConfig.SelectOneConfig.Collection = selectManyConfig.Collection
-		selectManyConfig.SelectOneConfig.SelectMode = selectManyConfig.SelectMode
-		selectManyConfig.SelectOneConfig.DefaultCreating = selectManyConfig.DefaultCreating
-		selectManyConfig.SelectOneConfig.Placeholder = selectManyConfig.Placeholder
-		selectManyConfig.SelectOneConfig.RemoteDataResource = selectManyConfig.RemoteDataResource
+		if selectManyConfig.Placeholder != "" {
+			selectManyConfig.SelectOneConfig.Placeholder = selectManyConfig.Placeholder
+		}
+		if selectManyConfig.Collection != nil {
+			selectManyConfig.SelectOneConfig.Collection = selectManyConfig.Collection
+		}
+		if selectManyConfig.SelectMode != "" {
+			selectManyConfig.SelectOneConfig.SelectMode = selectManyConfig.SelectMode
+		}
+		if selectManyConfig.DefaultCreating {
+			selectManyConfig.SelectOneConfig.DefaultCreating = selectManyConfig.DefaultCreating
+		}
+		if selectManyConfig.RemoteDataResource != nil {
+			selectManyConfig.SelectOneConfig.RemoteDataResource = selectManyConfig.RemoteDataResource
+		}
 
 		selectManyConfig.SelectOneConfig.ConfigureQorMeta(meta)
 

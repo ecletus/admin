@@ -155,7 +155,18 @@ func (this *Context) renderSections(state *template.State, value interface{}, se
 	var (
 		res     *Resource
 		getMeta func(string) *Meta
+		rendered = map[string]bool{}
+		skipAttrsCheck = map[string]bool{}
 	)
+
+	if reflect.TypeOf(value).Kind() != reflect.Ptr {
+		value = func(v interface{}) interface{} {
+			nv := reflect.New(reflect.TypeOf(v))
+			nv.Elem().Set(reflect.ValueOf(v))
+			return nv.Elem().Addr().Interface()
+		}(value)
+	}
+
 	for _, section := range sections {
 		var (
 			hasRequired bool
@@ -170,20 +181,62 @@ func (this *Context) renderSections(state *template.State, value interface{}, se
 			getMeta = section.Resource.MetaContextGetter(this)
 		}
 
-		for _, column := range section.Rows {
+		for i := 0; i < len(section.Rows); i++ {
 			var (
 				columnsHTML bytes.Buffer
 				w           = NewTrimLeftWriter(&columnsHTML)
+				column = section.Rows[i]
 				exclude     int
 			)
-			for _, col := range column {
+			for j := 0; j < len(column); j++ {
+				var col = column[j]
+				if _, ok := rendered[col]; ok {
+					continue
+				}
 				meta := getMeta(col)
 				if meta != nil {
 					if meta.Enabled == nil || meta.Enabled(value, this, meta) {
 						if meta.IsRequired() {
 							hasRequired = true
 						}
-						this.renderMeta(state, meta, value, prefix, kind, w)
+						_, skipAttrCheck := skipAttrsCheck[col]
+						if attS := meta.Tags.GetString("ATTR"); attS != "" && !skipAttrCheck {
+							skipAttrsCheck[col] = true
+
+							if attS[0] == ';' {
+								// append to new sections
+								var news []string
+								for _, col2 := range strings.Split(attS, ";")[1:] {
+									col2 = strings.TrimSpace(col2)
+									if col2 == "." {
+										col2 = col
+									}
+									news = append(news, col2)
+								}
+								news = append(news, column[j+1:]...)
+								column = append(column[0:j], news...)
+								section.Rows[i] = column
+								section.Rows = append(section.Rows[0:i], append([][]string{news}, section.Rows[i+1:]...)...)
+								j--
+							} else {
+								for _, col2 := range strings.Split(attS, ";") {
+									col2 = strings.TrimSpace(col2)
+									if col2 == "." {
+										this.renderMeta(state, meta, value, prefix, kind, w)
+									} else {
+										m := getMeta(col2)
+										if m == nil {
+											panic(fmt.Errorf("Resource %q: meta %s: meta %q in TAG[ATTR]=%q is nil", this.Resource.ID, col, col2, attS))
+										}
+										this.renderMeta(state, m, value, prefix, kind, w)
+										rendered[col2] = true
+									}
+								}
+							}
+						} else {
+							this.renderMeta(state, meta, value, prefix, kind, w)
+							rendered[col] = true
+						}
 					} else {
 						exclude++
 					}
@@ -365,8 +418,12 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 			panic(err)
 		}
 		if r := recover(); r != nil {
-			var msg string
-			msg = fmt.Sprintf("render meta %q (%v)", meta.Name, meta.Type)
+			var (
+				msg string
+				metaTreePath = path.Join((*this.metaPath)...)
+			)
+
+			msg = fmt.Sprintf("render meta %q (%v)", metaTreePath, meta.Type)
 			writer.Write([]byte(msg))
 
 			if et, ok := r.(tracederror.TracedError); ok {
@@ -719,25 +776,27 @@ func (this *Context) loadResourceStyleSheets() template.HTML {
 	return ""
 }
 
-func (this *Context) loadActions(action string) template.HTML {
+func (this *Context) loadActions(action string, subPath ...string) template.HTML {
 	var (
 		actionKeys     []string
 		actionFiles    []assetfsapi.FileInfo
 		actions        = map[string]assetfsapi.FileInfo{}
 		actionPatterns []assetfs.GlobPatter
+		sub string
 	)
+	for _, sub = range subPath{}
 
 	switch action {
 	case "index", "show", "edit", "new":
-		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", action), TemplateGlob.Wrap("actions")}
+		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", action, sub), TemplateGlob.Wrap("actions", sub)}
 
 		if !this.Resource.isSetShowAttrs && action == "edit" {
-			actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", "show"), TemplateGlob.Wrap("actions")}
+			actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", "show", sub), TemplateGlob.Wrap("actions", sub)}
 		}
 	case "global":
-		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions")}
+		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", sub)}
 	default:
-		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", action)}
+		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", action, sub)}
 	}
 
 	var glob = func(pattern assetfs.GlobPatter) {

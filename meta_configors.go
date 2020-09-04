@@ -54,13 +54,6 @@ var metaConfigorMaps = map[string]func(*Meta){
 			meta.Config.ConfigureQorMeta(meta)
 		}
 	},
-
-	"rich_editor": func(meta *Meta) {
-		if _, ok := meta.Config.(*RichEditorConfig); !ok || meta.Config == nil {
-			meta.Config = &RichEditorConfig{}
-			meta.Config.ConfigureQorMeta(meta)
-		}
-	},
 }
 
 func RegisterMetaConfigor(name string, configor func(meta *Meta)) {

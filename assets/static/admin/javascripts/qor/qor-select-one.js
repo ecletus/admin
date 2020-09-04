@@ -45,37 +45,47 @@
     return keys[0];
   }
 
-  var lock = {
+  var glock = {
     lock: false,
-    $parent: null,
-    $select: null,
-  };
+    id: 0
+  }
+
+  function gunlock() {
+    glock.lock = false
+  }
 
   QorSelectOne.prototype = {
     constructor: QorSelectOne,
+
+    id: undefined,
 
     init: function() {
       let selectedRender = this.$element.data().selectedRender;
       if (selectedRender) {
         eval('this.selectedRender = function(data){'+atob(selectedRender)+'};');
       }
+      this.id = glock.id++;
       this.$selectOneSelectedTemplate = this.$element.find('[name="select-one-selected-template"]');
       this.$selectOneSelectedIconTemplate = this.$element.find('[name="select-one-selected-icon"]');
+      this.lock = {
+        $parent: null,
+        $select: null,
+      };
       this.bind();
     },
 
     bind: function() {
       $document
-        .on(EVENT_CLICK, '[data-selectone-url]', this.openBottomSheets.bind(this))
         .on(EVENT_RELOAD, `.${CLASS_ONE}`, this.reloadData.bind(this));
       this.$element
         .on(EVENT_CLICK, CLASS_CLEAR_SELECT, this.clearSelect.bind(this))
+        .on(EVENT_CLICK, '[data-selectone-url]', this.openBottomSheets.bind(this))
         .on(EVENT_CLICK, CLASS_CHANGE_SELECT, this.changeSelect);
     },
 
     unbind: function() {
-      $document.off(EVENT_CLICK, '[data-selectone-url]').off(EVENT_RELOAD, `.${CLASS_ONE}`);
-      this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, CLASS_CHANGE_SELECT);
+      $document.off(EVENT_RELOAD, `.${CLASS_ONE}`);
+      this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, '[data-selectone-url]').off(EVENT_CLICK, CLASS_CHANGE_SELECT);
     },
 
     clearSelect: function(e) {
@@ -99,40 +109,40 @@
     },
 
     openBottomSheets: function (e) {
-      if (lock.lock) {
+      if (glock.lock) {
         e.preventDefault();
         return false;
       }
 
-      lock.lock = true;
-      setTimeout(function () {lock.lock = false}, 1000*3);
+      glock.lock = true;
+      setTimeout(gunlock, 1000*3);
       var $this = $(e.target);
-      lock.currentData = $this.data();
+      this.lock.currentData = $this.data();
 
-      lock.BottomSheets = $body.data('qor.bottomsheets');
-      lock.$parent = $this.closest(CLASS_PARENT);
-      lock.$select = lock.$parent.find('select');
+      this.lock.BottomSheets = $body.data('qor.bottomsheets');
+      this.lock.$parent = $this.closest(CLASS_PARENT);
+      this.lock.$select = this.lock.$parent.find('select');
 
-      lock.currentData.url = lock.currentData.selectoneUrl;
-      lock.primaryField = lock.currentData.remoteDataPrimaryKey;
-      lock.displayField = lock.currentData.remoteDataDisplayKey;
-      lock.iconField = lock.currentData.remoteDataIconKey;
+      this.lock.currentData.url = this.lock.currentData.selectoneUrl;
+      this.lock.primaryField = this.lock.currentData.remoteDataPrimaryKey;
+      this.lock.displayField = this.lock.currentData.remoteDataDisplayKey;
+      this.lock.iconField = this.lock.currentData.remoteDataIconKey;
 
-      lock.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
-      let data = $.extend({}, lock.currentData);
-      if (lock.$select.length) {
-        data.$element = lock.$select;
+      this.lock.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
+      let data = $.extend({}, this.lock.currentData);
+      if (this.lock.$select.length) {
+        data.$element = this.lock.$select;
       }
-      lock.BottomSheets.open(data, this.handleSelectOne.bind(this));
+      this.lock.BottomSheets.open(data, this.handleSelectOne.bind(this));
     },
 
     initItem: function() {
-      var $selectField = lock.$parent.find(CLASS_SELECT_FIELD),
-          recordeUrl = lock.currentData.remoteRecordeUrl,
+      var $selectField = this.lock.$parent.find(CLASS_SELECT_FIELD),
+          recordeUrl = this.lock.currentData.remoteRecordeUrl,
           selectedID;
 
       if (recordeUrl) {
-        lock.$bottomsheets.find('tr[data-primary-key]').each(function () {
+        this.lock.$bottomsheets.find('tr[data-primary-key]').each(function () {
           var $this = $(this), data = $this.data();
           data.url = recordeUrl.replace("{ID}", data.primaryKey)
         })
@@ -145,11 +155,11 @@
       selectedID = $selectField.data().primaryKey;
 
       if (selectedID) {
-        lock.$bottomsheets
+        this.lock.$bottomsheets
           .find('tr[data-primary-key="' + selectedID + '"]')
           .addClass(CLASS_SELECTED)
           .find('td:first')
-          .append(lock.SELECT_ONE_SELECTED_ICON);
+          .append(this.lock.SELECT_ONE_SELECTED_ICON);
       }
     },
 
@@ -168,7 +178,7 @@
       };
 
       $bottomsheets.qorSelectCore(options).addClass(CLASS_ONE);
-      lock.$bottomsheets = $bottomsheets;
+      this.lock.$bottomsheets = $bottomsheets;
       this.initItem();
     },
 
@@ -182,22 +192,22 @@
 
     handleResults: function(data) {
       var template,
-          $parent = lock.$parent,
-          $selectFeild = $parent.find(CLASS_SELECT_FIELD);
+          $parent = this.lock.$parent,
+          $selectField = $parent.find(CLASS_SELECT_FIELD);
 
-      data.displayName = lock.displayField ? data[lock.displayField] :
+      data.displayName = this.lock.displayField ? data[this.lock.displayField] :
           (data.Text || data.Name || data.Title || data.Value || data.Code || firstTextKey(data));
-      data.selectoneValue = lock.primaryField ? data[lock.primaryField] : (data.primaryKey || data.ID);
+      data.selectoneValue = this.lock.primaryField ? data[this.lock.primaryField] : (data.primaryKey || data.ID);
 
-      if (lock.iconField) {
-          data.icon = data[lock.iconField];
+      if (this.lock.iconField) {
+          data.icon = data[this.lock.iconField];
       }
 
       if (data.icon && /\.svg/.test(data.icon)) {
           data.iconSVG = true;
       }
 
-      if (!lock.$select.length) {
+      if (!this.lock.$select.length) {
         return;
       }
 
@@ -206,19 +216,19 @@
       }
       template = this.renderSelectOne(data);
 
-      if ($selectFeild.length) {
-        $selectFeild.remove();
+      if ($selectField.length) {
+        $selectField.remove();
       }
 
       $parent.prepend(template);
       $parent.find(CLASS_SELECT_TRIGGER).hide();
 
-      lock.$select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
-      lock.$select[0].value = data.primaryKey || data.ID;
+      this.lock.$select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
+      this.lock.$select[0].value = data.primaryKey || data.ID;
 
       $parent.trigger('qor.selectone.selected', [data]);
 
-      lock.$bottomsheets.qorSelectCore('destroy').remove();
+      this.lock.$bottomsheets.qorSelectCore('destroy').remove();
       if (!$('.qor-bottomsheets').is(':visible')) {
         $('body').removeClass('qor-bottomsheets-open');
       }
@@ -227,6 +237,7 @@
     destroy: function() {
       this.unbind();
       this.$element.removeData(NAMESPACE);
+      this.lock = undefined;
     }
   };
 

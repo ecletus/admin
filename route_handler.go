@@ -7,10 +7,9 @@ import (
 
 	"github.com/ecletus/core"
 	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena-go/httpu"
 
 	"github.com/ecletus/roles"
-
-	"github.com/moisespsena-go/xroute"
 )
 
 var blankPermissionMode roles.PermissionMode
@@ -178,93 +177,97 @@ func (h RouteHandler) Child() *RouteHandler {
 	return &h
 }
 
-func (h *RouteHandler) ServeHTTPContext(w http.ResponseWriter, _ *http.Request, rctx *xroute.RouteContext) {
-	var (
-		err            error
-		context        = ContextFromRouteContext(rctx)
-		currentUser, _ = context.Admin.Auth.GetCurrentUser(context)
-	)
+func (h *RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	core.ContextHandle(w, r, core.ContextHandlerFunc(func(ctx *core.Context) {
+		var (
+			err            error
+			context        = ContextFromCoreContext(ctx)
+			currentUser, _ = context.Admin.Auth.GetCurrentUser(context)
+		)
 
-	if currentUser == nil && !h.Config.GlobalPermissionCheckDisabled {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+		context.Writer = httpu.ResponseWriterOf(w)
 
-	context.SetCurrentUser(currentUser)
-	if h.Config.Resource != nil {
-		if h.Config.IDParser != nil {
-			context.IDParser = h.Config.IDParser
-		}
-		context.SetResource(h.Config.Resource)
-	}
-
-	context.Role.Register(roles.GetVisitor())
-
-	if currentUser != nil {
-		context.DB(context.DB().SetCurrentUser(aorm.IDOf(currentUser)))
-		var superUser bool
-		if superUser, err = context.Admin.Auth.IsSuperAdmin(context); err != nil {
-			http.Error(context.Writer, err.Error(), http.StatusInternalServerError)
+		if currentUser == nil && !h.Config.GlobalPermissionCheckDisabled {
+			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		if context.Roles.Len() == 0 {
-			// all user roles
-			context.Roles = context.Role.MatchedRoles(context.Request, currentUser)
 
-			if superUser {
-				// all roles
-				context.Roles.Append(roles.Anyone)
+		context.SetCurrentUser(currentUser)
+		if h.Config.Resource != nil {
+			if h.Config.IDParser != nil {
+				context.IDParser = h.Config.IDParser
+			}
+			context.SetResource(h.Config.Resource)
+		}
+
+		context.Role.Register(roles.GetVisitor())
+
+		if currentUser != nil {
+			context.DB(context.DB().SetCurrentUser(aorm.IDOf(currentUser)))
+			var superUser bool
+			if superUser, err = context.Admin.Auth.IsSuperAdmin(context); err != nil {
+				http.Error(context.Writer, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if context.Roles.Len() == 0 {
+				// all user roles
+				context.Roles = context.Role.MatchedRoles(context.Request, currentUser)
+
+				if superUser {
+					// all roles
+					context.Roles.Append(roles.Anyone)
+				}
+			} else {
+				// only roles with exists for user
+				context.Roles = context.Role.MatchedRoles(context.Request, currentUser).Intersection(context.Roles.Strings())
 			}
 		} else {
-			// only roles with exists for user
-			context.Roles = context.Role.MatchedRoles(context.Request, currentUser).Intersection(context.Roles.Strings())
+			context.Roles = context.Role.MatchedRoles(context.Request, nil)
 		}
-	} else {
-		context.Roles = context.Role.MatchedRoles(context.Request, nil)
-	}
 
-	if setuper, ok := context.Admin.Auth.(ContextSetuper); ok {
-		if err = setuper.ContextSetup(context); err != nil {
-			panic(err)
-		}
-	}
-
-	if !h.Config.GlobalPermissionCheckDisabled && !context.HasPermission(core.Permissioners(h, context.Admin.Auth), context.PermissionMode) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	context.RouteHandler = h
-	h.generateCrumbs(context)
-
-	if context.HasError() {
-		http.Error(w, context.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	for _, res := range context.ParentResource {
-		if res.ContextSetuper != nil {
-			if err = res.ContextSetuper.ContextSetup(context); err != nil {
-				panic(errors.Wrapf(err, "%q Resource context setup", res.UID))
+		if setuper, ok := context.Admin.Auth.(ContextSetuper); ok {
+			if err = setuper.ContextSetup(context); err != nil {
+				panic(err)
 			}
 		}
-	}
 
-	if perm := h.HasContextPermission(context.PermissionMode, context.Context); perm.Deny() {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-	if perm := context.Admin.HasContextPermission(context.PermissionMode, context); perm.Deny() {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
+		if !h.Config.GlobalPermissionCheckDisabled && !context.HasPermission(core.Permissioners(h, context.Admin.Auth), context.PermissionMode) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 
-	var interseptors []func(chain *Chain)
-	for _, p := range h.ParentInterseptors {
-		interseptors = append(interseptors, p...)
-	}
-	interseptors = append(interseptors, h.Interseptors...)
-	NewChain(context, h.Handle, interseptors).Next()
+		context.RouteHandler = h
+		h.generateCrumbs(context)
+
+		if context.HasError() {
+			http.Error(w, context.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		for _, res := range context.ParentResource {
+			if res.ContextSetuper != nil {
+				if err = res.ContextSetuper.ContextSetup(context); err != nil {
+					panic(errors.Wrapf(err, "%q Resource context setup", res.UID))
+				}
+			}
+		}
+
+		if perm := h.HasContextPermission(context.PermissionMode, context.Context); perm.Deny() {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		if perm := context.Admin.HasContextPermission(context.PermissionMode, context); perm.Deny() {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		var interseptors []func(chain *Chain)
+		for _, p := range h.ParentInterseptors {
+			interseptors = append(interseptors, p...)
+		}
+		interseptors = append(interseptors, h.Interseptors...)
+		NewChain(context, h.Handle, interseptors).Next()
+	}))
 }
 
 func (h *RouteHandler) Intercept(f ...func(chain *Chain)) {

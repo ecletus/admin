@@ -11,9 +11,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/moisespsena-go/middleware"
 	"github.com/moisespsena/template/html/template"
 	"github.com/pkg/errors"
+
+	"github.com/moisespsena-go/middleware"
 
 	"github.com/ecletus/roles"
 
@@ -28,14 +29,13 @@ type Interseptor func(w http.ResponseWriter, req *http.Request, serv func(w http
 
 // routeInterseptor dispatches the handler registered in the matched route
 func (this *Admin) routeInterseptor(chain *xroute.ChainHandler) {
-	qorContext := core.ContexFromRouteContext(chain.Context)
-	staticURL := qorContext.StaticURL + "/admin"
-	req, qorContext := qorContext.NewChild(nil, this.Config.MountPath)
-	qorContext.StaticURL = staticURL
-	context := this.NewContext(qorContext)
+	mainContext := core.ContextFromRequest(chain.Request())
+	req, childContext := mainContext.NewChild(nil, this.Config.MountPath)
+	childContext.StaticURL = mainContext.StaticURL + "/admin"
+	context := this.NewContext(childContext)
 	context.RouteContext = chain.Context
-
-	SetContextToChain(chain, context)
+	childContext.Parent.SetValue(CONTEXT_KEY, context)
+	chain.SetRequest(req)
 
 	switch req.Method {
 	case http.MethodDelete, http.MethodPost, http.MethodPut:
@@ -57,7 +57,7 @@ func (this *Admin) routeInterseptor(chain *xroute.ChainHandler) {
 			chain.Context.DefaultValueKey = oldKey
 		}()
 		chain.Context.DefaultValueKey = CONTEXT_KEY
-		chain.Next(req)
+		chain.Next()
 	}
 
 	if this.Config.Public {
@@ -70,7 +70,7 @@ func (this *Admin) routeInterseptor(chain *xroute.ChainHandler) {
 }
 
 func (this *Admin) handlerInterseptor(chain *xroute.ChainHandler) {
-	context := ContextFromChain(chain)
+	context := ContextFromCoreContext(core.ContextFromRequest(chain.Request()))
 	context.RouteContext = chain.Context
 
 	if context.PermissionMode == roles.NONE {
@@ -168,7 +168,7 @@ func (this *Admin) UserPagesHandler(ctx *Context) {
 
 	var baseDir = "www/"
 	if ctx.Anonymous() {
-		baseDir += AnonymousDirName+"/"
+		baseDir += AnonymousDirName + "/"
 	}
 	pth = path.Join(baseDir, pth)
 	if ext := path.Ext(pth); ext == "" {

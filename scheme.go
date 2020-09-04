@@ -128,6 +128,14 @@ func (this *Scheme) Order(order ...interface{}) *Scheme {
 }
 
 func (this *Scheme) SetOrder(order ...interface{}) *Scheme {
+	if len(order) == 1 {
+		if s, ok := order[0].([]string); ok {
+			order = make([]interface{}, len(s))
+			for i, s := range s {
+				order[i] = s
+			}
+		}
+	}
 	this.orders = order
 	return this
 }

@@ -3193,7 +3193,7 @@
                         $responseBody = $response.find(CLASS_BODY_CONTENT);
 
                     if ($responseBody.length) {
-                        $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html());
+                        $bottomsheets.find(CLASS_BODY_CONTENT).html($responseBody.html()).trigger('enable');
 
                         if ($responseHeader.length) {
                             this.$body
@@ -3292,7 +3292,7 @@
                 $submit = $form.find(':submit');
 
             // will ingore submit event if need handle with other submit event: like select one, many...
-            if (resourseData.ingoreSubmit) {
+            if (resourseData.ignoreSubmit) {
                 return;
             }
 
@@ -3395,10 +3395,11 @@
                 method,
                 dataType,
                 load,
+                data = data || {},
                 actionData = data.actionData,
                 resourseData = this.resourseData,
                 selectModal = resourseData.selectModal,
-                ingoreSubmit = resourseData.ingoreSubmit,
+                ignoreSubmit = resourseData.ignoreSubmit,
                 $bottomsheets = this.$bottomsheets,
                 $header = this.$header,
                 $body = this.$body;
@@ -3460,7 +3461,7 @@
 
                             this.loadExtraResource(loadExtraResourceData);
 
-                            if (ingoreSubmit) {
+                            if (ignoreSubmit) {
                                 $content.find(CLASS_BODY_HEAD).remove();
                             }
 
@@ -3478,7 +3479,7 @@
                             if (selectModal) {
                                 $body
                                     .find('.qor-button--new')
-                                    .data('ingoreSubmit', true)
+                                    .data('ignoreSubmit', true)
                                     .data('selectId', resourseData.selectId)
                                     .data('loadInline', true);
                                 if (
@@ -3513,6 +3514,16 @@
                             this.addHeaderClass();
 
                             $bottomsheets.trigger('enable');
+
+                            let $form = $bottomsheets.find('.qor-bottomsheets__body form');
+                            if ($form.length) {
+                                this.$bottomsheets.qorSelectCore('newFormHandle', $form, this.load.bind(this));
+                            }
+
+                            $body.find('form .qor-button--cancel:last').click(function (){
+                                this.hide(e);
+                                return false;
+                            }.bind(this));
 
                             $bottomsheets.one(EVENT_HIDDEN, function() {
                                 $(this).trigger('disable');
@@ -3582,7 +3593,7 @@
 
             $bottomsheets.qorSelectCore('destroy');
 
-            $bottomsheets.trigger(EVENT_BOTTOMSHEET_CLOSED).remove();
+            $bottomsheets.trigger(EVENT_BOTTOMSHEET_CLOSED).trigger('disable').remove();
             if (!$('.qor-bottomsheets').is(':visible')) {
                 $('body').removeClass(CLASS_OPEN);
             }
@@ -5843,11 +5854,12 @@
         },
 
         bind: function() {
-            this.$el.bind(EVENT_SUBMIT, this.submit)
+            this.$el.off(EVENT_SUBMIT, this.submit.bind(this));
+            this.$el.bind(EVENT_SUBMIT, this.submit.bind(this))
         },
 
         unbind: function() {
-            this.$el.off(EVENT_SUBMIT, this.submit);
+            this.$el.off(EVENT_SUBMIT, this.submit.bind(this));
         },
 
         destroy: function() {
@@ -5855,21 +5867,30 @@
             this.$el.removeData(NAMESPACE);
         },
 
+        updateOptions: function(options) {
+            this.options = $.extend(this.options, options);
+        },
+
         submit: function (e) {
-            var form = e.target;
-            var $form = $(form);
-            var _this = this;
-            var $submit = $form.find(':submit');
+            let form = e.target,
+                $form = $(form),
+                $submit = $form.find(':submit'),
+                beforeSubmit = this.options.onBeforeSubmit,
+                submitSuccess = this.options.onSubmitSuccess,
+                openPage = this.options.openPage;
 
             if (window.FormData) {
                 e.preventDefault();
                 let action = $form.prop('action'),
-                    continueEditing = /[?|&]continue_editing=true/.test(action);
+                    continueEditing = /[?|&]continue_editing=true/.test(action),
+                    cfg;
 
                 if (continueEditing) {
                     action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
                 }
-                $.ajax(action, {
+
+                cfg = {
+                    continueEditing: continueEditing,
                     method: $form.prop('method'),
                     data: new FormData(form),
                     dataType: 'html',
@@ -5878,14 +5899,19 @@
                     headers: {
                         'X-Layout': 'lite'
                     },
-                    beforeSend: function () {
+                    beforeSend: function (jqXHR, cfg) {
                         $submit.prop('disabled', true);
                     },
                     success: function (html, statusText, jqXHR) {
                         $form.parent().find('.qor-error').remove();
+
                         let xLocation = jqXHR.getResponseHeader('X-Location');
 
                         if (xLocation) {
+                            if ($.isFunction(openPage)) {
+                                openPage(xLocation)
+                                return;
+                            }
                             window.location.href = xLocation;
                             return
                         }
@@ -5898,8 +5924,17 @@
                             return;
                         }
 
-                        if (returnUrl !== '') {
+                        if (returnUrl) {
+                            if ($.isFunction(openPage)) {
+                                openPage(returnUrl)
+                                return;
+                            }
                             location.href = returnUrl
+                            return;
+                        }
+
+                        if ($.isFunction(submitSuccess)) {
+                            submitSuccess(html, statusText, jqXHR)
                             return;
                         }
 
@@ -5961,7 +5996,13 @@
                     complete: function () {
                         $submit.prop('disabled', false);
                     }
-                });
+                };
+
+                if ($.isFunction(beforeSubmit)) {
+                    beforeSubmit(this, cfg);
+                }
+
+                $.ajax(action, cfg);
             }
         }
     };
@@ -5969,6 +6010,7 @@
     QorAsyncFormSubmiter.DEFAULTS = {};
 
     QorAsyncFormSubmiter.plugin = function(options) {
+        let args = Array.prototype.slice.call(arguments, 1);
         return this.each(function() {
             var $this = $(this);
             var data = $this.data(NAMESPACE);
@@ -5978,19 +6020,23 @@
                 if (/destroy/.test(options)) {
                     return;
                 }
-                data = new QorAsyncFormSubmiter(this, options);
-                if (("asyncSubmiter" in data)) {
-                    $this.data(NAMESPACE, data);
+
+                if (typeof options === 'string') {
+                    data = new QorAsyncFormSubmiter(this, {});
                 } else {
-                    return
+                    data = new QorAsyncFormSubmiter(this, options);
                 }
+
+                $this.data(NAMESPACE, data);
             }
 
             if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
-                fn.apply(data);
+                fn.apply(data, args);
             }
         });
     };
+
+    $.fn.qorAsyncFormSubmiter = QorAsyncFormSubmiter.plugin;
 
     $(function() {
         var selector = 'form[data-async="true"]';
@@ -5999,6 +6045,9 @@
         $(document)
             .on(EVENT_DISABLE, function(e) {
                 let $form = $(selector, e.target);
+                if (!$form.length) {
+                    return
+                }
                 if ($form.parents('.qor-slideout').length) {
                     return
                 }
@@ -6006,10 +6055,13 @@
             })
             .on(EVENT_ENABLE, function(e) {
                 let $form = $(selector, e.target);
+                if (!$form.length) {
+                    return
+                }
                 if ($form.parents('.qor-slideout').length) {
                     return
                 }
-                QorAsyncFormSubmiter.plugin.call($(selector, e.target), options);
+                QorAsyncFormSubmiter.plugin.call($form, options);
             })
             .triggerHandler(EVENT_ENABLE);
     });
@@ -8175,7 +8227,7 @@
 
 });
 
-(function(factory) {
+(function (factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -8186,7 +8238,7 @@
         // Browser globals.
         factory(jQuery);
     }
-})(function($) {
+})(function ($) {
     'use strict';
 
     let FormData = window.FormData,
@@ -8207,19 +8259,42 @@
     QorSelectCore.prototype = {
         constructor: QorSelectCore,
 
-        init: function() {
+        init: function () {
             this.bind();
         },
 
-        bind: function() {
-            this.$element.on(EVENT_CLICK, CLASS_CLICK_TABLE, this.processingData.bind(this)).on(EVENT_SUBMIT, 'form', this.submit.bind(this));
+        bind: function () {
+            this.$element.on(EVENT_CLICK, CLASS_CLICK_TABLE, this.processingData.bind(this));
+            //.on(EVENT_SUBMIT, 'form', this.submit.bind(this));
+            //this.$element.on('enable.qor.asyncFormSubmiter', 'form', this.newFormHandle.bind(this))
         },
 
-        unbind: function() {
+        unbind: function () {
             this.$element.off(EVENT_CLICK, '.qor-table tbody tr').off(EVENT_SUBMIT, 'form');
         },
 
-        processingData: function(e) {
+        newFormHandle: function ($form, openPage) {
+            $form.qorAsyncFormSubmiter('updateOptions', {
+                onBeforeSubmit: function (jqXHR, cfg) {
+                    if (!cfg.continueEditing) {
+                        cfg.headers['X-Redirection-Disabled'] = true;
+                        cfg.headers['X-Accept'] = 'json';
+                    }
+                    cfg.headers['X-Flash-Messages-Disabled'] = true;
+                }.bind(this),
+                onSubmitSuccess: function (data, statusText, jqXHR) {
+                    let onSelect = this.options.onSelect;
+                    data = JSON.parse(data);
+                    if (onSelect && $.isFunction(onSelect)) {
+                        onSelect(data, undefined);
+                        $(document).trigger(EVENT_ONSELECT);
+                    }
+                }.bind(this),
+                openPage: openPage
+            });
+        },
+
+        processingData: function (e) {
             let $this = $(e.target).closest('tr'),
                 data = {},
                 url,
@@ -8233,7 +8308,7 @@
             url = data.mediaLibraryUrl || data.url;
 
             if (url) {
-                $.getJSON(url, function(json) {
+                $.getJSON(url, function (json) {
                     json.MediaOption && (json.MediaOption = JSON.parse(json.MediaOption));
                     data = $.extend({}, json, data);
                     if (onSelect && $.isFunction(onSelect)) {
@@ -8250,13 +8325,17 @@
             return false;
         },
 
-        submit: function(e) {
+        submit: function (e) {
             let form = e.target,
                 $form = $(form),
                 _this = this,
                 $submit = $form.find(':submit'),
                 data,
                 onSubmit = this.options.onSubmit;
+
+            if ($form.parents('.qor-page__new').length) {
+                return
+            }
 
             $(document).trigger(EVENT_SELECTCORE_BEFORESEND);
 
@@ -8269,14 +8348,18 @@
                     dataType: 'json',
                     processData: false,
                     contentType: false,
-                    beforeSend: function() {
+                    headers: {
+                        'X-Layout': 'lite',
+                        'X-Redirection-Disabled': true
+                    },
+                    beforeSend: function () {
                         $form
                             .parent()
                             .find('.qor-error')
                             .remove();
                         $submit.prop('disabled', true);
                     },
-                    success: function(json) {
+                    success: function (json) {
                         data = json;
                         data.primaryKey = data.ID;
 
@@ -8289,7 +8372,7 @@
                             _this.refresh();
                         }
                     },
-                    error: function(xhr, textStatus, errorThrown) {
+                    error: function (xhr, textStatus, errorThrown) {
                         let error;
 
                         if (xhr.responseJSON) {
@@ -8313,26 +8396,27 @@
                             window.alert([textStatus, errorThrown].join(': '));
                         }
                     },
-                    complete: function() {
+                    complete: function () {
                         $submit.prop('disabled', false);
                     }
                 });
             }
         },
 
-        refresh: function() {
-            setTimeout(function() {
+        refresh: function () {
+            setTimeout(function () {
                 window.location.reload();
             }, 350);
         },
 
-        destroy: function() {
+        destroy: function () {
             this.unbind();
         }
     };
 
-    QorSelectCore.plugin = function(options) {
-        return this.each(function() {
+    QorSelectCore.plugin = function (options) {
+        let args = Array.prototype.slice.call(arguments, 1);
+        return this.each(function () {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 fn;
@@ -8345,7 +8429,7 @@
             }
 
             if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
-                fn.apply(data);
+                fn.apply(data, args);
             }
         });
     };
@@ -8406,17 +8490,17 @@
 
         bind: function() {
             $document
-                .on(EVENT_CLICK, '[data-select-modal="many"]', this.openBottomSheets.bind(this))
                 .on(EVENT_RELOAD, `.${CLASS_MANY}`, this.reloadData.bind(this));
 
             this.$element
                 .on(EVENT_CLICK, CLASS_CLEAR_SELECT, this.clearSelect.bind(this))
+                .on(EVENT_CLICK, '[data-select-modal="many"]', this.openBottomSheets.bind(this))
                 .on(EVENT_CLICK, CLASS_UNDO_DELETE, this.undoDelete.bind(this));
         },
 
         unbind: function() {
-            $document.off(EVENT_CLICK, '[data-select-modal="many"]').off(EVENT_RELOAD, `.${CLASS_MANY}`);
-            this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, CLASS_UNDO_DELETE);
+            $document.off(EVENT_RELOAD, `.${CLASS_MANY}`);
+            this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, '[data-select-modal="many"]').off(EVENT_CLICK, CLASS_UNDO_DELETE);
         },
 
         clearSelect: function(e) {
@@ -8743,37 +8827,47 @@
     return keys[0];
   }
 
-  var lock = {
+  var glock = {
     lock: false,
-    $parent: null,
-    $select: null,
-  };
+    id: 0
+  }
+
+  function gunlock() {
+    glock.lock = false
+  }
 
   QorSelectOne.prototype = {
     constructor: QorSelectOne,
+
+    id: undefined,
 
     init: function() {
       let selectedRender = this.$element.data().selectedRender;
       if (selectedRender) {
         eval('this.selectedRender = function(data){'+atob(selectedRender)+'};');
       }
+      this.id = glock.id++;
       this.$selectOneSelectedTemplate = this.$element.find('[name="select-one-selected-template"]');
       this.$selectOneSelectedIconTemplate = this.$element.find('[name="select-one-selected-icon"]');
+      this.lock = {
+        $parent: null,
+        $select: null,
+      };
       this.bind();
     },
 
     bind: function() {
       $document
-        .on(EVENT_CLICK, '[data-selectone-url]', this.openBottomSheets.bind(this))
         .on(EVENT_RELOAD, `.${CLASS_ONE}`, this.reloadData.bind(this));
       this.$element
         .on(EVENT_CLICK, CLASS_CLEAR_SELECT, this.clearSelect.bind(this))
+        .on(EVENT_CLICK, '[data-selectone-url]', this.openBottomSheets.bind(this))
         .on(EVENT_CLICK, CLASS_CHANGE_SELECT, this.changeSelect);
     },
 
     unbind: function() {
-      $document.off(EVENT_CLICK, '[data-selectone-url]').off(EVENT_RELOAD, `.${CLASS_ONE}`);
-      this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, CLASS_CHANGE_SELECT);
+      $document.off(EVENT_RELOAD, `.${CLASS_ONE}`);
+      this.$element.off(EVENT_CLICK, CLASS_CLEAR_SELECT).off(EVENT_CLICK, '[data-selectone-url]').off(EVENT_CLICK, CLASS_CHANGE_SELECT);
     },
 
     clearSelect: function(e) {
@@ -8797,40 +8891,40 @@
     },
 
     openBottomSheets: function (e) {
-      if (lock.lock) {
+      if (glock.lock) {
         e.preventDefault();
         return false;
       }
 
-      lock.lock = true;
-      setTimeout(function () {lock.lock = false}, 1000*3);
+      glock.lock = true;
+      setTimeout(gunlock, 1000*3);
       var $this = $(e.target);
-      lock.currentData = $this.data();
+      this.lock.currentData = $this.data();
 
-      lock.BottomSheets = $body.data('qor.bottomsheets');
-      lock.$parent = $this.closest(CLASS_PARENT);
-      lock.$select = lock.$parent.find('select');
+      this.lock.BottomSheets = $body.data('qor.bottomsheets');
+      this.lock.$parent = $this.closest(CLASS_PARENT);
+      this.lock.$select = this.lock.$parent.find('select');
 
-      lock.currentData.url = lock.currentData.selectoneUrl;
-      lock.primaryField = lock.currentData.remoteDataPrimaryKey;
-      lock.displayField = lock.currentData.remoteDataDisplayKey;
-      lock.iconField = lock.currentData.remoteDataIconKey;
+      this.lock.currentData.url = this.lock.currentData.selectoneUrl;
+      this.lock.primaryField = this.lock.currentData.remoteDataPrimaryKey;
+      this.lock.displayField = this.lock.currentData.remoteDataDisplayKey;
+      this.lock.iconField = this.lock.currentData.remoteDataIconKey;
 
-      lock.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
-      let data = $.extend({}, lock.currentData);
-      if (lock.$select.length) {
-        data.$element = lock.$select;
+      this.lock.SELECT_ONE_SELECTED_ICON = this.$selectOneSelectedIconTemplate.html();
+      let data = $.extend({}, this.lock.currentData);
+      if (this.lock.$select.length) {
+        data.$element = this.lock.$select;
       }
-      lock.BottomSheets.open(data, this.handleSelectOne.bind(this));
+      this.lock.BottomSheets.open(data, this.handleSelectOne.bind(this));
     },
 
     initItem: function() {
-      var $selectField = lock.$parent.find(CLASS_SELECT_FIELD),
-          recordeUrl = lock.currentData.remoteRecordeUrl,
+      var $selectField = this.lock.$parent.find(CLASS_SELECT_FIELD),
+          recordeUrl = this.lock.currentData.remoteRecordeUrl,
           selectedID;
 
       if (recordeUrl) {
-        lock.$bottomsheets.find('tr[data-primary-key]').each(function () {
+        this.lock.$bottomsheets.find('tr[data-primary-key]').each(function () {
           var $this = $(this), data = $this.data();
           data.url = recordeUrl.replace("{ID}", data.primaryKey)
         })
@@ -8843,11 +8937,11 @@
       selectedID = $selectField.data().primaryKey;
 
       if (selectedID) {
-        lock.$bottomsheets
+        this.lock.$bottomsheets
           .find('tr[data-primary-key="' + selectedID + '"]')
           .addClass(CLASS_SELECTED)
           .find('td:first')
-          .append(lock.SELECT_ONE_SELECTED_ICON);
+          .append(this.lock.SELECT_ONE_SELECTED_ICON);
       }
     },
 
@@ -8866,7 +8960,7 @@
       };
 
       $bottomsheets.qorSelectCore(options).addClass(CLASS_ONE);
-      lock.$bottomsheets = $bottomsheets;
+      this.lock.$bottomsheets = $bottomsheets;
       this.initItem();
     },
 
@@ -8880,22 +8974,22 @@
 
     handleResults: function(data) {
       var template,
-          $parent = lock.$parent,
-          $selectFeild = $parent.find(CLASS_SELECT_FIELD);
+          $parent = this.lock.$parent,
+          $selectField = $parent.find(CLASS_SELECT_FIELD);
 
-      data.displayName = lock.displayField ? data[lock.displayField] :
+      data.displayName = this.lock.displayField ? data[this.lock.displayField] :
           (data.Text || data.Name || data.Title || data.Value || data.Code || firstTextKey(data));
-      data.selectoneValue = lock.primaryField ? data[lock.primaryField] : (data.primaryKey || data.ID);
+      data.selectoneValue = this.lock.primaryField ? data[this.lock.primaryField] : (data.primaryKey || data.ID);
 
-      if (lock.iconField) {
-          data.icon = data[lock.iconField];
+      if (this.lock.iconField) {
+          data.icon = data[this.lock.iconField];
       }
 
       if (data.icon && /\.svg/.test(data.icon)) {
           data.iconSVG = true;
       }
 
-      if (!lock.$select.length) {
+      if (!this.lock.$select.length) {
         return;
       }
 
@@ -8904,19 +8998,19 @@
       }
       template = this.renderSelectOne(data);
 
-      if ($selectFeild.length) {
-        $selectFeild.remove();
+      if ($selectField.length) {
+        $selectField.remove();
       }
 
       $parent.prepend(template);
       $parent.find(CLASS_SELECT_TRIGGER).hide();
 
-      lock.$select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
-      lock.$select[0].value = data.primaryKey || data.ID;
+      this.lock.$select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
+      this.lock.$select[0].value = data.primaryKey || data.ID;
 
       $parent.trigger('qor.selectone.selected', [data]);
 
-      lock.$bottomsheets.qorSelectCore('destroy').remove();
+      this.lock.$bottomsheets.qorSelectCore('destroy').remove();
       if (!$('.qor-bottomsheets').is(':visible')) {
         $('body').removeClass('qor-bottomsheets-open');
       }
@@ -8925,6 +9019,7 @@
     destroy: function() {
       this.unbind();
       this.$element.removeData(NAMESPACE);
+      this.lock = undefined;
     }
   };
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/ecletus/core"
 	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/xroute"
 )
@@ -16,7 +17,7 @@ func (this *Admin) registerCompositePrimaryKeyCallback(router xroute.Router) {
 	router.Use(&xroute.Middleware{
 		Name: PKG + ".composite_primary_key_filter",
 		Handler: func(chain *xroute.ChainHandler) {
-			context := ContextFromChain(chain)
+			context := core.ContextFromRequest(chain.Request()).Value(CONTEXT_KEY).(*Context)
 			for key, value := range context.Request.URL.Query() {
 				if primaryKeyRegexp.MatchString(key) {
 					context.DB(context.DB().Set(key, value))

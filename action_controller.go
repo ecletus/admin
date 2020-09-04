@@ -93,7 +93,7 @@ func (this *ActionControl) Action(context *Context) {
 		err = action.Handler(&actionArgument)
 
 	done:
-		if !actionArgument.Context.Writer.Writed() {
+		if !actionArgument.Context.Writer.WroteHeader() {
 			if err == nil {
 				message := actionArgument.successMessage
 				if message == "" {

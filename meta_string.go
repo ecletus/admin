@@ -19,7 +19,7 @@ func (this *StringConfig) ConfigureQorMeta(metaor resource.Metaor) {
 		meta.Type = "string"
 	}
 	if this.MaxLen == 0 {
-		if t, ok := meta.Tags.Get("MAX_LEN"); ok {
+		if t, ok := meta.Tags.GetOk("MAX_LEN"); ok {
 			ui64, err := strconv.ParseUint(t, 10, 16)
 			if err != nil {
 				panic(err)

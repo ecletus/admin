@@ -195,6 +195,31 @@ func (this *Meta) updateMeta() {
 					}
 				}
 			}
+		} else if this.Type == "select_one" && this.Config == nil && this.FieldStruct.Struct.Type.Kind() == reflect.Bool {
+			this.Config = MetaConfigBooleanSelect()
+			this.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) interface{} {
+				value := this.Value(ctx, recorde)
+				if value == nil {
+					return ""
+				}
+				b := value.(bool)
+				p := I18NGROUP + ".form.bool."
+				if b {
+					return ctx.Ts(p+"true", "Yes")
+				}
+				return ctx.Ts(p+"false", "No")
+			})
+			this.AfterUpdate(func() {
+				this.NewValuer(func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{} {
+					if ContextFromContext(ctx).Type.Has(NEW) {
+						return nil
+					}
+					return old(recorde, ctx)
+				})
+			})
+			this.IsZeroFunc = func(recorde, value interface{}) bool {
+				return false
+			}
 		} else {
 			if relationship := this.FieldStruct.Relationship; relationship != nil {
 				if (relationship.Kind == "has_one" || relationship.Kind == "has_many") && this.Meta.Setter == nil && (this.Type == "select_one" || this.Type == "select_many") {
@@ -343,4 +368,12 @@ a:
 	if this.Resource != nil {
 		this.Resource.AddForeignMeta(this)
 	}
+
+	func(f ...func()) {
+		this.afterUpdate = nil
+		// call after update callbacks
+		for _, f := range f {
+			f()
+		}
+	}(this.afterUpdate...)
 }

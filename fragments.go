@@ -135,7 +135,7 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 		return a.Config.Priority < b.Config.Priority || b.Resource.Name < b.Resource.Name
 	})
 
-	if fr.Config.Is {
+	if fr.Config.Mode.Cast() {
 		var param []string
 		super := fr.Resource
 		for super.Fragment != nil {

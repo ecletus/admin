@@ -72,13 +72,18 @@ func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, 
 		for i, meta := range metas {
 			// has_one, has_many checker to avoid dead loop
 			if meta.Resource != nil && (meta.FieldStruct != nil && meta.FieldStruct.Relationship != nil && (meta.FieldStruct.Relationship.Kind == "has_one" || meta.FieldStruct.Relationship.Kind == "has_many" || meta.Type == "single_edit" || meta.Type == "collection_edit")) {
-				values[metaNames[i].GetEncodedNameOrDefault()] = convertObjectToJSONMap(meta.Resource, context, context.RawValueOf(value, meta), layout)
+				if m := convertObjectToJSONMap(meta.Resource, context, context.RawValueOf(value, meta), layout); m != nil {
+					values[metaNames[i].GetEncodedNameOrDefault()] = m
+				}
 			} else {
 				formattedValue := context.FormattedValueOf(value, meta)
 				if meta.ForceShowZero || !meta.IsZero(value, formattedValue) {
 					values[metaNames[i].GetEncodedNameOrDefault()] = formattedValue
 				}
 			}
+		}
+		if len(values) == 0 {
+			return nil
 		}
 		return values
 	case reflect.Map:

@@ -40,7 +40,7 @@ func (this *Context) Execute(name string, result interface{}) {
 
 	defer this.templatesStack.Add(layout)()
 
-	if err := executor.Execute(&buf, this); err != nil {
+	if err := this.renderExecutor(executor, &buf, this); err != nil {
 		this.Errors = core.Errors{}
 		panic(err)
 	}

@@ -79,7 +79,7 @@ func (this *Controller) Create(context *Context) {
 		if cfg.ErrorCallback != nil {
 			cfg.ErrorCallback(context, context.Errors)
 		}
-		if context.Writer.Writed() {
+		if context.Writer.WroteHeader() {
 			return
 		}
 		responder.With("html", func() {
@@ -92,15 +92,20 @@ func (this *Controller) Create(context *Context) {
 		}).Respond(context.Request)
 	} else {
 		context.ResourceID = context.Resource.GetKey(context.Result)
-		message := string(context.tt(I18NGROUP+".form.successfully_created",
-			NewResourceRecorde(context, res, recorde),
-			"{{.}} was successfully created"))
 
-		if cfg.SuccessCallback != nil {
-			cfg.SuccessCallback(context, message)
-			if context.Writer.Writed() {
-				return
+		if (context.Request.Header.Get("X-Flash-Messages-Disabled") != "true") {
+			message := string(context.tt(I18NGROUP+".form.successfully_created",
+				NewResourceRecorde(context, res, recorde),
+				"{{.}} was successfully created"))
+
+			if cfg.SuccessCallback != nil {
+				cfg.SuccessCallback(context, message)
+				if context.Writer.WroteHeader() {
+					return
+				}
 			}
+
+			context.Flash(message, "success")
 		}
 
 		if cfg.RedirectTo == "" {
@@ -110,13 +115,10 @@ func (this *Controller) Create(context *Context) {
 		defer context.LogErrors()
 		context.Type = SHOW
 		context.DefaulLayout()
-		context.Flash(message, "success")
 		responder.With("html", func() {
 			url := cfg.RedirectTo
 			if url == "" {
-				if context.Request.URL.Query().Get("continue_editing") != "" {
-					url = res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
-				} else if context.Request.URL.Query().Get("continue_editing_url") != "" {
+				if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
 					url = res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
 				} else {
 					url = res.GetContextIndexURI(context.Context)
@@ -125,12 +127,12 @@ func (this *Controller) Create(context *Context) {
 			httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
 		}).With([]string{"json", "xml"}, func() {
 			context.Api = true
-			if context.Request.URL.Query().Get("continue_editing") != "" {
+			if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
 				url := res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
-				context.Encode(map[string]interface{}{"HTTPRedirectTo": url})
+				httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
 				return
 			}
 			context.Encode(recorde)
-		}).Respond(context.Request)
+		}).XAccept().Respond(context.Request)
 	}
 }

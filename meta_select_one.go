@@ -158,12 +158,21 @@ func (cfg *SelectOneConfig) basic() {
 			cfg.Layout = BASIC_LAYOUT_HTML_WITH_ICON
 		}
 	}
-	if cfg.DisplayField == "" {
-		cfg.DisplayField = "Value"
-	}
 	cfg.RemoteDataResource.RecordeUrl().Layout = cfg.Layout
 	if cfg.SelectMode == "bottom_sheet" {
-		cfg.BottomSheetSelectedTemplate = "[[& Value ]]"
+		if cfg.BottomSheetSelectedTemplate == "" {
+			if cfg.DisplayField != "" {
+				cfg.BottomSheetSelectedTemplate = "[[& " + cfg.DisplayField + " ]]"
+			} else  {
+				var defaul = "[[& Value ]]"
+				if cfg.RemoteDataResource != nil {
+					if tmpl := cfg.RemoteDataResource.Resource.Tags.GetString("UI_SELECTED_TMPL"); tmpl != "" {
+						defaul = tmpl
+					}
+				}
+				cfg.BottomSheetSelectedTemplate = defaul
+			}
+		}
 	}
 }
 
@@ -379,6 +388,20 @@ func (cfg *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor) {
 							}
 							return template.HTML(strings.Join(result, ", "))
 						}
+					}
+					return ""
+				})
+			} else if cfg.Collection != nil {
+				meta.SetFormattedValuer(func(record interface{}, context *core.Context) interface{} {
+					if value := meta.Value(context, record); value != nil {
+						s := value.(string)
+						items := cfg.getCollection(record, ContextFromCoreContext(context))
+						for _, item := range items {
+							if item[0] == s {
+								return item[1]
+							}
+						}
+						return s
 					}
 					return ""
 				})

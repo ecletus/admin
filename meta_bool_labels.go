@@ -13,7 +13,6 @@ type BoolLabelsConfig struct {
 	metaConfig
 }
 
-// ConfigureQorMeta configure rich editor meta
 func (s *BoolLabelsConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	meta := metaor.(*Meta)
 	meta.Type = "bool_labels"

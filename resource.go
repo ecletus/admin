@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-
 	// "github.com/ecletus/responder"
 	"strconv"
 	"strings"
@@ -123,6 +122,7 @@ type Resource struct {
 	NewCrudFunc           func(res *Resource, ctx *core.Context) *resource.CRUD
 	MetaContextGetterFunc func(ctx *Context) func(name string) *Meta
 	ContextSetuper        ContextSetuper
+	GetContextAttrsFunc   func(ctx *Context)[]string
 
 	TemplatePath string
 
@@ -135,11 +135,20 @@ type Resource struct {
 	setupMetasCalled bool
 
 	metaUpdateCallbacks MetaUpdateCallbacks
+
+	createWizard *Wizard
 }
 
-func (this *Resource) GetContextMetas(context *core.Context) []resource.Metaor {
+func (this *Resource) GetContextMetas(context *core.Context) (metas []resource.Metaor) {
 	ctx := ContextFromCoreContext(context)
-	var metas []resource.Metaor
+
+	if this.GetContextAttrsFunc != nil {
+		for _, m := range this.ConvertSectionToMetas(this.SectionsList(this.GetContextAttrsFunc(ctx))) {
+			metas = append(metas, m)
+		}
+		return
+	}
+
 	if ctx.Type.Has(EDIT) {
 		for _, m := range this.ConvertSectionToMetas(this.EditAttrs()) {
 			metas = append(metas, m)

@@ -82,6 +82,8 @@
         return /.svg$/.test(url);
     }
 
+
+
     function QorCropper(element, options) {
         this.$element = $(element);
         this.options = $.extend(true, {}, QorCropper.DEFAULTS, $.isPlainObject(options) && options);
@@ -96,10 +98,11 @@
             let options = this.options,
                 $this = this.$element,
                 $parent = $this.closest(options.parent),
+                $form = $parent.closest('form'),
+                // $takePicture = $form.find(`#${$this.attr('id')}-take-picture`),
                 data,
                 outputValue,
                 fetchUrl,
-                _this = this,
                 imageData;
 
             if (!$parent.length) {
@@ -107,8 +110,9 @@
             }
 
             this.$parent = $parent;
+            this.$takePicture = null //this.$takePicture = $takePicture.length && vigator.mediaDevices.getUserMedia ? $takePicture : null;
             this.$output = $parent.find(options.output);
-            this.$formCropInput = $parent.closest('form').find(HIDDEN_DATA_INPUT);
+            this.$formCropInput = $form.find(HIDDEN_DATA_INPUT);
             this.$list = $parent.find(options.list);
 
             fetchUrl = this.$output.data('fetchSizedata');
@@ -116,15 +120,15 @@
             if (fetchUrl) {
                 $.getJSON(fetchUrl, function(data) {
                     imageData = JSON.parse(data.MediaOption);
-                    _this.$output.val(JSON.stringify(data));
-                    _this.$formCropInput.val(JSON.stringify(data));
-                    _this.data = imageData || {};
+                    this.$output.val(JSON.stringify(data));
+                    this.$formCropInput.val(JSON.stringify(data));
+                    this.data = imageData || {};
                     if (isSVG(imageData.URL || imageData.Url)) {
-                        _this.resetImage();
+                        this.resetImage();
                     }
-                    _this.build();
-                    _this.bind();
-                });
+                    this.build();
+                    this.bind();
+                }.bind(this));
             } else {
                 outputValue = $.trim(this.$output.val());
                 if (outputValue) {
@@ -165,6 +169,24 @@
 
             this.wrap();
             this.$modal = $(replaceText(QorCropper.MODAL, replaceTexts)).appendTo('body');
+
+            if (this.$takePicture) {
+                let text;
+                if (textData) {
+                    text = {
+                        title: textData.tpTitle,
+                        ok: textData.tpOk,
+                        cancel: textData.tpCancel
+                    };
+                    replaceTexts = this.options.takePictureText;
+                }
+
+                if (text.ok && text.title && text.cancel) {
+                    replaceTexts = text;
+                }
+                this.$takePictureModal = $(replaceText(QorCropper.TAKE_PICTURE, replaceTexts)).appendTo('body');
+                this.$takePicture.show();
+            }
         },
 
         unbuild: function() {
@@ -252,6 +274,31 @@
         },
 
         read: function(e) {
+            let files = e.target.files,
+                file,
+                $list = this.$list,
+                $alert = this.$parent.find('.qor-fieldset__alert');
+
+            $list.show();
+
+            if ($alert.length) {
+                $alert.remove();
+            }
+
+            if (files && files.length) {
+                file = files[0];
+
+                if (/^image\//.test(file.type) && URL) {
+                    this.fileType = file.type;
+                    this.load(URL.createObjectURL(file));
+                    this.$parent.find('.qor-medialibrary__image-desc').show();
+                } else {
+                    $list.empty().html(QorCropper.FILE_LIST.replace('{{filename}}', file.name));
+                }
+            }
+        },
+
+        takePicture: function(e) {
             let files = e.target.files,
                 file,
                 $list = this.$list,
@@ -685,6 +732,25 @@
                     <div class="qor-cropper__options">
                         <p>Sync cropping result to: <label><input type="checkbox" class="qor-cropper__options-toggle" checked/> All</label></p>
                     </div>
+                </div>
+                <div class="mdl-card__actions mdl-card--border">
+                    <a class="mdl-button mdl-button--colored mdl-button--raised qor-cropper__save">$[ok]</a>
+                    <a class="mdl-button mdl-button--colored" data-dismiss="modal">$[cancel]</a>
+                </div>
+                <div class="mdl-card__menu">
+                    <button class="mdl-button mdl-button--icon" data-dismiss="modal" aria-label="close">
+                        <i class="material-icons">close</i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    QorCropper.TAKE_PICTURE = `<div class="qor-modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="mdl-card mdl-shadow--2dp" role="document">
+                <div class="mdl-card__title">
+                    <h2 class="mdl-card__title-text">$[title]</h2>
+                </div>
+                <div class="mdl-card__supporting-text">
+                    <video autoplay="true" />
                 </div>
                 <div class="mdl-card__actions mdl-card--border">
                     <a class="mdl-button mdl-button--colored mdl-button--raised qor-cropper__save">$[ok]</a>

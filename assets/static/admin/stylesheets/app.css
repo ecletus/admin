@@ -4743,9 +4743,13 @@ button.qor-fieldset__add:hover, button.qor-fieldset__add:active, button.qor-fiel
 .qor-field .mdl-checkbox__label {
   font-size: 14px;
 }
+.qor-field .mdl-textfield {
+  padding: 5px 0;
+}
 
 .qor-field .mdl-textfield__label {
-  top: 4px; 
+  position: inherit; 
+  top: 4px;
   font-size: 12px;
   color: rgba(0,0,0, .54);
 }
@@ -6669,6 +6673,7 @@ pre {
     border: 0;
   }
   .qor-form-container .qor-field__label {
+    position: inherit; 
     font-size: 12px;
   }
   .qor-form-container .qor-field__value {

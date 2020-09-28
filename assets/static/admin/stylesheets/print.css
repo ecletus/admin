@@ -138,6 +138,7 @@ a.qor-button--edit {
   border: 0;
 }
 .qor-form-container .qor-field__label {
+  position: inherit; 
   font-size: 12px;
 }
 .qor-form-container .qor-field__value {

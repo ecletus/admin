@@ -13,16 +13,18 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ecletus/core"
-	"github.com/ecletus/core/utils"
 	"github.com/ecletus/roles"
-	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/assetfs"
 	"github.com/moisespsena-go/assetfs/assetfsapi"
 	"github.com/moisespsena-go/tracederror"
+	"github.com/pkg/errors"
+
 	"github.com/moisespsena/template/funcs"
 	"github.com/moisespsena/template/html/template"
-	"github.com/pkg/errors"
+
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/utils"
+	"github.com/moisespsena-go/aorm"
 )
 
 var TemplateExecutorMetaValue = template.Must(template.New(PKG + ".meta_value").Parse("{{.Value}}")).CreateExecutor()
@@ -153,9 +155,9 @@ func (this *Context) renderForm(state *template.State, value interface{}, sectio
 
 func (this *Context) renderSections(state *template.State, value interface{}, sections []*Section, prefix []string, writer io.Writer, kind string, readOnly bool) {
 	var (
-		res     *Resource
-		getMeta func(string) *Meta
-		rendered = map[string]bool{}
+		res            *Resource
+		getMeta        func(string) *Meta
+		rendered       = map[string]bool{}
 		skipAttrsCheck = map[string]bool{}
 	)
 
@@ -185,7 +187,7 @@ func (this *Context) renderSections(state *template.State, value interface{}, se
 			var (
 				columnsHTML bytes.Buffer
 				w           = NewTrimLeftWriter(&columnsHTML)
-				column = section.Rows[i]
+				column      = section.Rows[i]
 				exclude     int
 			)
 			for j := 0; j < len(column); j++ {
@@ -321,7 +323,7 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 		err             error
 		funcsMap        = funcs.FuncMap{}
 		executor        *template.Executor
-		formattedValue  = this.FormattedValueOf(record, meta)
+		formattedValue  interface{}
 		show            = this.Type.Has(SHOW) || this.Type.Has(INDEX)
 		nestedFormCount int
 		readOnly        = show
@@ -330,6 +332,13 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 	defer func() {
 		*this.metaPath = (*this.metaPath)[0 : len(*this.metaPath)-1]
 	}()
+
+	if show && meta.Resource == nil {
+		formattedValue = meta.ReadOnlyFormattedValue(this, record)
+	}
+	if formattedValue == nil {
+		formattedValue = this.FormattedValueOf(record, meta)
+	}
 
 	if show && !meta.IsRequired() {
 		if !meta.ForceShowZero && meta.IsZero(record, formattedValue) {
@@ -368,6 +377,11 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 			} else {
 				*this.metaPath = append(*this.metaPath, strconv.Itoa(nestedFormCount))
 			}
+
+			if record == nil && !show && meta.Resource != nil {
+				record = meta.Resource.New()
+			}
+
 			defer func() {
 				nestedFormCount++
 				this.nestedForm--
@@ -419,8 +433,8 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 		}
 		if r := recover(); r != nil {
 			var (
-				msg string
-				metaTreePath = path.Join((*this.metaPath)...)
+				msg          string
+				metaTreePath = path.Join(*this.metaPath...)
 			)
 
 			msg = fmt.Sprintf("render meta %q (%v)", metaTreePath, meta.Type)
@@ -465,16 +479,17 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 			readOnly = meta.IsReadOnly(this, record)
 		}
 		var data = map[string]interface{}{
-			"Context":       this,
-			"BaseResource":  meta.BaseResource,
-			"Meta":          meta,
-			"Record":        record,
-			"ResourceValue": record,
-			"Value":         formattedValue,
-			"Label":         meta.Label,
-			"InputName":     strings.Join(prefix, "."),
-			"ReadOnly":      readOnly,
-			"NotReadOnly":   !readOnly,
+			"Context":         this,
+			"BaseResource":    meta.BaseResource,
+			"Meta":            meta,
+			"Record":          record,
+			"ResourceValue":   record,
+			"Value":           formattedValue,
+			"Label":           meta.Label,
+			"InputName":       strings.Join(prefix, "."),
+			"ReadOnly":        readOnly,
+			"NotReadOnly":     !readOnly,
+			"InputParentName": strings.Join(prefix[0:len(prefix)-1], "."),
 		}
 		data["InputId"] = strings.Join(*this.metaPath, "_")
 		executor.SetSuper(state)
@@ -782,9 +797,10 @@ func (this *Context) loadActions(action string, subPath ...string) template.HTML
 		actionFiles    []assetfsapi.FileInfo
 		actions        = map[string]assetfsapi.FileInfo{}
 		actionPatterns []assetfs.GlobPatter
-		sub string
+		sub            string
 	)
-	for _, sub = range subPath{}
+	for _, sub = range subPath {
+	}
 
 	switch action {
 	case "index", "show", "edit", "new":

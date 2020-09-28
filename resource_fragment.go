@@ -44,7 +44,7 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 
 	cfg.Config.Setup = func(fragRes *Resource) {
 		if !this.Singleton && !fragRes.Config.Virtual {
-			fragRes.SetMeta(&Meta{Name: "ID", Type: "-"}, true)
+			fragRes.SetMeta(&Meta{Name: "ID", Type: "-"})
 		}
 		if isForm {
 			meta := &Meta{
@@ -71,7 +71,7 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 				meta.SkipDefaultLabel = true
 				meta.Label = fragRes.SingularLabelKey()
 			}
-			fragRes.SetMeta(meta, true).DisableSiblingsRequirement = true
+			fragRes.SetMeta(meta).DisableSiblingsRequirement = resource.SiblingsRequirementCheckDisabledOnTrue
 			this.Fragments.AddForm(fragRes, cfg)
 		} else {
 			this.Fragments.Add(fragRes, cfg)

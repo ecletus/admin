@@ -39,7 +39,6 @@ func (this *Searcher) One(cb func()) {
 func (this *Searcher) FindOne(finder ...*Finder) (result interface{}, err error) {
 	this.One(func() {
 		if err = this.ParseContext(finder...); err != nil {
-			println(err)
 			return
 		}
 		if this.HasError() {

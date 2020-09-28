@@ -10,6 +10,10 @@ type Controller struct {
 	controller interface{}
 }
 
+func NewMainController(action *Action, controller interface{}) *Controller {
+	return &Controller{action: action, controller: controller}
+}
+
 // HTTPUnprocessableEntity error status code
 const HTTPUnprocessableEntity = 422
 

@@ -5,10 +5,11 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/ecletus/roles"
+
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/core/utils"
-	"github.com/ecletus/roles"
 )
 
 func (this *Resource) GetDefinedMeta(name string) *Meta {
@@ -27,11 +28,11 @@ func (this *Resource) GetMetaOrSet(name string) (meta *Meta) {
 }
 
 // GetMeta get meta with name
-func (this *Resource) GetMeta(name string, notUpdate ...bool) *Meta {
-	return this.getMeta(&Meta{Name: name}, notUpdate...)
+func (this *Resource) GetMeta(name string) *Meta {
+	return this.getMeta(&Meta{Name: name})
 }
 
-func (this *Resource) getMeta(meta *Meta, notUpdate ...bool) *Meta {
+func (this *Resource) getMeta(meta *Meta) *Meta {
 	fallbackMeta := this.MetasByName[meta.Name]
 
 	if meta.Type == "-" {
@@ -192,8 +193,8 @@ func (this *Resource) getMeta(meta *Meta, notUpdate ...bool) *Meta {
 }
 
 // Meta register meta for admin resource
-func (this *Resource) SetMeta(meta *Meta, notUpdate ...bool) *Meta {
-	return this.Meta(meta, true)
+func (this *Resource) SetMeta(meta *Meta) *Meta {
+	return this.Meta(meta)
 }
 
 // MetaDisable disable metas by name
@@ -215,21 +216,22 @@ func (this *Resource) MetaRequired(names ...string) {
 // MetaOptional set metas to optional
 func (this *Resource) MetaOptional(names ...string) {
 	for _, name := range names {
-		m := this.Meta(&Meta{Name: name, Required: false})
+		m := this.Meta(&Meta{Name: name})
+		m.Required = false
 		m.Meta.Required = false
 		m.updateMeta()
 	}
 }
 
 // MetaR register meta for admin resource and return this resource
-func (this *Resource) MetaR(meta *Meta, notUpdate ...bool) *Resource {
-	this.Meta(meta, notUpdate...)
+func (this *Resource) MetaR(meta *Meta) *Resource {
+	this.Meta(meta)
 	return this
 }
 
 // Meta register meta for admin resource
-func (this *Resource) Meta(meta *Meta, notUpdate ...bool) *Meta {
-	if oldMeta := this.getMeta(meta, notUpdate...); oldMeta != nil {
+func (this *Resource) Meta(meta *Meta) *Meta {
+	if oldMeta := this.getMeta(meta); oldMeta != nil {
 		if meta != oldMeta {
 			if meta.Type != "" {
 				oldMeta.Type = meta.Type
@@ -302,6 +304,34 @@ func (this *Resource) Meta(meta *Meta, notUpdate ...bool) *Meta {
 
 			if meta.ReadOnlyFunc != nil {
 				oldMeta.ReadOnlyFunc = meta.ReadOnlyFunc
+			}
+
+			if meta.ReadOnlyFormattedValuerFunc != nil {
+				oldMeta.ReadOnlyFormattedValuerFunc = meta.ReadOnlyFormattedValuerFunc
+			}
+
+			if meta.RecordLabelFormatter != nil {
+				oldMeta.RecordLabelFormatter = meta.RecordLabelFormatter
+			}
+
+			if meta.RecordHelpFormatter != nil {
+				oldMeta.RecordHelpFormatter = meta.RecordHelpFormatter
+			}
+
+			if meta.RecordHelpFormatter != nil {
+				oldMeta.RecordShowHelpFormatter = meta.RecordShowHelpFormatter
+			}
+
+			if meta.HelpFormatter != nil {
+				oldMeta.HelpFormatter = meta.HelpFormatter
+			}
+
+			if meta.LabelFormatter != nil {
+				oldMeta.LabelFormatter = meta.LabelFormatter
+			}
+
+			if meta.Required {
+				oldMeta.Required = true
 			}
 
 			oldMeta.updateMeta()

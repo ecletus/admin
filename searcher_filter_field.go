@@ -146,7 +146,7 @@ func filterResourceByFields(res *Resource, filterFields []filterField, keyword s
 		}
 	}
 
-	scope := db.NewScope(res.Value)
+	scope := db.NewModelScope(res.ModelStruct, res.Value)
 	for _, field := range filterFields {
 		generateConditions(field, scope)
 	}

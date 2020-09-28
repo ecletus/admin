@@ -13,21 +13,28 @@
     {{end}}
 
     <div class="qor-field__value">
-      {{$current_values := (.Meta.Config.CurrentValues .Context .Record .Meta)}}
-      <div class="qor-field__show qor-field__selectmany-show">
-        {{range $current_values}}
-          {{- if (defined_resource_show_page $meta.Resource) -}}
-            {{$url := ($meta.URLFor (admin_context) .)}}
-            {{if $url}}
-              {{if not ($meta.IsNewRecord .)}}<a data-url="{{$url}}" href="{{$url}}">{{stringify .}}</a>{{end}}
-            {{else}}
-              {{stringify .}}
-            {{end}}
-          {{- else}}
-            {{stringify .}}
-          {{- end}},
+      {{$roValues := .Meta.Config.GetReadonlyValues .Context .Record}}
+      {{if $roValues}}
+        {{range $roValues}}
+            {{.}},
         {{end}}
-      </div>
+      {{else}}
+        {{$current_values := (.Meta.Config.CurrentValues .Context .Record .Meta)}}
+        <div class="qor-field__show qor-field__selectmany-show">
+          {{range $current_values}}
+            {{- if (defined_resource_show_page $meta.Resource) -}}
+              {{$url := ($meta.URLFor (admin_context) .)}}
+              {{if $url}}
+                {{if not ($meta.IsNewRecord .)}}<a data-url="{{$url}}" href="{{$url}}">{{stringify .}}</a>{{end}}
+              {{else}}
+                {{stringify .}}
+              {{end}}
+            {{- else}}
+              {{stringify .}}
+            {{- end}},
+          {{end}}
+        </div>
+      {{end}}
     </div>
   </div>
 {{else}}

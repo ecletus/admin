@@ -65,6 +65,10 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 		typ, _, _ = aorm.StructTypeOf(reflect.TypeOf(value))
 	}
 
+	if config.Wizard != nil {
+		config.Invisible = true
+	}
+
 	var uid, uidSufix string
 	if config.Sub != nil && config.Sub.Parent != nil {
 		uid = config.Sub.Parent.UID
@@ -141,7 +145,13 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 	})
 
 	if config.Controller == nil {
-		config.Controller = NewCrudSearchIndexController()
+		if config.Wizard != nil {
+			config.Controller = NewWizardController()
+		} else if config.CreateWizard != nil {
+			config.Controller = &ResourceWithCreateWizardController{}
+		} else {
+			config.Controller = NewCrudSearchIndexController()
+		}
 	} else if _, ok := config.Controller.(ControllerUpdater); !ok {
 		res.ReadOnly = true
 	}
@@ -224,20 +234,19 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 
 	if !config.Alone && res.Param == "" {
 		if res.Config.Singleton {
-			res.Param = res.Name
+			res.Param = utils.ToParamString(res.Name)
 		} else {
-			res.Param = res.PluralName
+			res.Param = utils.ToParamString(res.PluralName)
 		}
 		if config.Prefix != "" {
-			res.Param = config.Prefix + "." + res.Param
+			res.Param = utils.ToParamString(config.Prefix + "." + res.Param)
 		}
 	}
 
 	if !config.Alone {
-		res.Param = utils.ToParamString(res.Param)
 		res.Parents = resourceParents(res)
 		res.PathLevel = len(res.Parents)
-		res.ParamName = resourceParamName(res.Parents, res.Param)
+		res.ParamName = resourceParamName(res.Parents, utils.ToParamString(res.Param))
 		res.paramIDName = resourceParamIDName(res.PathLevel, res.ParamName)
 
 		if config.Sub != nil {
@@ -348,12 +357,24 @@ func (this *Admin) NewResourceConfig(value interface{}, cfg *Config) (res *Resou
 		}
 	})
 
-	if res.Config.Setup != nil {
-		res.Config.Setup(res)
+	if setuper, ok := res.Value.(ResourceSetuper); ok {
+		setuper.AdminResourceSetup(res, func() {
+			if res.Config.Setup != nil {
+				res.Config.Setup(res)
+			}
+			for _, setup := range res.Config.Setups {
+				setup(res)
+			}
+		})
+	} else {
+		if res.Config.Setup != nil {
+			res.Config.Setup(res)
+		}
+		for _, setup := range res.Config.Setups {
+			setup(res)
+		}
 	}
-	for _, setup := range res.Config.Setups {
-		setup(res)
-	}
+
 	res.initializeLayouts()
 	for _, cb := range res.afterRegister {
 		cb()
@@ -460,7 +481,15 @@ func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
 	}
 
 	done := func() {
-		if res.Config.Setup != nil {
+		if setuper, ok := res.Value.(ResourceSetuper); ok {
+			log.Debug("setup start ", reflect.TypeOf(res.Config.Setup).PkgPath())
+			setuper.AdminResourceSetup(res, func() {
+				if res.Config.Setup != nil {
+					res.Config.Setup(res)
+				}
+			})
+			log.Debug("setup done ", reflect.TypeOf(res.Config.Setup).PkgPath())
+		} else if res.Config.Setup != nil {
 			log.Debug("setup start ", reflect.TypeOf(res.Config.Setup).PkgPath())
 			res.Config.Setup(res)
 			log.Debug("setup done ", reflect.TypeOf(res.Config.Setup).PkgPath())
@@ -480,6 +509,10 @@ func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
 			panic(err)
 		}
 		log.Debug("trigger added done")
+
+		if cfg.CreateWizard != nil {
+			res.AddCreateWizard(cfg.CreateWizard.Value, cfg.CreateWizard.Config)
+		}
 	}
 
 	if res.ParentResource != nil && !res.ParentResource.registered {

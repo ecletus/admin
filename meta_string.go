@@ -60,9 +60,30 @@ func (this *StringConfig) ConfigureQorMeta(metaor resource.Metaor) {
 func init() {
 	cfg := func(meta *Meta) {
 		if meta.Config == nil {
-			cfg := &StringConfig{}
-			meta.Config = cfg
-			cfg.ConfigureQorMeta(meta)
+			if meta.Type != "password" && meta.FieldStruct != nil {
+				var tags = meta.FieldStruct.TagSettings
+				if size, ok := tags["SIZE"]; ok {
+					if i, _ := strconv.Atoi(size); i > 255 {
+						meta.Type = "text"
+					} else {
+						meta.Type = "string"
+					}
+				} else if text, ok := tags["TYPE"]; ok && text == "text" {
+					meta.Type = "text"
+				} else {
+					meta.Type = "string"
+				}
+			}
+
+			if meta.Type == "text" {
+				cfg := &TextConfig{}
+				meta.Config = cfg
+				cfg.ConfigureQorMeta(meta)
+			} else {
+				cfg := &StringConfig{}
+				meta.Config = cfg
+				cfg.ConfigureQorMeta(meta)
+			}
 		} else {
 			meta.Config.ConfigureQorMeta(meta)
 		}

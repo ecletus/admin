@@ -32,7 +32,7 @@ type MetaConfig struct {
 	Icon                  bool
 	Typ                   reflect.Type
 	Type                  string
-	TypeHandler           func(recorde interface{}, context *Context, meta *Meta) string
+	TypeHandler           func(meta *Meta, recorde interface{}, context *Context) string
 	Enabled               MetaEnabled
 	SkipDefaultLabel      bool
 	DefaultLabel          string

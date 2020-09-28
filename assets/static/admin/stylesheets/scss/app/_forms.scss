@@ -205,6 +205,10 @@ button.qor-fieldset__add,
     .mdl-checkbox__label {
         font-size: 14px;
     }
+
+    .mdl-textfield {
+        padding: 5px 0;
+    }
 }
 
 // Custom modifier for .mdl-textfield
@@ -213,6 +217,7 @@ button.qor-fieldset__add,
         color: unquote('rgba(#{$color-black}, 0.54)');
         font-size: 12px;
         top: 4px;
+        position: inherit;
     }
     .mdl-textfield__input {
         font-size: 14px;

@@ -92,47 +92,56 @@ func (this *Controller) Create(context *Context) {
 		}).Respond(context.Request)
 	} else {
 		context.ResourceID = context.Resource.GetKey(context.Result)
+		if context.Resource.Config.Wizard == nil {
+			if context.Request.Header.Get("X-Flash-Messages-Disabled") != "true" {
+				message := string(context.tt(I18NGROUP+".form.successfully_created",
+					NewResourceRecorde(context, res, recorde),
+					"{{.}} was successfully created"))
 
-		if (context.Request.Header.Get("X-Flash-Messages-Disabled") != "true") {
-			message := string(context.tt(I18NGROUP+".form.successfully_created",
-				NewResourceRecorde(context, res, recorde),
-				"{{.}} was successfully created"))
-
-			if cfg.SuccessCallback != nil {
-				cfg.SuccessCallback(context, message)
-				if context.Writer.WroteHeader() {
-					return
+				if cfg.SuccessCallback != nil {
+					cfg.SuccessCallback(context, message)
+					if context.Writer.WroteHeader() {
+						return
+					}
 				}
+
+				context.Flash(message, "success")
 			}
 
-			context.Flash(message, "success")
-		}
-
-		if cfg.RedirectTo == "" {
-			cfg.RedirectTo = context.RedirectTo
+			if cfg.RedirectTo == "" {
+				cfg.RedirectTo = context.RedirectTo
+			}
 		}
 
 		defer context.LogErrors()
 		context.Type = SHOW
 		context.DefaulLayout()
-		responder.With("html", func() {
-			url := cfg.RedirectTo
-			if url == "" {
-				if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
-					url = res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
-				} else {
-					url = res.GetContextIndexURI(context.Context)
-				}
-			}
+
+		if context.Resource.Config.Wizard != nil {
+			wz := recorde.(WizardModelInterface)
+			context.Writer.Header().Set("X-Next-Step", wz.CurrentStepName())
+			url := res.GetContextURI(context.Context, res.GetKey(recorde))
 			httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
-		}).With([]string{"json", "xml"}, func() {
-			context.Api = true
-			if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
-				url := res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
+		} else {
+			responder.With("html", func() {
+				url := cfg.RedirectTo
+				if url == "" {
+					if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
+						url = res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
+					} else {
+						url = res.GetContextIndexURI(context.Context)
+					}
+				}
 				httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
-				return
-			}
-			context.Encode(recorde)
-		}).XAccept().Respond(context.Request)
+			}).With([]string{"json", "xml"}, func() {
+				context.Api = true
+				if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
+					url := res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
+					httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
+					return
+				}
+				context.Encode(recorde)
+			}).XAccept().Respond(context.Request)
+		}
 	}
 }

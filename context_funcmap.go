@@ -173,52 +173,16 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 				return template.HTML(meta.GetLabelC(this.Context))
 			},
 			"meta_help": func(meta *Meta) template.HTML {
-				key, defaul := meta.GetHelpPair()
-				if key != "" {
-					defaul = strings.TrimSpace(this.Admin.Ts(this.Context, key, defaul))
-				}
-				if strings.Contains(defaul, "{{") {
-					tmpl, err := template.New("meta_help{" + meta.Name + "}").Parse(defaul)
-					if err != nil {
-						return template.HTML("[[parse template failed: " + err.Error() + "]]")
-					}
-					var w bytes.Buffer
-					if err = this.ExecuteTemplate(tmpl, &w, this); err != nil {
-						return template.HTML("[[execute template failed: " + err.Error() + "]]")
-					}
-					return template.HTML(w.String())
-				}
-				return template.HTML(defaul)
+				return template.HTML(meta.GetHelp(this))
 			},
 			"meta_record_label": func(meta *Meta, record interface{}) template.HTML {
-				key, defaul := meta.GetRecordLabelPair(this, record)
-				if key != "" {
-					return template.HTML(strings.TrimSpace(this.Admin.Ts(this.Context, key, defaul)))
-				}
-				return template.HTML(defaul)
+				return template.HTML(meta.GetRecordLabel(this, record))
 			},
 			"meta_record_help": func(meta *Meta, record interface{}) template.HTML {
-				var key, defaul string
 				if this.Type.Has(SHOW) {
-					key, defaul = meta.GetRecordShowHelpPair(this, record)
-				} else {
-					key, defaul = meta.GetRecordHelpPair(this, record)
+					return template.HTML(meta.GetRecordShowHelp(this, record))
 				}
-				if key != "" {
-					defaul = strings.TrimSpace(this.Admin.Ts(this.Context, key, defaul))
-				}
-				if strings.Contains(defaul, "{{") {
-					tmpl, err := template.New("meta_help{" + meta.Name + "}").Parse(defaul)
-					if err != nil {
-						return template.HTML("[[parse template failed: " + err.Error() + "]]")
-					}
-					var w bytes.Buffer
-					if err = this.ExecuteTemplate(tmpl, &w, this); err != nil {
-						return template.HTML("[[execute template failed: " + err.Error() + "]]")
-					}
-					return template.HTML(w.String())
-				}
-				return template.HTML(defaul)
+				return template.HTML(meta.GetRecordHelp(this, record))
 			},
 			"section_title": func(section *Section) (s template.HTML) {
 				key := section.Resource.I18nPrefix + ".sections." + section.Title

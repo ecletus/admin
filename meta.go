@@ -20,6 +20,7 @@ import (
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
+
 	"github.com/moisespsena-go/aorm"
 )
 
@@ -61,13 +62,13 @@ type DependencyValue struct {
 	Value interface{}
 }
 
-type MetaOutputValuer func(context *core.Context, recorde, value interface{}) interface{}
-type MetaValuer func(recorde interface{}, context *core.Context) interface{}
-type MetaSetter func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error
-type MetaEnabled func(recorde interface{}, context *Context, meta *Meta) bool
+type MetaOutputValuer func(context *core.Context, record, value interface{}) interface{}
+type MetaValuer func(record interface{}, context *core.Context) interface{}
+type MetaSetter func(record interface{}, metaValue *resource.MetaValue, context *core.Context) error
+type MetaEnabled func(record interface{}, context *Context, meta *Meta) bool
 
 type MetaPostFormatted interface {
-	MetaPostFormatted(meta *Meta, ctx *core.Context, recorde, value interface{}) interface{}
+	MetaPostFormatted(meta *Meta, ctx *core.Context, record, value interface{}) interface{}
 }
 
 // Meta meta struct definition
@@ -79,13 +80,13 @@ type Meta struct {
 	Name        string
 	DB          *aorm.Alias
 	Type        string
-	TypeHandler func(recorde interface{}, context *Context, meta *Meta) string
+	TypeHandler func(meta *Meta, recorde interface{}, context *Context) string
 	Enabled     MetaEnabled
 
 	SkipDefaultLabel     bool
 	DefaultLabel         string
 	Label                string
-	recordLabelPairFuncs []func(ctx *Context, record interface{}) (key string, defaul string, ok bool)
+	recordLabelPairFuncs []func(meta *Meta, ctx *Context, record interface{}) (key string, defaul string, ok bool)
 
 	Help        string
 	HelpKey     string
@@ -93,7 +94,7 @@ type Meta struct {
 	ShowHelpKey string
 
 	recordHelpPairFuncs,
-	recordShowHelpPairFuncs []func(ctx *Context, record interface{}) (key string, defaul string, ok bool)
+	recordShowHelpPairFuncs []func(meta *Meta, ctx *Context, record interface{}) (key string, defaul string, ok bool)
 
 	FieldName         string
 	FieldLabel        bool
@@ -102,7 +103,7 @@ type Meta struct {
 	Valuer            MetaValuer
 	FormattedValuer   MetaValuer
 	ContextResourcer  func(meta resource.Metaor, context *core.Context) resource.Resourcer
-	ContextMetas      func(recorde interface{}, context *Context) []*Meta
+	ContextMetas      func(record interface{}, context *Context) []*Meta
 	SkipResourceModel bool
 	Resource          *Resource
 	Permission        *roles.Permission
@@ -120,7 +121,7 @@ type Meta struct {
 	ProxyTo               *Meta
 	Include               bool
 	ForceShowZero         bool
-	IsZeroFunc            func(recorde, value interface{}) bool
+	IsZeroFunc            func(meta *Meta, record, value interface{}) bool
 	Fragment              *Fragment
 	Options               maps.Map
 	OutputFormattedValuer MetaOutputValuer
@@ -130,10 +131,9 @@ type Meta struct {
 
 	SectionNotAllowed bool
 	ReadOnly          bool
-	ReadOnlyFunc      func(ctx *Context, recorde interface{}) bool
-
-	URIForFunc func(meta *Meta, ctx *Context, recorde interface{}) string
-	URLForFunc func(meta *Meta, ctx *Context, recorde interface{}) string
+	ReadOnlyFunc      func(meta *Meta, ctx *Context, record interface{}) bool
+	URIForFunc        func(meta *Meta, ctx *Context, record interface{}) string
+	URLForFunc        func(meta *Meta, ctx *Context, record interface{}) string
 
 	Required   bool
 	mustValuer bool
@@ -153,6 +153,17 @@ type Meta struct {
 	UITags Tags
 
 	AdminData maps.SyncedMap
+
+	ReadOnlyFormattedValuerFunc func(meta *Meta, ctx *Context, record interface{}) interface{}
+
+	RecordLabelFormatter,
+	RecordHelpFormatter,
+	RecordShowHelpFormatter func(meta *Meta, ctx *Context, record interface{}, s string) string
+
+	LabelFormatter,
+	HelpFormatter func(meta *Meta, ctx *Context, s string) string
+
+	LockedFunc func(meta *Meta, ctx *Context, record interface{}) bool
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -167,6 +178,13 @@ func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
 	return m
 }
 
+func (this *Meta) ReadOnlyFormattedValue(ctx *Context, record interface{}) interface{} {
+	if this.ReadOnlyFormattedValuerFunc != nil {
+		return this.ReadOnlyFormattedValuerFunc(this, ctx, record)
+	}
+	return nil
+}
+
 func (this *Meta) AfterUpdate(f ...func()) {
 	this.afterUpdate = append(this.afterUpdate, f...)
 }
@@ -176,7 +194,7 @@ func (this *Meta) IsReadOnly(ctx *Context, recorde interface{}) bool {
 		return true
 	}
 	if this.ReadOnlyFunc != nil {
-		return this.ReadOnlyFunc(ctx, recorde)
+		return this.ReadOnlyFunc(this, ctx, recorde)
 	}
 	switch this.Type {
 	case "single_edit", "collection_edit", "select_one", "select_many":
@@ -209,26 +227,32 @@ func (this *Meta) Namer() *resource.MetaName {
 }
 
 func (this *Meta) NewSetter(f func(meta *Meta, old MetaSetter, recorde interface{}, metaValue *resource.MetaValue, ctx *core.Context) error) *Meta {
-	old := this.Setter
+	old := this.Meta.Setter
 	this.Setter = func(recorde interface{}, metaValue *resource.MetaValue, ctx *core.Context) error {
 		return f(this, old, recorde, metaValue, ctx)
 	}
+	this.Meta.Setter = this.Setter
 	return this
 }
 
 func (this *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
-	old := this.Valuer
+	old := this.Meta.Valuer
 	this.Valuer = func(recorde interface{}, context *core.Context) interface{} {
 		return f(this, old, recorde, context)
 	}
+	this.Meta.Valuer = this.Valuer
 	return this
 }
 
 func (this *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
-	old := this.FormattedValuer
+	old := this.Meta.FormattedValuer
+	if old == nil {
+		old = this.Meta.Valuer
+	}
 	this.FormattedValuer = func(recorde interface{}, ctx *core.Context) interface{} {
 		return f(this, old, recorde, ctx)
 	}
+	this.Meta.FormattedValuer = this.FormattedValuer
 	return this
 }
 
@@ -258,9 +282,17 @@ func (this *Meta) NewEnabled(f func(old MetaEnabled, recorde interface{}, ctx *C
 	return this
 }
 
+// Locked returns if this meta was locked for input changes
+func (this *Meta) Locked(ctx *Context, record interface{}) bool {
+	if this.LockedFunc != nil {
+		return this.LockedFunc(this, ctx, record)
+	}
+	return false
+}
+
 func (this *Meta) GetType(record interface{}, context *Context) string {
 	if this.TypeHandler != nil {
-		return this.TypeHandler(record, context, this)
+		return this.TypeHandler(this, record, context)
 	}
 	return this.Type
 }
@@ -284,6 +316,21 @@ func (this *Meta) GetHelpPair() (key string, defaul string) {
 	return key, defaul
 }
 
+func (this *Meta) GetHelp(ctx *Context) (s string) {
+	if key, defaul := this.GetHelpPair(); key != "" {
+		s = ctx.Ts(key, defaul)
+	} else {
+		s = defaul
+	}
+	if s != "" {
+		if this.HelpFormatter != nil {
+			s = this.HelpFormatter(this, ctx, s)
+		}
+		return this.formatTemplateString(ctx, "help", s)
+	}
+	return
+}
+
 func (this *Meta) GetShowHelpPair() (key string, defaul string) {
 	if this.ShowHelp == "-" {
 		return "", ""
@@ -303,7 +350,7 @@ func (this *Meta) GetShowHelpPair() (key string, defaul string) {
 	return key, defaul
 }
 
-func (this *Meta) RecordHelpPair(f ...func(ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
+func (this *Meta) RecordHelpPair(f ...func(meta *Meta, ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
 	this.recordHelpPairFuncs = append(this.recordHelpPairFuncs, f...)
 	return this
 }
@@ -311,14 +358,29 @@ func (this *Meta) RecordHelpPair(f ...func(ctx *Context, record interface{}) (ke
 func (this *Meta) GetRecordHelpPair(ctx *Context, record interface{}) (key string, defaul string) {
 	var ok bool
 	for _, f := range this.recordHelpPairFuncs {
-		if key, defaul, ok = f(ctx, record); ok {
+		if key, defaul, ok = f(this, ctx, record); ok {
 			return
 		}
 	}
 	return this.GetHelpPair()
 }
 
-func (this *Meta) RecordShowHelpPair(f ...func(ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
+func (this *Meta) GetRecordHelp(ctx *Context, record interface{}) (s string) {
+	if key, defaul := this.GetRecordHelpPair(ctx, record); key != "" {
+		s = ctx.Ts(key, defaul)
+	} else {
+		s = defaul
+	}
+	if s != "" {
+		if this.RecordHelpFormatter != nil {
+			s = this.RecordHelpFormatter(this, ctx, record, s)
+		}
+		return this.formatTemplateString(ctx, "record_help", s)
+	}
+	return
+}
+
+func (this *Meta) RecordShowHelpPair(f ...func(meta *Meta, ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
 	this.recordShowHelpPairFuncs = append(this.recordShowHelpPairFuncs, f...)
 	return this
 }
@@ -326,11 +388,26 @@ func (this *Meta) RecordShowHelpPair(f ...func(ctx *Context, record interface{})
 func (this *Meta) GetRecordShowHelpPair(ctx *Context, record interface{}) (key string, defaul string) {
 	var ok bool
 	for _, f := range this.recordShowHelpPairFuncs {
-		if key, defaul, ok = f(ctx, record); ok {
+		if key, defaul, ok = f(this, ctx, record); ok {
 			return
 		}
 	}
 	return this.GetShowHelpPair()
+}
+
+func (this *Meta) GetRecordShowHelp(ctx *Context, record interface{}) (s string) {
+	if key, defaul := this.GetRecordShowHelpPair(ctx, record); key != "" {
+		s = ctx.Ts(key, defaul)
+	} else {
+		s = defaul
+	}
+	if s != "" {
+		if this.RecordShowHelpFormatter != nil {
+			s = this.RecordShowHelpFormatter(this, ctx, record, s)
+		}
+		return this.formatTemplateString(ctx, "record_show_help", s)
+	}
+	return
 }
 
 func (this *Meta) I18nKey(sub ...string) string {
@@ -370,7 +447,7 @@ func (this *Meta) GetLabelPair() (string, string) {
 	return key, defaul
 }
 
-func (this *Meta) RecordLabelPair(f ...func(ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
+func (this *Meta) RecordLabelPair(f ...func(meta *Meta, ctx *Context, record interface{}) (key string, defaul string, ok bool)) *Meta {
 	this.recordLabelPairFuncs = append(this.recordLabelPairFuncs, f...)
 	return this
 }
@@ -378,31 +455,43 @@ func (this *Meta) RecordLabelPair(f ...func(ctx *Context, record interface{}) (k
 func (this *Meta) GetRecordLabelPair(ctx *Context, record interface{}) (key string, defaul string) {
 	var ok bool
 	for _, f := range this.recordLabelPairFuncs {
-		if key, defaul, ok = f(ctx, record); ok {
+		if key, defaul, ok = f(this, ctx, record); ok {
 			return
 		}
 	}
 	return this.GetLabelPair()
 }
 
-func (this *Meta) GetRecordLabel(ctx *Context, record interface{}) string {
+func (this *Meta) GetRecordLabel(ctx *Context, record interface{}) (label string) {
 	if key, defaul := this.GetRecordLabelPair(ctx, record); key != "" {
-		return ctx.Ts(key, defaul)
+		label = ctx.Ts(key, defaul)
 	} else {
-		return defaul
+		label = defaul
 	}
+	if this.RecordLabelFormatter != nil {
+		label = this.RecordLabelFormatter(this, ctx, record, label)
+	}
+	return
 }
 
 func (this *Meta) GetRecordLabelC(ctx *core.Context, record interface{}) string {
 	return this.GetRecordLabel(ContextFromCoreContext(ctx), record)
 }
 
-func (this *Meta) GetLabelC(ctx *core.Context) string {
+func (this *Meta) GetLabelC(ctx *core.Context) (s string) {
 	if key, defaul := this.GetLabelPair(); key != "" {
-		return ctx.Ts(key, defaul)
+		s = ctx.Ts(key, defaul)
 	} else {
-		return defaul
+		s = defaul
 	}
+	if s != "" && this.LabelFormatter != nil {
+		return this.LabelFormatter(this, ContextFromContext(ctx), s)
+	}
+	return
+}
+
+func (this *Meta) GetLabel(ctx *Context) string {
+	return this.GetLabelC(ctx.Context)
 }
 
 func (this *Meta) getLabelKey(key string) string {
@@ -691,7 +780,7 @@ func (this *Meta) IsZero(recorde, value interface{}) (zero bool) {
 		return value == nil
 	}
 	if this.IsZeroFunc != nil {
-		return this.IsZeroFunc(recorde, value)
+		return this.IsZeroFunc(this, recorde, value)
 	}
 	switch vt := value.(type) {
 	case helpers.Zeroer:
@@ -702,6 +791,10 @@ func (this *Meta) IsZero(recorde, value interface{}) (zero bool) {
 		return vt == nil || vt.IsZero()
 	case interface{ PrimaryGoValue() interface{} }:
 		return this.IsZero(recorde, vt.PrimaryGoValue())
+	case bool:
+		return false
+	case *bool:
+		return vt == nil
 	default:
 		return aorm.IsBlank(reflect.ValueOf(value))
 	}
@@ -714,7 +807,14 @@ func (this *Meta) GetSetter() func(recorde interface{}, metaValue *resource.Meta
 			valuer := this.Meta.GetValuer()
 			var old interface{}
 			if valuer != nil {
-				old = valuer(recorde, context)
+				if old = valuer(recorde, context); old == nil && this.Typ != nil {
+					typ := indirectType(this.Typ)
+					switch this.Typ.Kind() {
+					case reflect.Slice, reflect.Map, reflect.Ptr, reflect.Interface:
+					default:
+						old = reflect.New(typ).Interface()
+					}
+				}
 				if old != nil {
 					value := reflect.ValueOf(old)
 					if value.Kind() != reflect.Ptr {

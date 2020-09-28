@@ -394,14 +394,25 @@ func (cfg *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor) {
 			} else if cfg.Collection != nil {
 				meta.SetFormattedValuer(func(record interface{}, context *core.Context) interface{} {
 					if value := meta.Value(context, record); value != nil {
-						s := value.(string)
-						items := cfg.getCollection(record, ContextFromCoreContext(context))
-						for _, item := range items {
-							if item[0] == s {
-								return item[1]
+						switch v := value.(type) {
+						case string:
+							items := cfg.getCollection(record, ContextFromCoreContext(context))
+							for _, item := range items {
+								if item[0] == v {
+									return item[1]
+								}
 							}
+							return v
+						default:
+							s := fmt.Sprint(v)
+							items := cfg.getCollection(record, ContextFromCoreContext(context))
+							for _, item := range items {
+								if fmt.Sprint(item[0]) == s {
+									return item[1]
+								}
+							}
+							return s
 						}
-						return s
 					}
 					return ""
 				})

@@ -184,8 +184,8 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 	})
 
 	if to.TypeHandler != nil {
-		meta.TypeHandler = func(i interface{}, context *Context, meta *Meta) string {
-			return to.TypeHandler(record(context.Context, i), context, meta)
+		meta.TypeHandler = func(meta *Meta, i interface{}, context *Context) string {
+			return to.TypeHandler(meta, record(context.Context, i), context)
 		}
 	}
 	if to.Enabled != nil {
@@ -209,7 +209,7 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 		}
 	}
 
-	meta.IsZeroFunc = func(recorde, value interface{}) bool {
+	meta.IsZeroFunc = func(meta *Meta, recorde, value interface{}) bool {
 		return to.IsZero(record(nil, recorde), value)
 	}
 	meta.ForceShowZero = to.ForceShowZero

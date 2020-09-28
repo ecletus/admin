@@ -2,6 +2,7 @@ package admin
 
 import (
 	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
 	"github.com/moisespsena-go/aorm"
 )
 
@@ -20,19 +21,27 @@ type ResourceCrumb struct {
 	ID       aorm.ID
 }
 
-func (this *ResourceCrumber) NewCrumb(ctx *core.Context, recorde bool) core.Breadcrumb {
+type StaticCrumbValuer interface {
+	AdminStaticCrumbValue(ctx *core.Context, record bool) resource.BasicValuer
+}
+
+func (this *ResourceCrumber) NewCrumb(ctx *core.Context, record bool) core.Breadcrumb {
 	uri := this.Resource.GetContextIndexURI(ctx, this.ParentID...)
 	crumb := &ResourceCrumb{
 		Resource: this.Resource,
 		ParentID: this.ParentID,
 	}
-	if recorde {
+	if record {
 		crumb.ID = this.ID
 		_ = ctx.WithDB(func(ctx *core.Context) {
 			ctx.SetRawDB(ctx.DB().Unscoped())
-			model, err := this.Resource.Crud(ctx).FindOneBasic(this.ID)
-
-			if err != nil {
+			var (
+				model resource.BasicValuer
+				err   error
+			)
+			if scv, ok := this.Resource.Value.(StaticCrumbValuer); ok {
+				model = scv.AdminStaticCrumbValue(ctx, record)
+			} else if model, err = this.Resource.Crud(ctx).FindOneBasic(this.ID); err != nil {
 				if aorm.IsRecordNotFoundError(err) {
 					ctx.AddError(err)
 					crumb = nil

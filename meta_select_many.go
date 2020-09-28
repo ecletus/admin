@@ -23,6 +23,14 @@ type SelectManyConfig struct {
 	Select2SelectionTemplate template.JS
 	RemoteDataResource       *DataResource
 	SelectOneConfig
+	ReadonlyValuesFunc func(ctx *Context, record interface{}) []interface{}
+}
+
+func (selectManyConfig SelectManyConfig) GetReadonlyValues(ctx *Context, record interface{}) []interface{} {
+	if selectManyConfig.ReadonlyValuesFunc != nil {
+		return selectManyConfig.ReadonlyValuesFunc(ctx, record)
+	}
+	return nil
 }
 
 // GetTemplate get template for selection template

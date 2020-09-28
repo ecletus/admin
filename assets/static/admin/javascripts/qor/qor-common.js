@@ -149,6 +149,24 @@
             return false;
         };
 
+        QOR.submitValues = function (e) {
+            let $form = $(e).parents('form'),
+                action = $form.attr('action') || window.location.href,
+                pairs = Array.prototype.slice.call(arguments, 1),
+                key, values;
+            $form.attr('action', action);
+            $form.children(':not(.qor-form__actions,input[name="_method"])').trigger('DISABLE').remove();
+            for (let i = 0; i < pairs.length; i += 2) {
+                key = pairs[i];
+                values = pairs[i+1];
+                values.forEach(function (value) {
+                    $form.append($(`<input type="hidden" name="${pairs[i]}" value="${value}">`))
+                })
+            }
+            $form.submit();
+            return false;
+        };
+
         QOR.SUBMITER = "qor.submiter";
 
 

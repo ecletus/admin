@@ -256,6 +256,24 @@
             return false;
         };
 
+        QOR.submitValues = function (e) {
+            let $form = $(e).parents('form'),
+                action = $form.attr('action') || window.location.href,
+                pairs = Array.prototype.slice.call(arguments, 1),
+                key, values;
+            $form.attr('action', action);
+            $form.children(':not(.qor-form__actions,input[name="_method"])').trigger('DISABLE').remove();
+            for (let i = 0; i < pairs.length; i += 2) {
+                key = pairs[i];
+                values = pairs[i+1];
+                values.forEach(function (value) {
+                    $form.append($(`<input type="hidden" name="${pairs[i]}" value="${value}">`))
+                })
+            }
+            $form.submit();
+            return false;
+        };
+
         QOR.SUBMITER = "qor.submiter";
 
 
@@ -3408,6 +3426,23 @@
                 return;
             }
 
+            if (data.image) {
+                let $title = $header.find('.qor-bottomsheets__title');
+                $title.html(data.title || '');
+                $body.css({overflow:'auto', padding:0});
+                $body.html('<img style="max-width: inherit" src="'+url+'">');
+
+                this.show();
+
+                $bottomsheets
+                    .one(EVENT_HIDDEN, function () {
+                        $(this).trigger('disable');
+                    })
+                    .trigger('enable');
+
+                return;
+            }
+
             if (data.$element) {
                 url = QOR.Xurl(url, data.$element).toString();
             }
@@ -3662,6 +3697,97 @@
     return QorBottomSheets;
 });
 
+(function(factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function($) {
+    'use strict';
+
+    // https://github.com/samdutton/simpl/blob/gh-pages/getusermedia/sources/js/mai
+
+    function getDevices() {
+        // AFAICT in Safari this only gets default devices until gUM is called :/
+        return navigator.mediaDevices.enumerateDevices();
+    }
+
+    function handleError(error) {
+        console.error('Error: ', error);
+    }
+
+    function QorMediaDevices ($audioSelect, $videoSelect, $videoElement) {
+        this.$audioSelect = $audioSelect;
+        this.$videoSelect = $videoSelect;
+        this.$videoElement = $videoElement;
+
+        this.init();
+    }
+
+    QorMediaDevices.prototype = {
+        constructor: QorMediaDevices,
+
+        init : function () {
+
+        },
+
+        gotDevices: function (deviceInfos) {
+            this.$audioSelect.html('');
+            this.$videoSelect.html('');
+
+            window.deviceInfos = deviceInfos; // make available to console
+            console.log('Available input and output devices:', deviceInfos);
+            for (const deviceInfo of deviceInfos) {
+                const option = document.createElement('option');
+                option.value = deviceInfo.deviceId;
+                if (deviceInfo.kind === 'audioinput') {
+                    if (this.$audioSelect) {
+                        option.text = deviceInfo.label || `Microphone ${audioSelect.length + 1}`;
+                        this.$audioSelect.appendChild(option);
+                    }
+                } else if (deviceInfo.kind === 'videoinput') {
+                    if (this.$videoSelect) {
+                        option.text = deviceInfo.label || `Camera ${videoSelect.length + 1}`;
+                        this.$videoSelect.appendChild(option);
+                    }
+                }
+            }
+        },
+
+        getStream: function () {
+            if (window.stream) {
+                window.stream.getTracks().forEach(track => {
+                    track.stop();
+                });
+            }
+            const audioSource = this.$audioSelect ? this.$audioSelect.val() : null;
+            const videoSource = this.$videoSelect ? this.$videoSelect.val() : null;
+            const constraints = {
+                audio: {deviceId: audioSource ? {exact: audioSource} : undefined},
+                video: {deviceId: videoSource ? {exact: videoSource} : undefined}
+            };
+            return navigator.mediaDevices.getUserMedia(constraints).
+            then(this.gotStream.bind(this)).catch(handleError);
+        },
+
+        gotStream: function (stream) {
+            window.stream = stream; // make stream available to console
+            this.$audioSelect.selectedIndex = [...audioSelect.options].
+            findIndex(option => option.text === stream.getAudioTracks()[0].label);
+            this.$videoSelect.selectedIndex = [...videoSelect.options].
+            findIndex(option => option.text === stream.getVideoTracks()[0].label);
+            this.$videoElement.srcObject = stream;
+        }
+    }
+
+    window.QorMediaDevices = QorMediaDevices;
+});
 (function(factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
@@ -4039,6 +4165,8 @@
         return /.svg$/.test(url);
     }
 
+
+
     function QorCropper(element, options) {
         this.$element = $(element);
         this.options = $.extend(true, {}, QorCropper.DEFAULTS, $.isPlainObject(options) && options);
@@ -4053,10 +4181,11 @@
             let options = this.options,
                 $this = this.$element,
                 $parent = $this.closest(options.parent),
+                $form = $parent.closest('form'),
+                // $takePicture = $form.find(`#${$this.attr('id')}-take-picture`),
                 data,
                 outputValue,
                 fetchUrl,
-                _this = this,
                 imageData;
 
             if (!$parent.length) {
@@ -4064,8 +4193,9 @@
             }
 
             this.$parent = $parent;
+            this.$takePicture = null //this.$takePicture = $takePicture.length && vigator.mediaDevices.getUserMedia ? $takePicture : null;
             this.$output = $parent.find(options.output);
-            this.$formCropInput = $parent.closest('form').find(HIDDEN_DATA_INPUT);
+            this.$formCropInput = $form.find(HIDDEN_DATA_INPUT);
             this.$list = $parent.find(options.list);
 
             fetchUrl = this.$output.data('fetchSizedata');
@@ -4073,15 +4203,15 @@
             if (fetchUrl) {
                 $.getJSON(fetchUrl, function(data) {
                     imageData = JSON.parse(data.MediaOption);
-                    _this.$output.val(JSON.stringify(data));
-                    _this.$formCropInput.val(JSON.stringify(data));
-                    _this.data = imageData || {};
+                    this.$output.val(JSON.stringify(data));
+                    this.$formCropInput.val(JSON.stringify(data));
+                    this.data = imageData || {};
                     if (isSVG(imageData.URL || imageData.Url)) {
-                        _this.resetImage();
+                        this.resetImage();
                     }
-                    _this.build();
-                    _this.bind();
-                });
+                    this.build();
+                    this.bind();
+                }.bind(this));
             } else {
                 outputValue = $.trim(this.$output.val());
                 if (outputValue) {
@@ -4122,6 +4252,24 @@
 
             this.wrap();
             this.$modal = $(replaceText(QorCropper.MODAL, replaceTexts)).appendTo('body');
+
+            if (this.$takePicture) {
+                let text;
+                if (textData) {
+                    text = {
+                        title: textData.tpTitle,
+                        ok: textData.tpOk,
+                        cancel: textData.tpCancel
+                    };
+                    replaceTexts = this.options.takePictureText;
+                }
+
+                if (text.ok && text.title && text.cancel) {
+                    replaceTexts = text;
+                }
+                this.$takePictureModal = $(replaceText(QorCropper.TAKE_PICTURE, replaceTexts)).appendTo('body');
+                this.$takePicture.show();
+            }
         },
 
         unbuild: function() {
@@ -4209,6 +4357,31 @@
         },
 
         read: function(e) {
+            let files = e.target.files,
+                file,
+                $list = this.$list,
+                $alert = this.$parent.find('.qor-fieldset__alert');
+
+            $list.show();
+
+            if ($alert.length) {
+                $alert.remove();
+            }
+
+            if (files && files.length) {
+                file = files[0];
+
+                if (/^image\//.test(file.type) && URL) {
+                    this.fileType = file.type;
+                    this.load(URL.createObjectURL(file));
+                    this.$parent.find('.qor-medialibrary__image-desc').show();
+                } else {
+                    $list.empty().html(QorCropper.FILE_LIST.replace('{{filename}}', file.name));
+                }
+            }
+        },
+
+        takePicture: function(e) {
             let files = e.target.files,
                 file,
                 $list = this.$list,
@@ -4642,6 +4815,25 @@
                     <div class="qor-cropper__options">
                         <p>Sync cropping result to: <label><input type="checkbox" class="qor-cropper__options-toggle" checked/> All</label></p>
                     </div>
+                </div>
+                <div class="mdl-card__actions mdl-card--border">
+                    <a class="mdl-button mdl-button--colored mdl-button--raised qor-cropper__save">$[ok]</a>
+                    <a class="mdl-button mdl-button--colored" data-dismiss="modal">$[cancel]</a>
+                </div>
+                <div class="mdl-card__menu">
+                    <button class="mdl-button mdl-button--icon" data-dismiss="modal" aria-label="close">
+                        <i class="material-icons">close</i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    QorCropper.TAKE_PICTURE = `<div class="qor-modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="mdl-card mdl-shadow--2dp" role="document">
+                <div class="mdl-card__title">
+                    <h2 class="mdl-card__title-text">$[title]</h2>
+                </div>
+                <div class="mdl-card__supporting-text">
+                    <video autoplay="true" />
                 </div>
                 <div class="mdl-card__actions mdl-card--border">
                     <a class="mdl-button mdl-button--colored mdl-button--raised qor-cropper__save">$[ok]</a>
@@ -7140,6 +7332,104 @@
 
 });
 
+(function (factory) {
+    if (typeof define === 'function' && define.amd) {
+        // AMD. Register as anonymous module.
+        define(['jquery'], factory);
+    } else if (typeof exports === 'object') {
+        // Node / CommonJS
+        factory(require('jquery'));
+    } else {
+        // Browser globals.
+        factory(jQuery);
+    }
+})(function ($) {
+    'use strict';
+
+    let NAMESPACE = 'qor.password_visibility',
+        SELECTOR = '[data-toggle="qor.password_visibility"]',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_CLICK = 'click.' + NAMESPACE;
+
+    function QorPasswordVisibility(element, options) {
+        this.$el = $(element);
+        this.init();
+    }
+
+    QorPasswordVisibility.prototype = {
+        constructor: QorPasswordVisibility,
+
+        init: function () {
+            this.flag = false;
+            this.$icon = this.$el.find('i');
+            this.$target = this.$el.siblings('input[type=password]');
+            this.icons = [this.$icon.text(), this.$el.data('toggleIcon')];
+            this.bind();
+        },
+
+        bind: function () {
+            this.$el.bind(EVENT_CLICK, this.toggle.bind(this));
+        },
+
+        toggle: function () {
+            this.flag = !this.flag;
+            this.$icon.html(this.icons[+this.flag]);
+            this.$target.attr('type', this.flag?'text':'password');
+        },
+
+        destroy: function () {
+            this.$el.of(EVENT_CLICK, this.toggle);
+            this.$el.removeData(NAMESPACE);
+        }
+    };
+
+    QorPasswordVisibility.DEFAULTS = {};
+
+    QorPasswordVisibility.plugin = function (options) {
+        let args = Array.prototype.slice.call(arguments, 1),
+            result;
+
+        return this.each(function () {
+            var $this = $(this);
+            var data = $this.data(NAMESPACE);
+            var fn;
+
+            if (!data) {
+                if (/destroy/.test(options)) {
+                    return;
+                }
+                data = new QorPasswordVisibility(this, options);
+                if (("$el" in data)) {
+                    $this.data(NAMESPACE, data);
+                } else {
+                    return
+                }
+            }
+
+            if (typeof options === 'string' && $.isFunction((fn = data[options]))) {
+                result = fn.apply(data, args);
+            }
+        });
+
+        return (typeof result === 'undefined') ? this : result;
+    };
+
+    $(function () {
+        var options = {};
+
+        $(document)
+            .on(EVENT_DISABLE, function (e) {
+                QorPasswordVisibility.plugin.call($(SELECTOR, e.target), 'destroy');
+            })
+            .on(EVENT_ENABLE, function (e) {
+                QorPasswordVisibility.plugin.call($(SELECTOR, e.target), options);
+            })
+            .triggerHandler(EVENT_ENABLE);
+    });
+
+    return QorPasswordVisibility;
+});
 (function (factory) {
   if (typeof define === 'function' && define.amd) {
     // AMD. Register as anonymous module.

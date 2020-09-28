@@ -13,3 +13,18 @@
     color: darkred;
   }
 }
+
+
+.qor-field__left-1-icon {
+  position: relative;
+  .qor-input__icon {
+    bottom: 0;
+    position: absolute;
+    margin: 0;
+    right: 0;
+  }
+
+  .qor-input__icon-as-rigth {
+    width: calc(100% - 35px);
+  }
+}

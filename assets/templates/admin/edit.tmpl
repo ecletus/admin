@@ -22,10 +22,22 @@
       {{- record_frame .Resource .Result "edit/form/end" -}}
       {{- if has_update_permission .Resource -}}
         <div class="qor-form__actions">
-          <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{$cfg.ButtonLabel}}</button>
-          {{- if not $cfg.ContinueEditingDisabled -}}
-            <a class="mdl-button mdl-button--primary mdl-js-button mdl-js-ripple-effect" href="javascript:void(0);" onclick="QOR.submitContinueEditing(this);">{{t "github_com:ecletus:admin.form.save_continue_editing" }}</a>
-          {{- end -}}
+          {{if .Resource.Config.Wizard}}
+            {{if .Result.IsDone}}
+              <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{t "github_com:ecletus:admin.form.wizard.done" }}</button>
+            {{end}}
+
+            <a class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" href="javascript:void(0);" onclick="QOR.submitContinueEditing(this);">{{t "github_com:ecletus:admin.form.wizard.next" }}</a>
+
+            {{if .Result.CurrentStepName}}
+              <a class="mdl-button mdl-button--colored mdl-js-button mdl-js-ripple-effect" href="javascript:void(0);" onclick="QOR.submitValues(this, 'QorResource.GoBack',['true']);">{{t "github_com:ecletus:admin.form.wizard.prev" }}</a>
+            {{end}}
+          {{else}}
+            <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{$cfg.ButtonLabel}}</button>
+            {{- if not $cfg.ContinueEditingDisabled -}}
+              <a class="mdl-button mdl-button--primary mdl-js-button mdl-js-ripple-effect" href="javascript:void(0);" onclick="QOR.submitContinueEditing(this);">{{t "github_com:ecletus:admin.form.save_continue_editing" }}</a>
+            {{- end -}}
+          {{end}}
           <a class="mdl-button mdl-button--primary mdl-js-button mdl-js-ripple-effect qor-button--cancel" href="{{default $cfg.CancelUrl "javascript:history.back();"}}">{{t "github_com:ecletus:admin.form.cancel_edit"}}</a>
         </div>
       {{- end -}}

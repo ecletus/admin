@@ -5,14 +5,16 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ecletus/core"
 	"github.com/ecletus/responder"
 	"github.com/jinzhu/copier"
-	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/httpu"
+
+	"github.com/ecletus/core"
+	"github.com/moisespsena-go/aorm"
 
 	field_access "github.com/moisespsena-go/field-access"
 	"github.com/moisespsena-go/valuesmap"
+
 	"github.com/moisespsena/template/html/template"
 )
 
@@ -152,12 +154,48 @@ done:
 			context.Encode(map[string]interface{}{"errors": context.GetErrors()})
 		}).Respond(context.Request)
 	} else {
-		message := string(context.tt(I18NGROUP+".form.successfully_updated", NewResourceRecorde(context, res, recorde),
-			"{{.}} was successfully updated"))
-		if cfg.SuccessCallback != nil {
-			cfg.SuccessCallback(context, old, recorde, &message)
-			if context.Writer.WroteHeader() {
+		var messageDisabled bool
+		if context.Resource.Config.Wizard != nil {
+			wz := recorde.(WizardModelInterface)
+			if wz.IsDone() {
+				destRes := context.Resource.Config.Wizard.BaseResource
+				dest := wz.GetDestination()
+				context.Writer.Header().Set("X-Steps-Done", "true")
+				message := string(context.tt(I18NGROUP+".form.successfully_created",
+					NewResourceRecorde(context, destRes, dest), "{{.}} was successfully created"))
+				if cfg.SuccessCallback != nil {
+					cfg.SuccessCallback(context, old, recorde, &message)
+					if context.Writer.WroteHeader() {
+						return
+					}
+				}
+				context.Flash(message, "success")
+
+				url := cfg.RedirectTo
+				if url == "" {
+					if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
+						url = res.Config.Wizard.BaseResource.GetContextURI(context.Context, destRes.GetKey(dest)) + P_OBJ_UPDATE_FORM
+					} else {
+						url = res.Config.Wizard.BaseResource.GetContextIndexURI(context.Context)
+					}
+				}
+				httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
 				return
+			} else {
+				context.Writer.Header().Set("X-Next-Step", wz.CurrentStepName())
+				httpu.Redirect(context.Writer, context.Request, context.Request.RequestURI, http.StatusSeeOther)
+				return
+			}
+		}
+		var message string
+		if !messageDisabled {
+			message = string(context.tt(I18NGROUP+".form.successfully_updated", NewResourceRecorde(context, res, recorde),
+				"{{.}} was successfully updated"))
+			if cfg.SuccessCallback != nil {
+				cfg.SuccessCallback(context, old, recorde, &message)
+				if context.Writer.WroteHeader() {
+					return
+				}
 			}
 		}
 
@@ -165,7 +203,9 @@ done:
 		context.Type = SHOW
 		context.DefaulLayout()
 		responder.With("html", func() {
-			context.Flash(message, "success")
+			if !messageDisabled {
+				context.Flash(message, "success")
+			}
 			url := context.RedirectTo
 			if url == "" {
 				if url = cfg.RedirectTo; url == "" {
@@ -190,7 +230,7 @@ done:
 				}
 				newResult := make(map[string]interface{})
 
-				for key, _ := range context.Request.Form {
+				for key := range context.Request.Form {
 					if strings.HasPrefix(key, "QorResource.") {
 						key = strings.TrimPrefix(key, "QorResource.")
 						f := rresult.FieldByName(key)

@@ -1,8 +1,10 @@
 package admin
 
 import (
-	"github.com/ecletus/core"
 	"github.com/ecletus/roles"
+
+	"github.com/ecletus/core"
+
 	"github.com/moisespsena-go/aorm"
 )
 
@@ -14,6 +16,11 @@ type SubConfig struct {
 	Relation        *aorm.Relationship
 	Filters         []*DBFilter
 	RawFieldFilter  map[string]interface{}
+}
+
+type CreateWizardConfig struct {
+	Value  interface{}
+	Config *Config
 }
 
 // Config admin config struct
@@ -48,8 +55,12 @@ type Config struct {
 	ActionControllerFactory func(action *Action) ActionController
 	DescriprionGetter       func(ctx *core.Context, record interface{}) string
 
+	Wizard *Wizard
+
 	// apenas cria o resource, nao registra em nada, não monta
-	Alone       bool
+	Alone bool
 
 	ModelStruct *aorm.ModelStruct
+
+	CreateWizard *CreateWizardConfig
 }

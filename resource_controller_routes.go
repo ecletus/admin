@@ -26,7 +26,6 @@ func (this *ResourceControllerBuilder) RegisterDefaultSingletonRouters() {
 			updateForm.Path = P_SINGLETON_UPDATE_FORM
 			updateHandler.Path = P_SINGLETON_UPDATE
 
-
 			res.Router.Api(func(router xroute.Router) {
 				router.Get(P_SINGLETON_UPDATE_FORM, updateForm)
 				router.Put(P_SINGLETON_UPDATE, updateHandler)
@@ -143,4 +142,34 @@ func (this *ResourceControllerBuilder) RegisterDefaultNormalRouters() {
 			router.Get(P_SEARCH, searchHandler)
 		})
 	}
+}
+
+func (this *ResourceControllerBuilder) RegisterWizardRouters() {
+	vc := this.ViewController
+	res := this.Resource
+
+	var (
+		createForm    = vc.Handlers.Require(VA_CREATE_FROM)
+		createHandler = vc.Handlers.Require(VA_CREATE)
+	)
+	createForm.Path = "/"
+	createHandler.Path = "/"
+
+	res.Router.Get("/", createForm)
+	res.Router.Api(func(router xroute.Router) {
+		router.Post("/", createHandler)
+	})
+
+	var (
+		updateForm    = vc.Handlers.Require(VA_UPDATE_FORM)
+		updateHandler = vc.Handlers.Require(VA_UPDATE)
+	)
+
+	updateForm.Path = "/"
+	updateHandler.Path = "/"
+
+	res.ItemRouter.Api(func(router xroute.Router) {
+		router.Get("/", updateForm)
+		router.Put("/", updateHandler)
+	})
 }

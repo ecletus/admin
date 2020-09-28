@@ -40,6 +40,10 @@ form:
   file:
     max_size_label: "Tamanho Máximo:"
   required_fields: Campos de preenchimento obrigatório
+  wizard:
+    next: Próximo
+    prev: Voltar
+    done: Fim
 action:
   new: "Cadastrar {{.}}"
   edit: "Editar {{.}}"
@@ -121,6 +125,9 @@ alerts:
 
 metas:
   select_one:
+    placeholder: Escolha uma Opção
+
+  select_one_bool:
     placeholder: Escolha uma Opção
 
   date:

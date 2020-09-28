@@ -558,7 +558,13 @@ func (this *Scheme) EditSections(context *Context, record interface{}) (sections
 
 func (this *Scheme) NewSections(context *Context) []*Section {
 	if this.NewSectionsFunc != nil {
-		return this.NewSectionsFunc(context)
+		sections := this.NewSectionsFunc(context)
+		for _, sec := range sections {
+			if sec.Resource == nil {
+				sec.Resource = this.Resource
+			}
+		}
+		return sections
 	}
 
 	if len(this.newSections) == 0 {

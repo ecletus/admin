@@ -30,7 +30,7 @@ func (this *Resource) OnForeignMetaAdded(cb func(meta *Meta)) {
 func MetaTypeAdded(typ interface{}, cb func(meta *Meta)) func(meta *Meta) {
 	rtype := utils.IndirectType(typ)
 	return func(meta *Meta) {
-		if meta.Typ == rtype {
+		if indirectType(meta.Typ) == rtype {
 			cb(meta)
 		}
 	}

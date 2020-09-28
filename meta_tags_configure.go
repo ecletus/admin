@@ -1,5 +1,10 @@
 package admin
 
+import (
+	"fmt"
+	"reflect"
+)
+
 var MetaConfigureTagsHandlers []func(meta *Meta, tags *MetaTags)
 
 func RegisterMetaConfigureTagsHandler(f func(meta *Meta, tags *MetaTags)) {
@@ -40,6 +45,17 @@ func (this *Meta) tagsConfigure() {
 	}
 	if tags.NilAsZero() {
 		this.NilAsZero = true
+	}
+	if lockedField := tags.LockedField(); lockedField != "" {
+		typ := indirectType(reflect.TypeOf(this.BaseResource.Value))
+		f, ok := typ.FieldByName(lockedField)
+		if !ok {
+			panic(fmt.Errorf("locked field %s.%s#%s does not exists", typ.PkgPath(), typ.Name(), lockedField))
+		}
+		fieldIndex := f.Index
+		this.LockedFunc = func(_ *Meta, _ *Context, record interface{}) bool {
+			return reflect.Indirect(reflect.ValueOf(record)).FieldByIndex(fieldIndex).Bool()
+		}
 	}
 	if tags.Filter() {
 		// TODO

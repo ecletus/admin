@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -71,7 +70,7 @@ func (this *Meta) updateMeta() {
 	this.tagsConfigure()
 
 	if this.FieldStruct != nil {
-		if injector, ok := reflect.New(this.FieldStruct.Struct.Type).Interface().(resource.ConfigureMetaBeforeInitializeInterface); ok {
+		if injector, ok := reflect.New(indirectType(this.Typ)).Interface().(resource.ConfigureMetaBeforeInitializeInterface); ok {
 			injector.ConfigureQorMetaBeforeInitialize(this)
 		}
 	}
@@ -97,172 +96,100 @@ func (this *Meta) updateMeta() {
 		this.DefaultLabel = utils.HumanizeString(this.Name)
 	}
 
-	var fieldType reflect.Type
-	var hasColumn = this.FieldStruct != nil
-	var isPtr bool
-
-	if hasColumn {
-		fieldType = this.FieldStruct.Struct.Type
-		for fieldType.Kind() == reflect.Ptr {
-			isPtr = true
-			fieldType = fieldType.Elem()
+	if this.Typ != nil {
+		typ := indirectType(this.Typ)
+		if typ.Kind() == reflect.Bool && this.Config == nil && ((this.Type == "" && this.Required) || this.Type == "select_one") {
+			this.Type = ""
 		}
-	}
 
-	// Set Meta Type
-	if hasColumn {
-		if this.Type == "" {
-			if _, ok := reflect.New(fieldType).Interface().(sql.Scanner); ok {
-				if fieldType.Kind() == reflect.Struct {
-					fieldType = reflect.Indirect(reflect.New(fieldType)).Field(0).Type()
+		if this.FieldStruct != nil {
+			if reflect.PtrTo(typ).Implements(reflect.TypeOf((*sql.Scanner)(nil)).Elem()) {
+				if typ.Kind() == reflect.Struct {
+					typ = reflect.Indirect(reflect.New(typ)).Field(0).Type()
 				}
 			}
 
-			if relationship := this.FieldStruct.Relationship; relationship != nil {
-				if relationship.Kind == "has_one" {
-					this.Type = "single_edit"
-				} else if relationship.Kind == "has_many" {
-					this.Type = "collection_edit"
-				} else if relationship.Kind == "belongs_to" {
-					this.Type = "select_one"
-				} else if relationship.Kind == "many_to_many" {
-					this.Type = "select_many"
-				}
-			} else if _, ok := metaTypeConfigorMaps[indirectType(fieldType)]; !ok {
-				switch fieldType.Kind() {
-				case reflect.String:
-					var tags = this.FieldStruct.TagSettings
-					if size, ok := tags["SIZE"]; ok {
-						if i, _ := strconv.Atoi(size); i > 255 {
-							this.Type = "text"
-						} else {
-							this.Type = "string"
-						}
-					} else if text, ok := tags["TYPE"]; ok && text == "text" {
-						this.Type = "text"
-					} else {
-						this.Type = "string"
-					}
-				case reflect.Bool:
-					if isPtr {
+			// Set Meta Type
+			if this.Type == "" {
+				if relationship := this.FieldStruct.Relationship; relationship != nil {
+					if relationship.Kind == "has_one" {
+						this.Type = "single_edit"
+					} else if relationship.Kind == "has_many" {
+						this.Type = "collection_edit"
+					} else if relationship.Kind == "belongs_to" {
 						this.Type = "select_one"
-						this.Config = MetaConfigBooleanSelect()
-						this.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) interface{} {
-							value := this.Value(ctx, recorde)
-							if value == nil {
-								return ""
+					} else if relationship.Kind == "many_to_many" {
+						this.Type = "select_many"
+					}
+				} else if _, ok := metaTypeConfigorMaps[indirectType(typ)]; !ok {
+					switch typ.Kind() {
+					default:
+						if this.FieldStruct.TagSettings["TYPE"] == "date" {
+							this.Type = "date"
+						} else if regexp.MustCompile(`^(.*)?(u)?(int)(\d+)?`).MatchString(typ.Kind().String()) {
+							this.Type = "number"
+						} else if regexp.MustCompile(`^(.*)?(float)(\d+)?`).MatchString(typ.Kind().String()) {
+							this.Type = "float"
+						} else if _, ok := reflect.New(typ).Interface().(*time.Time); ok {
+							this.Type = "datetime"
+						} else {
+							if typ.Kind() == reflect.Struct {
+								if !this.Tags.Flag("SINGLE_EDIT_DISABLED") {
+									this.Type = "single_edit"
+								}
+							} else if typ.Kind() == reflect.Slice {
+								refelectType := typ.Elem()
+								for refelectType.Kind() == reflect.Ptr {
+									refelectType = refelectType.Elem()
+								}
+								if refelectType.Kind() == reflect.Struct {
+									this.Type = "collection_edit"
+								}
 							}
-							b := value.(*bool)
-							if b == nil {
-								return ""
+						}
+					}
+				}
+			} else {
+				if relationship := this.FieldStruct.Relationship; relationship != nil {
+					if (relationship.Kind == "has_one" || relationship.Kind == "has_many") && this.Meta.Setter == nil && (this.Type == "select_one" || this.Type == "select_many") {
+						this.SetSetter(func(record interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+							reflectValue := reflect.Indirect(reflect.ValueOf(record))
+							field := reflectValue.FieldByName(this.FieldName)
+
+							if field.Kind() == reflect.Ptr {
+								if field.IsNil() {
+									field.Set(utils.NewValue(field.Type()).Elem())
+								}
+
+								for field.Kind() == reflect.Ptr {
+									field = field.Elem()
+								}
 							}
-							p := I18NGROUP + ".form.bool."
-							if *b {
-								return ctx.Ts(p+"true", "Yes")
+
+							primaryKeys := utils.ToArray(metaValue.Value)
+							if len(primaryKeys) > 0 {
+								// set current field value to blank and replace it with new value
+								field.Set(reflect.Zero(field.Type()))
+								// 2020-03-31: nao havia tratamento de erro
+								if err := context.DB().Where(primaryKeys).Find(field.Addr().Interface()).Error; err != nil {
+									panic(err)
+								}
 							}
-							return ctx.Ts(p+"false", "No")
+
+							if !aorm.ZeroIdOf(record) {
+								// 2020-03-31: nao havia tratamento de erro
+								if err := context.DB().Model(record).Association(this.FieldName).Replace(field.Interface()).Error(); err != nil {
+									panic(err)
+								}
+								field.Set(reflect.Zero(field.Type()))
+							}
+							return nil
 						})
-						this.IsZeroFunc = func(recorde, value interface{}) bool {
-							if value == nil {
-								return true
-							}
-							return false
-						}
-					} else {
-						this.Type = "switch"
-					}
-				default:
-					if this.FieldStruct.TagSettings["TYPE"] == "date" {
-						this.Type = "date"
-					} else if regexp.MustCompile(`^(.*)?(u)?(int)(\d+)?`).MatchString(fieldType.Kind().String()) {
-						this.Type = "number"
-					} else if regexp.MustCompile(`^(.*)?(float)(\d+)?`).MatchString(fieldType.Kind().String()) {
-						this.Type = "float"
-					} else if _, ok := reflect.New(fieldType).Interface().(*time.Time); ok {
-						this.Type = "datetime"
-					} else {
-						if fieldType.Kind() == reflect.Struct {
-							this.Type = "single_edit"
-						} else if fieldType.Kind() == reflect.Slice {
-							refelectType := fieldType.Elem()
-							for refelectType.Kind() == reflect.Ptr {
-								refelectType = refelectType.Elem()
-							}
-							if refelectType.Kind() == reflect.Struct {
-								this.Type = "collection_edit"
-							}
-						}
 					}
 				}
 			}
-		} else if this.Type == "select_one" && this.Config == nil && this.FieldStruct.Struct.Type.Kind() == reflect.Bool {
-			this.Config = MetaConfigBooleanSelect()
-			this.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) interface{} {
-				value := this.Value(ctx, recorde)
-				if value == nil {
-					return ""
-				}
-				b := value.(bool)
-				p := I18NGROUP + ".form.bool."
-				if b {
-					return ctx.Ts(p+"true", "Yes")
-				}
-				return ctx.Ts(p+"false", "No")
-			})
-			this.AfterUpdate(func() {
-				this.NewValuer(func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{} {
-					if ContextFromContext(ctx).Type.Has(NEW) {
-						return nil
-					}
-					return old(recorde, ctx)
-				})
-			})
-			this.IsZeroFunc = func(recorde, value interface{}) bool {
-				return false
-			}
-		} else {
-			if relationship := this.FieldStruct.Relationship; relationship != nil {
-				if (relationship.Kind == "has_one" || relationship.Kind == "has_many") && this.Meta.Setter == nil && (this.Type == "select_one" || this.Type == "select_many") {
-					this.SetSetter(func(record interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-						reflectValue := reflect.Indirect(reflect.ValueOf(record))
-						field := reflectValue.FieldByName(this.FieldName)
 
-						if field.Kind() == reflect.Ptr {
-							if field.IsNil() {
-								field.Set(utils.NewValue(field.Type()).Elem())
-							}
-
-							for field.Kind() == reflect.Ptr {
-								field = field.Elem()
-							}
-						}
-
-						primaryKeys := utils.ToArray(metaValue.Value)
-						if len(primaryKeys) > 0 {
-							// set current field value to blank and replace it with new value
-							field.Set(reflect.Zero(field.Type()))
-							// 2020-03-31: nao havia tratamento de erro
-							if err := context.DB().Where(primaryKeys).Find(field.Addr().Interface()).Error; err != nil {
-								panic(err)
-							}
-						}
-
-						if !aorm.ZeroIdOf(record) {
-							// 2020-03-31: nao havia tratamento de erro
-							if err := context.DB().Model(record).Association(this.FieldName).Replace(field.Interface()).Error(); err != nil {
-								panic(err)
-							}
-							field.Set(reflect.Zero(field.Type()))
-						}
-						return nil
-					})
-				}
-			}
-		}
-	}
-
-	{ // Set Meta Resource
-		if hasColumn {
+			// Set Meta Resource
 			if this.Resource == nil {
 				var typ reflect.Type
 				if typ = aorm.AcceptableTypeForModelStructInterface(this.FieldStruct.Struct.Type); typ == nil {
@@ -338,8 +265,10 @@ a:
 		}
 	}
 
-	if configor, ok := metaTypeConfigorMaps[this.Typ]; ok {
-		configor(this)
+	if this.Typ != nil {
+		if configor, ok := metaTypeConfigorMaps[indirectType(this.Typ)]; ok {
+			configor(this)
+		}
 	}
 
 	// call field's ConfigureMetaInterface

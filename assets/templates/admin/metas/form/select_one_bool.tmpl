@@ -1,0 +1,38 @@
+{{$value := (raw_value_of .Record .Meta) -}}
+<div class="qor-field">
+    {{if or .ReadOnly (not (has_update_permission .Meta)) -}}
+        {{- if not (is_null $value) -}}
+            <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
+                {{meta_record_label .Meta .Record}}
+            </label>
+
+            {{$help := meta_record_help .Meta .Record}}
+            {{- if $help -}}
+                <div class="qor-field__help">{{$help}}</div>
+            {{- end -}}
+
+            <div class="qor-field__value">{{.Value}}</div>
+        {{- end -}}
+    {{else}}
+        <label class="qor-field__label" for="{{.InputId}}">
+            {{meta_record_label .Meta .Record}}{{if .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+        </label>
+            {{$help := meta_record_help .Meta .Record}}
+        {{if $help}}
+            <div class="qor-field__help">{{$help}}</div>
+        {{end}}
+
+        <div class="qor-field__show">{{.Value}}</div>
+        <div class="qor-field__edit qor-field__block qor-field__selectone" >
+            <select id="{{.InputId}}" name="{{.InputName}}"
+                    class="qor-field__input hidden"
+                    data-toggle="qor.chooser"
+                    data-allow-clear="true"
+                    data-placeholder="{{meta_placeholder .Meta .Context "Select an Option"}}">
+                <option value="" {{if is_null $value}}selected{{end}}></option>
+                <option {{if $value}}selected{{end}} value="true">{{.Meta.Config.TruthLabel .Context .Record}}</option>
+                <option {{if and (not (is_null $value)) (not $value)}}selected{{end}} value="false">{{.Meta.Config.FalsyLabel .Context .Record}}</option>
+            </select>
+        </div>
+    {{end}}
+</div>

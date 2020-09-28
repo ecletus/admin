@@ -47,7 +47,7 @@ func (this *ActionControl) Action(context *Context) {
 
 	context.Type = EDIT | ACTION
 
-	var actionArgument = ActionArgument{
+	var actionArgument = &ActionArgument{
 		Context: context,
 		Action: action,
 	}
@@ -67,12 +67,15 @@ func (this *ActionControl) Action(context *Context) {
 		}
 
 		if err == nil && action.SetupArgument != nil {
-			err = action.SetupArgument(&actionArgument)
+			err = action.SetupArgument(actionArgument)
 		}
 		context.AddError(err)
 	}
 
 	if context.Request.Method == "GET" {
+		if action.ShowHandler != nil {
+			action.ShowHandler(actionArgument)
+		}
 		if action.ReadOnly {
 			context.Type = SHOW | ACTION
 			context.Execute("action_show", actionArgument)
@@ -90,7 +93,7 @@ func (this *ActionControl) Action(context *Context) {
 			}
 		}
 
-		err = action.Handler(&actionArgument)
+		err = action.Handler(actionArgument)
 
 	done:
 		if !actionArgument.Context.Writer.WroteHeader() {

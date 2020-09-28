@@ -222,18 +222,19 @@ func (this Actions) Sort() Actions {
 
 // Action action definiation
 type Action struct {
-	Name           string
-	Label          string
-	LabelKey       string
-	MdlIcon        string
-	Method         string
-	URL            func(record interface{}, context *Context, args ...interface{}) string
-	URLOpenType    string
-	Available      func(context *Context) bool
-	IndexVisible   func(context *Context) bool
-	Visible        func(record interface{}, context *Context) bool
-	Handler        func(argument *ActionArgument) error
-	SetupArgument  func(argument *ActionArgument) error
+	Name        string
+	Label       string
+	LabelKey    string
+	MdlIcon     string
+	Method      string
+	URL         func(record interface{}, context *Context, args ...interface{}) string
+	URLOpenType string
+	Available,
+	IndexVisible func(context *Context) bool
+	Visible func(record interface{}, context *Context) bool
+	Handler,
+	ShowHandler,
+	SetupArgument func(argument *ActionArgument) error
 	Modes          []string
 	BaseResource   *Resource
 	Resource       *Resource
@@ -242,8 +243,8 @@ type Action struct {
 	Type           ActionType
 	PermissionMode roles.PermissionMode
 	ReadOnly       bool
-	ReturnURL      func(record interface{}, context *Context) string
-	RefreshURL     func(record interface{}, context *Context) string
+	ReturnURL,
+	RefreshURL func(record interface{}, context *Context) string
 	// executes and disable now
 	One bool
 	// allow executes with empty bulk records
@@ -358,5 +359,5 @@ func (actionArgument *ActionArgument) FindSelectedRecords() []interface{} {
 }
 
 func (this *Action) MessageKey(key string) string {
-	return this.BaseResource.I18nPrefix+".actions_messages."+this.ToParam()+"."+key
+	return this.BaseResource.I18nPrefix + ".actions_messages." + this.ToParam() + "." + key
 }

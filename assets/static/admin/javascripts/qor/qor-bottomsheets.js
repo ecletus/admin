@@ -486,6 +486,23 @@
                 return;
             }
 
+            if (data.image) {
+                let $title = $header.find('.qor-bottomsheets__title');
+                $title.html(data.title || '');
+                $body.css({overflow:'auto', padding:0});
+                $body.html('<img style="max-width: inherit" src="'+url+'">');
+
+                this.show();
+
+                $bottomsheets
+                    .one(EVENT_HIDDEN, function () {
+                        $(this).trigger('disable');
+                    })
+                    .trigger('enable');
+
+                return;
+            }
+
             if (data.$element) {
                 url = QOR.Xurl(url, data.$element).toString();
             }

@@ -5,20 +5,21 @@ import (
 
 	"github.com/ecletus/about"
 	"github.com/ecletus/assets"
-	"github.com/ecletus/core"
-	"github.com/ecletus/core/helpers"
 	"github.com/ecletus/db"
 	"github.com/ecletus/ecletus"
 	"github.com/ecletus/roles"
 	"github.com/ecletus/session"
-	"github.com/ecletus/sites"
-	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/assetfs"
 	"github.com/moisespsena-go/edis"
 	"github.com/moisespsena-go/logging"
 	"github.com/moisespsena-go/options"
 	path_helpers "github.com/moisespsena-go/path-helpers"
 	"github.com/moisespsena-go/xroute"
+
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/helpers"
+	"github.com/ecletus/sites"
+	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena/template/html/template"
 )
 
@@ -39,10 +40,10 @@ type AdminConfig struct {
 	UserResourceUID string
 	SiteAbouter     func(ctx *Context) about.Abouter
 	DefaultDenyMode bool
-	Ecletus *ecletus.Ecletus
+	Ecletus         *ecletus.Ecletus
 
-	Controller *AdminController
-	Public     bool
+	Controller       *AdminController
+	Public           bool
 	DefaultPageTitle func(ctx *Context) string
 }
 
@@ -85,6 +86,7 @@ type Admin struct {
 	onRouter                    []func(r xroute.Router)
 	onPreInitializeResourceMeta []func(meta *Meta)
 	onResourceTypeAdded         map[reflect.Type][]func(res *Resource)
+	onMenuAdded                 []func(menu *Menu)
 	ContextPermissioners        []core.Permissioner
 	DefaultDenyMode             bool
 }
@@ -98,7 +100,7 @@ type ResourceNamer interface {
 func New(config *AdminConfig) *Admin {
 	if config.DefaultPageTitle == nil {
 		config.DefaultPageTitle = func(ctx *Context) string {
-			return ctx.Ts(I18NGROUP + ".layout.title", "Admin")
+			return ctx.Ts(I18NGROUP+".layout.title", "Admin")
 		}
 	}
 	admin := &Admin{

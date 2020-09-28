@@ -49,8 +49,6 @@ func (e *EmailConfig) ConfigureQorMeta(metaor resource.Metaor) {
 					return doErr(fmt.Sprintf(ctx.Ts(I18NGROUP+".errors.validations.email.host_not_exists"), v))
 				}
 			}
-
-			// TODO: Check if is online
 		}
 		return
 	})

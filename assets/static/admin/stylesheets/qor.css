@@ -5860,6 +5860,19 @@ li.ui-timepicker-selected .ui-timepicker-duration,
   color: darkred;
 }
 
+.qor-field__left-1-icon {
+  position: relative;
+}
+.qor-field__left-1-icon .qor-input__icon {
+  position: absolute;
+  right: 0; 
+  bottom: 0;
+  margin: 0;
+}
+.qor-field__left-1-icon .qor-input__icon-as-rigth {
+  width: calc(100% - 35px);
+}
+
 .qor-money__value.money-credit {
   color: darkblue;
 }

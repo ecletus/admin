@@ -15,7 +15,21 @@ func (this Admin) GetMenus() []*Menu {
 func (this *Admin) AddMenu(menu *Menu) *Menu {
 	menu.prefix = this.Config.MountPath
 	this.menus = appendMenu(this.menus, menu.Ancestors, menu)
+	for _, cb := range this.onMenuAdded {
+		cb(menu)
+	}
 	return menu
+}
+
+// GetItemMenu get sidebar menu with name
+func (this *Admin) OnMenuAdded(name string, cb func(menu *Menu)) {
+	for _, m := range this.menus {
+		if m.Name == name {
+			cb(m)
+			return
+		}
+	}
+	this.onMenuAdded = append(this.onMenuAdded, cb)
 }
 
 // GetItemMenu get sidebar menu with name
@@ -23,9 +37,9 @@ func (this Admin) GetMenu(name string) *Menu {
 	return getMenu(this.menus, name)
 }
 
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 // Sidebar Menu
-////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////
 
 // Menu admin sidebar menu definiation
 type Menu struct {

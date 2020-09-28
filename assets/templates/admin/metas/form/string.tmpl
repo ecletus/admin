@@ -1,7 +1,7 @@
 <div class="qor-field">
   <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
     <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
-      {{meta_record_label .Meta .Record}}{{if  and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+      {{meta_record_label .Meta .Record}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
     </label>
 
     {{$help := .Config.MaxSizeString}}

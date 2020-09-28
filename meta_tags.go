@@ -3,8 +3,9 @@ package admin
 import (
 	"reflect"
 
-	"github.com/moisespsena-go/aorm"
 	tag_scanner "github.com/unapu-go/tag-scanner"
+
+	"github.com/moisespsena-go/aorm"
 )
 
 type Tags = aorm.TagSetting
@@ -79,6 +80,9 @@ func (this MetaTags) Search() bool {
 }
 func (this MetaTags) Filter() bool {
 	return this.Tags.Flag("FILTER")
+}
+func (this MetaTags) LockedField() string {
+	return this.Tags.Get("LOCKED_FIELD")
 }
 func (this MetaTags) SelectOne() (cfg *SelectOneConfig, resID string, advanced bool, opts SelectConfigOption) {
 	if value := this.Tags["SELECT_ONE"]; value != "" {

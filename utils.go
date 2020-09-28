@@ -53,3 +53,12 @@ func StringChunks(s string, chunkSize int) []string {
 	}
 	return chunks
 }
+
+func InStrings(value string, lis ...string) bool {
+	for _, v := range lis {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}

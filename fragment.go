@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/ecletus/fragment"
@@ -41,7 +42,7 @@ Tipos de Fragmentos:
 			- em SHOW: não renderiza nada
 			- em EDIT: Renderiza apenas o campo ENABLED
 
- */
+*/
 
 type FormFragmentRecordState struct {
 	*Fragment
@@ -50,20 +51,28 @@ type FormFragmentRecordState struct {
 	IsNil   bool
 }
 
+func (f *FormFragmentRecordState) IsZero() bool {
+	return f.IsNil || f.Value == nil || !f.Enabled
+}
+
+func (f *FormFragmentRecordState) MarshalJSON() ([]byte, error) {
+	return json.Marshal(f.Value)
+}
+
 func (f *FormFragmentRecordState) EditSections(context *Context) (sections []*Section) {
 	if f.Config.Mode.Inline() && (f.Value != nil && f.Value.Enabled()) {
 		sections = append(sections, f.Resource.EditAttrs()...)
 	}
-	sections = f.Resource.allowedSections(f.Value, sections, context, roles.Update)
+	sections = Sections(sections).Allowed(f.Value, context, roles.Update)
 
-	return append([]*Section{{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}}}, sections...)
+	return append([]*Section{{Resource: f.Resource, Rows: [][]interface{}{{AttrFragmentEnabled}}}}, sections...)
 }
 
-func (f *FormFragmentRecordState) ShowSections(context *Context) (sections []*Section) {
+func (f *FormFragmentRecordState) ShowSections(context *Context) (sections Sections) {
 	if !f.Config.Mode.Inline() {
-		sections = append(sections, &Section{Resource: f.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
+		sections = append(sections, &Section{Resource: f.Resource, Rows: [][]interface{}{{AttrFragmentEnabled}}})
 	} else {
-		sections = f.Resource.allowedSections(f.Value, f.Resource.ShowAttrs(), context, roles.Read)
+		sections = f.Resource.ShowAttrs().Allowed(f.Value, context, roles.Read)
 	}
 	return
 }
@@ -225,7 +234,7 @@ func (f *Fragment) AllFields() []*aorm.StructField {
 
 func (f *Fragment) formatQuery(DB *aorm.DB, query string) string {
 	return strings.ReplaceAll(
-		strings.ReplaceAll(query, "?", f.Resource.ParentResource.QuotedTableName(DB)),
+		strings.ReplaceAll(query, "?", "_"),
 		"!", f.Resource.QuotedTableName(DB))
 }
 

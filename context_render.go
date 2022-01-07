@@ -4,27 +4,38 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/moisespsena-go/tracederror"
-	"github.com/moisespsena/template/html/template"
 	"github.com/pkg/errors"
+
+	"github.com/moisespsena/template/html/template"
 
 	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
 // renderWithF render template based on data
 func (this *Context) renderWithF(out io.Writer, name string, data interface{}) (err error) {
+	name = strings.ReplaceAll(name, "|", "_")
 	pth := this.templatesStack.Abs(name)
 	if pth == "" {
 		return fmt.Errorf("bad template name %q", name)
 	}
 	defer this.templatesStack.Add(pth)()
-	var executor *template.Executor
-	if executor, err = this.GetTemplate(pth); err != nil {
+	var (
+		executor *template.Executor
+		others   []string
+	)
+	if this.Type.Has(PRINT) {
+		others = []string{pth}
+		name = pth + ".print"
+	}
+	if executor, err = this.GetTemplate(pth, others...); err != nil {
 		return errors.Wrapf(err, "get template %q", pth)
 	}
 	return errors.Wrapf(executor.Execute(out, data), "execute template %q", pth)
 }
+
 // renderWithF render template based on data
 func (this *Context) renderExecutor(executor *template.Executor, out io.Writer, data interface{}) (err error) {
 	defer func() {
@@ -69,9 +80,15 @@ func (this *Context) renderWithInfoF(out io.Writer, info assetfsapi.FileInfo, da
 
 // RenderF render template based on context
 func (this *Context) RenderF(out io.Writer, name string, results ...interface{}) error {
-	clone := this.Clone()
+	var clone *Context
 	if len(results) > 0 {
-		clone.Result = results[0]
+		var ok bool
+		if clone, ok = results[0].(*Context); !ok {
+			clone = this.Clone()
+			clone.Result = results[0]
+		}
+	} else {
+		clone = this.Clone()
 	}
 	return clone.renderWithF(out, name, clone)
 }
@@ -93,8 +110,19 @@ func (this *Context) Include(w io.Writer, name string, results ...interface{}) {
 	}
 }
 
+// IncludeRecord render template based on context
+func (this *Context) IncludeRecord(w io.Writer, name string, record interface{}) {
+	clone := this.Clone()
+	clone.Result = record
+	clone.ResourceRecord = record
+	if err := this.RenderF(w, name, clone); err != nil {
+		w.Write([]byte("<pre>" + err.Error() + "</pre>"))
+		panic(err)
+	}
+}
+
 // Include render template based on context
-func (this *Context) defaultYield(w io.Writer, results ...interface{}) {
+func (this *Context) Yielder(w io.Writer, results ...interface{}) {
 	if err := this.RenderF(w, this.TemplateName, results...); err != nil {
 		w.Write([]byte("<pre>" + err.Error() + "</pre>"))
 		panic(err)

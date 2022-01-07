@@ -33,7 +33,7 @@ func (settings) Get(key string, value interface{}, context *Context) error {
 		resParams = ""
 		userID    = ""
 	)
-	sqlCondition := fmt.Sprintf("%v = ? AND (resource = ? OR resource = ?) AND (user_id = ? OR user_id = ?)", tx.NewScope(nil).Quote("key"))
+	sqlCondition := fmt.Sprintf("%v = ? AND (resource = ? OR resource = ?) AND (user_id = ? OR user_id = ?)", aorm.QuotePath(tx.Dialect(), "key"))
 
 	if context.Resource != nil {
 		resParams = context.Resource.ToParam()

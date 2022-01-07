@@ -1,8 +1,24 @@
 .qor-money__value {
+  &.money-zero {
+    color: #999999;
+  }
   &.money-credit {
     color: darkblue;
   }
   &.money-debit{
     color: darkred;
   }
+}
+
+
+.tag-money-zero td {
+  background-color: #d0ebfa;
+}
+
+.tag-money-credit td {
+  background-color: #d0ebfa;
+}
+
+.tag-money-debit td {
+  background-color: #f3d2d2;
 }

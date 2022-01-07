@@ -12,7 +12,7 @@ $(function () {
 
     var emptySearch = function () {
       var search = location.search.replace(new RegExp($input.attr('name') + '\\=?\\w*'), '');
-      if (search == '?'){
+      if (search === '?'){
         location.href = location.href.split('?')[0];
       } else {
         location.search = location.search.replace(new RegExp($input.attr('name') + '\\=?\\w*'), '');

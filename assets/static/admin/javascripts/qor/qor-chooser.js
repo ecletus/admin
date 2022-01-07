@@ -13,9 +13,9 @@
 
     'use strict';
 
-    var NAMESPACE = 'qor.chooser';
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
+    const NAMESPACE = 'qor.chooser',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE;
 
     function QorChooser(element, options) {
         this.$element = $(element);
@@ -30,10 +30,10 @@
             let $this = this.$element,
                 select2Data = $this.data(),
                 resetSelect2Width,
-                option = {
+                option = $.extend({
                     minimumResultsForSearch: 8,
                     dropdownParent: $this.parent()
-                },
+                }, select2Data.select2 || {}),
                 dataOptions = {
                     displayKey: select2Data.remoteDataDisplayKey,
                     iconKey: select2Data.remoteDataIconKey,
@@ -53,9 +53,10 @@
 
             if (select2Data.remoteData) {
                 option.ajax = $.fn.select2.ajaxCommonOptions(select2Data);
-                let url = select2Data.ajaxUrl || select2Data.originalAjaxUrl
-                let xurl = QOR.Xurl(url, $this);
-                let primaryKey = select2Data.remoteDataPrimaryKey;
+                let url = select2Data.ajaxUrl || select2Data.originalAjaxUrl,
+                    xurl = QOR.Xurl(url, $this),
+                    primaryKey = select2Data.remoteDataPrimaryKey;
+
                 delete select2Data["ajaxUrl"];
                 $this.removeAttr('data-ajax-url');
                 $this.attr('data-original-ajax-url', url);
@@ -71,41 +72,54 @@
                     return 'https://unsolvedy.dependency.localhost/' + result.notFound.concat(result.empties).toString()
                 };
 
+                let $field = $this.parents('.qor-field:eq(0)');
+                this.$templateResult = $field.find('[name="select2-result-template"]');
+
+                let renderTemplate = function ($tmpl, data) {
+                    if (data.text && (data.loading || data.selected || data.id === "")) {
+                        return data.text
+                    }
+                    if ($tmpl.length) {
+                        if ($tmpl.data("raw")) {
+                            let f = $tmpl.data("func");
+                            if (!f) {
+                                f = new Function("data", $tmpl.html());
+                                $tmpl.data('func', f);
+                            }
+                            return f(data)
+                        } else {
+                            let tmpl = $tmpl.html().replace(/^\s+|\s+$/g, '').replace(/\[\[ *&amp;/g, '[[&'),
+                                res = Mustache.render(tmpl, data);
+                            return res;
+                        }
+                    }
+                    return $.fn.select2.ajaxFormatResult(data, $tmpl);
+                }.bind(this);
+
                 option.templateResult = function(data) {
                     data.QorChooserOptions = dataOptions;
-                    let tmpl = $this.parents('.qor-field').find('[name="select2-result-template"]');
-                    if (tmpl.length > 0 && tmpl.data("raw")) {
-                        var f = tmpl.data("func");
-                        if (!f) {
-                            f = new Function("data", tmpl.html());
-                            tmpl.data('func', f);
-                        }
-                        return f(data);
-                    }
-                    return $.fn.select2.ajaxFormatResult(data, tmpl);
-                };
+                    let text = renderTemplate(this.$templateResult, data).replace(/^\s+|\s+$/g, '');
+                    return text;
+                }.bind(this);
+
+                this.$templateSelection = $field.find('[name="select2-selection-template"]');
 
                 option.templateSelection = function(data) {
                     if (data.loading) return data.text;
                     data.QorChooserOptions = dataOptions;
-                    let tmpl = $this.parents('.qor-field').find('[name="select2-selection-template"]');
                     if (data.element) {
-                        if (primaryKey) {
+                        if (primaryKey && data.hasOwnProperty(primaryKey)) {
                             $(data.element).attr('data-value', data[primaryKey]);
                         } else {
                             $(data.element).attr('data-value', data.id);
                         }
                     }
-                    if (tmpl.length > 0 && tmpl.data("raw")) {
-                        var f = tmpl.data("func");
-                        if (!f) {
-                            f = new Function("data", tmpl.html());
-                            tmpl.data('func', f);
-                        }
-                        return f(data)
+                    let text = renderTemplate(this.$templateSelection, data).replace(/^\s+|\s+$/g, '');
+                    if (text === '') {
+                        return data.text
                     }
-                    return $.fn.select2.ajaxFormatResult(data, tmpl);
-                };
+                    return text
+                }.bind(this);
             }
 
             $this.on('select2:select', function(evt) {
@@ -127,7 +141,11 @@
         },
 
         resetSelect2Width: function() {
-            var $container, select2 = this.$element.data().select2;
+            if (!this.$element) {
+                this.destroy()
+            }
+
+            let $container, select2 = this.$element.data().select2;
             if (select2 && select2.$container) {
                 $container = select2.$container;
                 $container.width($container.parent().width());
@@ -136,7 +154,15 @@
         },
 
         destroy: function() {
-            this.$element.select2('destroy').removeData(NAMESPACE);
+            if (this.$element) {
+                const $el = this.$element;
+                this.$element = null;
+                $el.removeData(NAMESPACE);
+                try {
+                    $el.select2('destroy');
+                } catch (e) {
+                }
+            }
         }
     };
 

@@ -6,16 +6,20 @@ import (
 )
 
 type Finder struct {
-	Result            interface{}
-	Unlimited         bool
-	Limit             func(s *Searcher) (db *aorm.DB)
-	Count             func(s *Searcher) (total int, err error)
-	FindMany, FindOne func(s *Searcher) (interface{}, error)
+	Result                interface{}
+	Unlimited             bool
+	Limit                 func(s *Searcher) (db *aorm.DB)
+	Count                 func(s *Searcher) (total int, err error)
+	FindMany, FindOne     func(s *Searcher) (interface{}, error)
+	RequestParserDisabled bool
 }
 
-// FindMany find many records based on current conditions
-func (this *Searcher) FindMany(finder ...*Finder) (_ interface{}, err error) {
+// ParseFindMany parse context and find many records based on current conditions
+func (this *Searcher) ParseFindMany(finder ...*Finder) (_ interface{}, err error) {
 	if err = this.ParseContext(finder...); err != nil {
+		if aorm.IsParseIdError(err) {
+			return nil, nil
+		}
 		return
 	}
 
@@ -24,6 +28,11 @@ func (this *Searcher) FindMany(finder ...*Finder) (_ interface{}, err error) {
 		this.Errors = core.Errors{}
 		return
 	}
+	return this.Finder.FindMany(this)
+}
+
+// FindMany find many records based on current conditions
+func (this *Searcher) FindMany() (_ interface{}, err error) {
 	return this.Finder.FindMany(this)
 }
 

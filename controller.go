@@ -35,7 +35,7 @@ func (this *Controller) Search(context *Context) {
 		err          error
 	)
 
-	if searchResult.Results, err = context.FindMany(); err != nil {
+	if searchResult.Results, err = context.ParseFindMany(); err != nil {
 		context.AddError(err)
 	}
 

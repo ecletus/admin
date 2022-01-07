@@ -1,5 +1,5 @@
 {{if eq (admin_context).RequestLayout "lite" -}}
-    {{$menu := (trim (render "shared/resource_menu_actions_children_rigth"))}}
+    {{$menu := (trim (render "shared/resource_item_menu_actions_children_rigth"))}}
     {{- if $menu}}
         <div style="float: right;margin-top: 16px;text-align: right;">
             {{$menu}}

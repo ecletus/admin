@@ -1,81 +1,99 @@
 <!DOCTYPE html>
 <html lang="{{locale}}">
   <head>
-    {{$title := page_title}}
-    <title>{{if $title}}{{$title}} - {{end}}{{if .Admin.SiteTitle}}{{t .Admin.SiteTitle}}{{else}}{{t "Ecletus Admin"}}{{end}}</title>
-    <meta charset="utf-8">
-    <meta http-equiv="x-ua-compatible" content="ie=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{$lite := eq (admin_context).RequestLayout "lite"}}
+    {{$printMode := and (not $lite) (.Type.HasS "print")}}
+    {{if not $lite -}}
+      {{$title := page_title}}
+      <title>{{if $title}}{{$title}} - {{end}}{{if .Site.Title}}{{t .Site.Title}}{{else}}{{t "Ecletus Admin"}}{{end}}</title>
+      <meta charset="utf-8">
+      <meta http-equiv="x-ua-compatible" content="ie=edge">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- systen url prefix -->
-    <meta name="uri" content="{{url}}">
-    <meta name="static_url" content="{{admin_static_url}}">
-    <meta name="global_static_url" content="{{static_url}}">
+      <!-- systen url prefix -->
+      <meta name="uri" content="{{url}}">
+      <meta name="static_url" content="{{admin_static_url}}">
+      <meta name="global_static_url" content="{{static_url}}">
+      <!-- Stylesheets -->
+      {{- stylesheet_tag "qor_admin_default" -}}
+      {{- load_admin_stylesheets -}}
+      {{- load_theme_stylesheets -}}
+    {{end}}
 
-    <script type="application/javascript">
-      window.BASE_URL = "{{url}}";
-      window.STATIC_URL = "{{admin_static_url}}";
-      window.GLOBAL_STATIC_URL = "{{static_url}}";
-      window.JS_STATIC_URL = STATIC_URL + "/javascripts";
-      window.JS_GLOBAL_STATIC_URL = GLOBAL_STATIC_URL + "/javascripts";
-    </script>
-    <!-- Stylesheets -->
-    {{- stylesheet_tag "qor_admin_default" -}}
-    {{- load_admin_stylesheets -}}
-    {{- load_theme_stylesheets -}}
+      <script type="application/javascript">
+          window.PRINT_MODE = {{$printMode}};
+          window.BASE_URL = "{{url}}";
+          window.STATIC_URL = "{{admin_static_url}}";
+          window.GLOBAL_STATIC_URL = "{{static_url}}";
+          window.JS_STATIC_URL = STATIC_URL + "/javascripts";
+          window.JS_GLOBAL_STATIC_URL = GLOBAL_STATIC_URL + "/javascripts";
+      </script>
+
     {{- load_resource_stylesheets -}}
-    {{- load_print_mode_stylesheeets -}}
+
+    {{if $printMode -}}
+      {{- stylesheet_tag "print@all" -}}
+    {{end}}
   </head>
 
-  <body class="{{if qor_theme_class}}{{qor_theme_class}}{{end}} identified-user">
+  <body class="{{if qor_theme_class}}{{qor_theme_class}}{{end}} identified-user{{if $printMode}} print{{end}}">
     <!--[if lt IE 10]>
       <p class="browsehappy">{{t "github_com:ecletus:common.upgrade_browser"}}</p>
     <![endif]-->
     <a class="visuallyhidden" href="#content" tabindex="1">{{t "github_com:ecletus:admin.layout.skip_to_content"}}</a>
 
-    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-drawer mdl-layout--fixed-header qor-layout">
-      <header class="mdl-layout__header">
-        <div class="mdl-layout__header-row">
-          {{- $actions := load_actions "header" -}}
-          {{- if $actions -}}
-            {{- $actions -}}
-          {{- end -}}
+    <div class="mdl-layout mdl-js-layout {{if not $lite }} mdl-layout--fixed-header{{end}} qor-layout">
+        <header class="mdl-layout__header">
+          <div class="mdl-layout__header-row flex">
+            {{- $actions := load_actions "header" -}}
+            {{- if $actions -}}
+              {{- $actions -}}
+            {{- end -}}
+          </div>
+            {{if not (eq .RequestLayout "lite") -}}
+            <div class="qor-breadcrumbs mdl-layout__header qor-page-subnav__header">
+                {{- include "shared/breadcrumbs" . -}}
+          </div>
+            {{end}}
+        </header>
+      {{- if not $lite -}}
+        <div class="mdl-layout__drawer">
+          {{- include "shared/sidebar" -}}
         </div>
-      </header>
-
-      <div class="mdl-layout__drawer">
-        {{- include "shared/sidebar" -}}
-      </div>
+      {{- end -}}
 
       <main class="mdl-layout__content qor-page" id="content">
-        {{- wrap -}}
-          {{- include "shared/breadcrumbs" -}}
-
-          {{- if not (must_config_get . "context:actions_disabled") -}}
-              {{- if eq (admin_context).Action "index" -}}
-                  {{- include "actions/index/actions" -}}
-              {{- end -}}
+        {{- if and (not $lite) (not .NotFound) -}}
+          {{- wrap -}}
+            {{- if not (must_config_get . "context:actions_disabled") -}}
+                {{- if eq (admin_context).Action "index" -}}
+                    {{- include "actions/index/actions" -}}
+                {{- end -}}
+            {{- end -}}
+          {{- begin -}}
+          <div class="qor-page__header">
+          {{- after -}}
+          </div>
           {{- end -}}
-
-        {{- begin -}}
-        <div class="qor-page__header">
-        {{- after -}}
-        </div>
         {{- end -}}
 
         {{- yield -}}
 
+        {{- if not $lite -}}
         <div class="qor-page__footer">
           {{- render "shared/page_footer" -}}
         </div>
+        {{- end -}}
       </main>
     </div>
 
+    {{- if not $lite -}}
     {{- javascript_tag "vendors" -}}
     {{- javascript_tag "qor_admin_default"}}
     {{- load_admin_javascripts -}}
     {{- load_theme_javascripts -}}
     {{- javascript_tag ("lang/" + locale) -}}
+    {{- end -}}
     {{- range (js_libs) -}}
       <script type="application/javascript" src="{{.}}"></script>
     {{- end -}}

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 )
 
 func equal(a, b interface{}) bool {
@@ -61,4 +62,21 @@ func InStrings(value string, lis ...string) bool {
 		}
 	}
 	return false
+}
+
+func GetPrimaryValues(uv ...url.Values) (ret []string) {
+	var values = map[string]interface{}{}
+	for _, uv := range uv {
+		for _, value := range uv[":pk"] {
+			for _, value := range strings.Split(value, ":") {
+				if value != "" {
+					if _, ok := values[value]; !ok {
+						values[value] = nil
+						ret = append(ret, value)
+					}
+				}
+			}
+		}
+	}
+	return
 }

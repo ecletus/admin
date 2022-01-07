@@ -1,11 +1,11 @@
 package admin
 
 import (
-	"github.com/ecletus/core"
 	"github.com/moisespsena-go/aorm"
 )
 
-type DBFilterFunc func(context *core.Context, db *aorm.DB) (DB *aorm.DB, err error)
+type DBFilterFunc func(context *Context, db *aorm.DB) (DB *aorm.DB, err error)
+
 type DBFilter struct {
 	Name    string
 	Handler DBFilterFunc

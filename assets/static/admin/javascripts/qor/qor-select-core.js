@@ -54,10 +54,15 @@
                     cfg.headers['X-Flash-Messages-Disabled'] = true;
                 }.bind(this),
                 onSubmitSuccess: function (data, statusText, jqXHR) {
-                    let onSelect = this.options.onSelect;
-                    data = JSON.parse(data);
+                    let onSelect = this.options.onSelect, jsonData;
+                    try {
+                        jsonData = JSON.parse(data);
+                    } catch (e) {
+                        return
+                    }
+
                     if (onSelect && $.isFunction(onSelect)) {
-                        onSelect(data, undefined);
+                        onSelect(jsonData, undefined);
                         $(document).trigger(EVENT_ONSELECT);
                     }
                 }.bind(this),

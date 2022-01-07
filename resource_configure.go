@@ -5,6 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"time"
+
+	uurl "github.com/ecletus/core/utils/url"
+	"github.com/ecletus/roles"
+	tag_scanner "github.com/unapu-go/tag-scanner"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
@@ -12,125 +17,299 @@ import (
 	"github.com/moisespsena-go/aorm"
 )
 
-func (this *Resource) configure() {
-	if f, ok := indirectType(this.ModelStruct.Type).FieldByName("_"); ok && len(f.Index) == 1 {
-		if tags := ParseResourceTags(f.Tag); len(this.Tags.Tags) == 0 {
-			this.Tags = &tags
-		} else {
-			this.Tags.Tags.Update(tags.Tags)
-		}
-		tags := this.Tags
+func (this *Resource) ParseTagsFromUnderlineField(typ reflect.Type) *ResourceTags {
+	var (
+		getUnderlineField func(typ reflect.Type) (reflect.StructField, bool)
+	)
 
-		var exclude = func(s []string) []string {
-			for i, v := range s {
-				s[i] = "-" + v
-			}
-			return s
-		}
-		if sections := tags.Attrs(); len(sections) > 0 {
-			this.NESAttrs(sections)
-		}
-		if sections := tags.AttrsInclude(); len(sections) > 0 {
-			this.NESAttrs(this.NewAttrs(), sections)
-		}
-		if sections := tags.AttrsIncludeBeginning(); len(sections) > 0 {
-			this.NESAttrs(sections, this.NewAttrs())
-		}
-		if names := tags.AttrsExclude(); len(names) > 0 {
-			this.NESAttrs(this.NewAttrs(), exclude(names))
-		}
-		if sections := tags.ShowAttrs(); len(sections) > 0 {
-			this.ShowAttrs(sections)
-		}
-		if names := tags.ShowAttrsExclude(); len(names) > 0 {
-			this.ShowAttrs(this.ShowAttrs(), exclude(names))
-		}
-		if sections := tags.ShowAttrsInclude(); len(sections) > 0 {
-			this.ShowAttrs(this.ShowAttrs(), sections)
-		}
-		if sections := tags.ShowAttrsIncludeBeginning(); len(sections) > 0 {
-			this.ShowAttrs(sections, this.ShowAttrs())
-		}
-		if sections := tags.NewAttrs(); len(sections) > 0 {
-			this.NewAttrs(sections)
-		}
-		if names := tags.NewAttrsExclude(); len(names) > 0 {
-			this.NewAttrs(this.NewAttrs(), exclude(names))
-		}
-		if sections := tags.NewAttrsInclude(); len(sections) > 0 {
-			this.NewAttrs(this.NewAttrs(), sections)
-		}
-		if sections := tags.NewAttrsIncludeBeginning(); len(sections) > 0 {
-			this.NewAttrs(sections, this.NewAttrs())
-		}
-		if sections := tags.EditAttrs(); len(sections) > 0 {
-			this.EditAttrs(sections)
-		}
-		if names := tags.EditAttrsExclude(); len(names) > 0 {
-			this.EditAttrs(this.EditAttrs(), exclude(names))
-		}
-		if sections := tags.EditAttrsInclude(); len(sections) > 0 {
-			this.EditAttrs(this.EditAttrs(), sections)
-		}
-		if sections := tags.EditAttrsIncludeBeginning(); len(sections) > 0 {
-			this.EditAttrs(sections, this.EditAttrs())
-		}
-		if sections := tags.IndexAttrs(); len(sections) > 0 {
-			this.IndexAttrs(sections)
-		}
-		if names := tags.IndexAttrsExclude(); len(names) > 0 {
-			this.IndexAttrs(this.IndexAttrs(), exclude(names))
-		}
-		if tags.ShowPage() {
-			if len(this.Scheme.showSections) == 0 {
-				this.ShowAttrs(this.EditAttrs())
+	getUnderlineField = func(typ reflect.Type) (reflect.StructField, bool) {
+		typ = indirectType(typ)
+
+		underlineField, ok := typ.FieldByName("_")
+		if ok && (typ.NumField() == 1 || len(underlineField.Index) == 1) {
+			var tag Tags
+			if tag.ParseDefault(aorm.StructTag(underlineField.Tag), "admin") {
+				return underlineField, true
 			}
 		}
-		if showMetaType := tags.Show(); showMetaType != "" {
-			this.ShowAttrs(META_STRINGIFY)
-			this.Meta(&Meta{Name: META_STRINGIFY, Type: showMetaType})
-		} else if stringify, err := tags.Stringify(); stringify != nil {
-			// template
-			if stringify.Template != nil {
-				// field
-				this.Meta(&Meta{Name: META_STRINGIFY, Valuer: func(recorde interface{}, context *core.Context) interface{} {
-					var w bytes.Buffer
-					if err := stringify.Template.Execute(&w, recorde); err != nil {
-						return "{ERROR: " + err.Error() + "}"
-					}
-					return w.String()
-				}})
-			} else if stringify.FieldName != "" {
-				// field
-				this.Meta(&Meta{Name: META_STRINGIFY, Valuer: func(recorde interface{}, context *core.Context) interface{} {
-					return fmt.Sprint(reflect.Indirect(reflect.ValueOf(recorde)).FieldByName(stringify.FieldName).Interface())
-				}})
-			} else {
-				// field
-				this.Meta(&Meta{Name: META_STRINGIFY, Valuer: func(recorde interface{}, context *core.Context) interface{} {
-					m := reflect.Indirect(reflect.ValueOf(recorde)).MethodByName(stringify.MethodName)
-					result := m.Call([]reflect.Value{})[0].Interface()
-					return fmt.Sprint(result)
-				}})
+
+		for i, l := 0, typ.NumField(); i < l; i++ {
+			f := typ.Field(i)
+			var tag Tags
+			if tag.ParseDefault(aorm.StructTag(f.Tag), "admin") {
+				if tag.Flag("INHERIT") {
+					return getUnderlineField(f.Type)
+				}
 			}
-		} else if err != nil {
-			log.Fatal(err)
 		}
-		if attrs := tags.Search(); attrs != nil {
-			this.SearchAttrs(attrs...)
+		return reflect.StructField{}, false
+	}
+
+	if f, ok := getUnderlineField(typ); ok {
+		tags := ParseResourceTags(f.Tag)
+		return &tags
+	}
+	return nil
+}
+
+func (this *Resource) ParseSectionLayoutTags(name string, tags Tags, dst, from *SectionsLayout) {
+	for key := range tags {
+		tags := tags.GetTags(key)
+		if tags == nil {
+			continue
 		}
-		if attrs := tags.Order(); attrs != nil {
-			this.SetOrder(attrs)
+
+		switch key {
+		case "SCREEN":
+			if from != nil && dst.Screen == nil {
+				dst.Screen = NewCRUDSchemeSectionsLayout(name+"/screen", from.Screen)
+			}
+			ResourceTags{Tags: tags}.SetAttrsTo(&this.SectionsAttribute, dst.Screen)
+		case "PRINT":
+			if from != nil && dst.Print == nil {
+				dst.Print = NewCRUDSchemeSectionsLayout(name+"/print", from.Print)
+			}
+			ResourceTags{Tags: tags}.SetAttrsTo(&this.SectionsAttribute, dst.Print)
 		}
 	}
 
-	this.AfterRegister(func() {
+	if from != nil {
+		if dst.Screen == nil {
+			dst.Screen = NewCRUDSchemeSectionsLayout(name+"/screen", from.Screen)
+		}
+		if dst.Print == nil {
+			dst.Print = NewCRUDSchemeSectionsLayout(name+"/print", dst.Screen)
+		}
+	}
+}
+
+func (this *Resource) ParseSectionsLayouts(raw string) {
+	var parseTags = this.ParseSectionLayoutTags
+	tags := this.Tags.TagsOf(raw, tag_scanner.FlagPreserveKeys)
+	if tags != nil {
+		hasDefault, hasInline := false, false
+
+		if this.Config.DefaultSectionsLayout != "" {
+			this.Sections = NewDefaultSchemeSectionsLayout(
+				NewSchemeSectionsLayouts(this.Config.DefaultSectionsLayout+"~default",
+					NewSchemeSectionsLayoutsOptions{DefaultProvider: this.AllSectionsProvider}))
+
+			if _, ok := tags[this.Config.DefaultSectionsLayout]; ok {
+				parseTags("", tags.GetTags(this.Config.DefaultSectionsLayout), this.Sections.Default, nil)
+				delete(tags, this.Config.DefaultSectionsLayout)
+				hasDefault = true
+			}
+			if _, ok := tags[this.Config.DefaultSectionsLayout+".inline"]; ok {
+				parseTags("", tags.GetTags(this.Config.DefaultSectionsLayout+".inline"), this.Sections.Inline, nil)
+				delete(tags, this.Config.DefaultSectionsLayout+".inline")
+				hasInline = true
+			}
+		}
+		if _, ok := tags["default"]; ok {
+			if !hasDefault {
+				parseTags("", tags.GetTags("default"), this.Sections.Default, nil)
+			}
+			delete(tags, "default")
+		}
+		if _, ok := tags["inline"]; ok {
+			if !hasInline {
+				parseTags("", tags.GetTags("inline"), this.Sections.Inline, nil)
+			}
+			delete(tags, "inline")
+		}
+
+		for key := range tags {
+			layoutTags := tags.GetTags(key)
+			if layoutTags == nil {
+				continue
+			}
+			layout := &SectionsLayout{Name: key}
+			var from = this.Sections.Default
+			if inherits := layoutTags.Get("_"); inherits != "" {
+				from = this.Sections.Layouts.Layouts[inherits]
+				delete(layoutTags, "_")
+			}
+			parseTags(key, layoutTags, layout, from)
+			this.Sections.Layouts.Layouts[key] = layout
+		}
+	}
+}
+
+func (this *Resource) configureParseSections(tags *ResourceTags) {
+	tags.SetAttrsTo(&this.SectionsAttribute, this.Sections.Default.Screen)
+
+	if this.Config.DefaultSectionsLayout == "" {
+		if tags := tags.GetTags("PRINT"); tags != nil {
+			ResourceTags{Tags: tags}.SetAttrsTo(&this.SectionsAttribute, this.Sections.Default.Print)
+		}
+		if tags := tags.GetTags("INLINE"); tags != nil {
+			ResourceTags{Tags: tags}.SetAttrsTo(&this.SectionsAttribute, this.Sections.Inline.Screen)
+		}
+		if tags := tags.GetTags("INLINE_PRINT"); tags != nil {
+			ResourceTags{Tags: tags}.SetAttrsTo(&this.SectionsAttribute, this.Sections.Inline.Print)
+		}
+	}
+
+	this.ParseSectionsLayouts(tags.Get("SECTION_LAYOUTS"))
+}
+
+func (this *Resource) configure() {
+	var (
+		getUnderlineField func(typ reflect.Type) (reflect.StructField, bool)
+		tags              *ResourceTags
+	)
+
+	getUnderlineField = func(typ reflect.Type) (reflect.StructField, bool) {
+		typ = indirectType(typ)
+
+		underlineField, ok := typ.FieldByName("_")
+		if ok && (typ.NumField() == 1 || len(underlineField.Index) == 1) {
+			var tag Tags
+			if tag.ParseDefault(aorm.StructTag(underlineField.Tag), "admin") {
+				return underlineField, true
+			}
+		}
+
+		for i, l := 0, typ.NumField(); i < l; i++ {
+			f := typ.Field(i)
+			var tag Tags
+			if tag.ParseDefault(aorm.StructTag(f.Tag), "admin") {
+				if tag.Flag("INHERIT") {
+					return getUnderlineField(f.Type)
+				}
+			}
+		}
+		return reflect.StructField{}, false
+	}
+
+	for _, name := range []string{"CreatedAt", "CreatedBy", "UpdatedAt", "UpdatedBy", "DeletedAt", "DeletedBy"} {
+		if _, ok := this.ModelStruct.FieldsByName[name]; ok {
+			this.Meta(&Meta{Name: name, ReadOnly: true})
+		}
+	}
+
+	if tagsGetter, ok := this.Value.(ResourceTagsGetter); ok {
+		tags = tagsGetter.AdminGetResourceTags(this)
+	} else {
+		tags = this.ParseTagsFromUnderlineField(this.ModelStruct.Type)
+	}
+
+	if len(this.Tags.Tags) == 0 {
+		if tags != nil {
+			this.Tags = tags
+		}
+	} else {
+		this.Tags.Tags.Update(tags.Tags)
+	}
+
+	tags = this.Tags
+
+	if uitags := this.Tags.GetTags("UI"); uitags != nil {
+		this.UITags = uitags
+	}
+
+	if order := tags.PkOrder(); order != 0 {
+		this.SetDefaultPrimaryKeyOrder(order)
+	}
+
+	if names := tags.ReadOnlyAttrs(); len(names) > 0 {
+		this.PostInitialize(func() {
+			for _, name := range names {
+				this.Meta(&Meta{Name: name, ReadOnly: true})
+			}
+		})
+	}
+	if names := tags.SortAttrs(); len(names) > 0 {
+		this.SortableAttrs(names...)
+	} else if len(this.PrimaryFields) > 0 {
+		var names []string
+		for _, f := range this.PrimaryFields {
+			names = append(names, f.Name)
+		}
+		this.SortableAttrs(names...)
+	}
+
+	this.configureParseSections(tags)
+
+	if tags.ShowPage() {
+		if !this.Sections.Default.Screen.Show.IsSet() {
+			this.ShowAttrs(this.EditAttrs())
+		}
+	}
+	if showMetaType := tags.Show(); showMetaType != "" {
+		this.ShowAttrs(META_STRINGIFY)
+		this.Meta(&Meta{Name: META_STRINGIFY, Type: showMetaType})
+	} else if stringify, err := tags.Stringify(); stringify != nil {
+		// template
+		if stringify.Template != nil {
+			// field
+			this.Meta(&Meta{Name: META_STRINGIFY, Valuer: func(recorde interface{}, context *core.Context) interface{} {
+				var w bytes.Buffer
+				if err := stringify.Template.Execute(&w, recorde); err != nil {
+					return "{ERROR: " + err.Error() + "}"
+				}
+				return w.String()
+			}})
+		} else if stringify.FieldName != "" {
+			// field
+			this.Meta(&Meta{Name: META_STRINGIFY, Valuer: func(recorde interface{}, context *core.Context) interface{} {
+				return fmt.Sprint(reflect.Indirect(reflect.ValueOf(recorde)).FieldByName(stringify.FieldName).Interface())
+			}})
+		} else {
+			// field
+			this.Meta(&Meta{Name: META_STRINGIFY, Valuer: func(recorde interface{}, context *core.Context) interface{} {
+				m := reflect.Indirect(reflect.ValueOf(recorde)).MethodByName(stringify.MethodName)
+				result := m.Call([]reflect.Value{})[0].Interface()
+				return fmt.Sprint(result)
+			}})
+		}
+	} else if err != nil {
+		log.Fatal(err)
+	}
+	if attrs := tags.Search(); attrs != nil {
+		this.SearchAttrs(attrs...)
+	}
+	if attrs := tags.Order(); attrs != nil {
+		this.SetOrder(attrs)
+	}
+	for _, parentPreload := range tags.ParentPreload() {
+		switch parentPreload {
+		case "*":
+			this.Config.ParentPreload |=
+				ParentPreloadIndex |
+					ParentPreloadNew |
+					ParentPreloadCreate |
+					ParentPreloadShow |
+					ParentPreloadEdit |
+					ParentPreloadUpdate |
+					ParentPreloadDelete |
+					ParentPreloadAction
+		case "INDEX":
+			this.Config.ParentPreload |= ParentPreloadIndex
+		case "NEW":
+			this.Config.ParentPreload |= ParentPreloadNew
+		case "CREATE":
+			this.Config.ParentPreload |= ParentPreloadCreate
+		case "SHOW":
+			this.Config.ParentPreload |= ParentPreloadShow
+		case "EDIT":
+			this.Config.ParentPreload |= ParentPreloadEdit
+		case "UPDATE":
+			this.Config.ParentPreload |= ParentPreloadUpdate
+		case "DELETE":
+			this.Config.ParentPreload |= ParentPreloadDelete
+		case "ACTION":
+			this.Config.ParentPreload |= ParentPreloadAction
+		}
+	}
+
+	this.PostInitialize(func() {
 		if this.GetDefinedMeta(META_STRINGIFY) == nil {
 			this.Meta(&Meta{
 				Name: META_STRINGIFY,
 				Type: "string",
-				FormattedValuer: func(recorde interface{}, context *core.Context) interface{} {
-					return fmt.Sprint(recorde)
+				FormattedValuer: func(recorde interface{}, context *core.Context) *FormattedValue {
+					return &FormattedValue{Record: recorde, Raw: recorde}
 				},
 			})
 		}
@@ -158,7 +337,7 @@ func (this *Resource) configure() {
 
 	// set primary fields as default invisible
 	for _, f := range this.ModelStruct.PrimaryFields {
-		this.Meta(&Meta{Name: f.Name, DefaultInvisible: true})
+		this.Meta(&Meta{Name: f.Name, DefaultInvisible: true, ReadOnly: f.TagSettings.Flag("SERIAL")})
 	}
 
 	if this.Config.Alone {
@@ -172,17 +351,26 @@ func (this *Resource) configure() {
 			LabelKey: I18NGROUP + ".actions.delete",
 			Type:     ActionSuperDanger,
 			URL: func(record interface{}, context *Context, args ...interface{}) string {
-				return this.GetContextURI(context.Context, this.GetKey(record))
+				return this.GetContextURI(context, this.GetKey(record))
 			},
 			Modes: []string{"menu_item"},
 			Visible: func(recorde interface{}, context *Context) bool {
-				if context.RouteHandler != nil && context.RouteHandler.Name == A_DELETED_INDEX {
+				if context.RouteHandler != nil && context.RouteHandler.Name == A_DELETED_INDEX || this.IsSoftDeleted(recorde) {
 					return false
 				}
-				return !this.IsSoftDeleted(recorde)
+				if this.HasRecordPermission(roles.Delete, context.Context, recorde).Deny() {
+					return false
+				}
+				if f, ok := this.ModelStruct.FieldsByName[aorm.SoftDeletionDisableFieldDisabledAt]; ok {
+					v := this.ModelStruct.InstanceOf(recorde, f.Name).FirstField().Interface()
+					if !v.(time.Time).IsZero() {
+						return false
+					}
+				}
+				return true
 			},
 			RefreshURL: func(record interface{}, context *Context) string {
-				return this.GetContextIndexURI(context.Context)
+				return this.GetContextIndexURI(context)
 			},
 		})
 
@@ -193,7 +381,7 @@ func (this *Resource) configure() {
 				Method:   http.MethodPost,
 				Type:     ActionSuperDanger,
 				URL: func(record interface{}, context *Context, args ...interface{}) string {
-					return this.GetContextIndexURI(context.Context) + P_BULK_DELETE
+					return this.GetContextIndexURI(context) + P_BULK_DELETE
 				},
 				Modes: []string{"index"},
 				Visible: func(recorde interface{}, context *Context) bool {
@@ -212,11 +400,28 @@ func (this *Resource) configure() {
 		}
 
 		if this.softDelete && this.ControllerBuilder.IsRestorer() {
-			this.AfterRegister(this.configureRestorer)
+			this.PostInitialize(this.configureRestorer)
 		}
 	}
 
-	this.AfterRegister(this.configureAudited)
+	this.PostInitialize(this.configureAudited)
+
+	this.AddMenu(&Menu{
+		Name:     "Print",
+		Label:    "Print",
+		MdlIcon:  "print",
+		LabelKey: I18NGROUP + ".menus." + PrintMenu,
+		MakeLink: func(context *Context, args ...interface{}) string {
+			uri, _ := context.PatchCurrentURL("print", uurl.Flag(true))
+			return uri
+		},
+		MakeItemLink: func(context *Context, item interface{}, args ...interface{}) string {
+			return context.Path(this.GetRecordURI(context, item)) + "?print"
+		},
+		EnabledFunc: func(menu *Menu, context *Context) bool {
+			return !context.Type.Has(PRINT)
+		},
+	})
 }
 
 func (this *Resource) configureRestorer() {
@@ -226,9 +431,9 @@ func (this *Resource) configureRestorer() {
 		Icon:     "Delete",
 		LabelKey: I18NGROUP + ".schemes." + A_DELETED_INDEX,
 		MakeLink: func(context *Context, args ...interface{}) string {
-			return this.GetContextIndexURI(context.Context) + "/" + A_DELETED_INDEX
+			return this.GetContextIndexURI(context) + "/" + A_DELETED_INDEX
 		},
-		Enabled: func(menu *Menu, context *Context) bool {
+		EnabledFunc: func(menu *Menu, context *Context) bool {
 			return context.Resource == this && context.ResourceID == nil
 		},
 	})
@@ -244,16 +449,18 @@ func (this *Resource) configureRestorer() {
 			}
 			return false
 		},
-		Handler: func(argument *ActionArgument) error {
-			var record = reflect.New(this.ModelStruct.Type).Interface()
-			argument.Context.ResourceID.SetTo(record)
-			return argument.Context.DB().ModelStruct(this.ModelStruct, record).Opt(aorm.OptStoreBlankField()).Unscoped().UpdateColumn(map[string]interface{}{
-				"DeletedAt": nil,
-				"DeletedByID": nil,
-			}).Error
+		FindRecord: func(s *Searcher) (rec interface{}, err error) {
+			s.DB(s.DB().Unscoped())
+			return s.FindOne()
+		},
+		Handler: func(arg *ActionArgument) error {
+			ctx := arg.Context
+			return ctx.WithTransaction(func() (err error) {
+				return ctx.Resource.RestoreRecord(arg.Context, arg.Record)
+			})
 		},
 		RefreshURL: func(record interface{}, context *Context) string {
-			return this.GetContextIndexURI(context.Context) + "/deleted_index"
+			return this.GetContextIndexURI(context) + "/deleted_index"
 		},
 	})
 
@@ -261,7 +468,7 @@ func (this *Resource) configureRestorer() {
 		Setup: func(scheme *Scheme) {
 			scheme.DefaultFilter(&DBFilter{
 				Name: "deleted",
-				Handler: func(context *core.Context, db *aorm.DB) (*aorm.DB, error) {
+				Handler: func(_ *Context, db *aorm.DB) (*aorm.DB, error) {
 					return db.Where(aorm.IQ("{}.deleted_at IS NOT NULL")).Unscoped(), nil
 				},
 			})

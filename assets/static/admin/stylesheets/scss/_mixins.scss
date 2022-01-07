@@ -47,7 +47,41 @@
 }
 
 @mixin shadow-2dp-bottom() {
+  /*
+  &::after {
+    content:" ";
+    display: block;
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    height: 10px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 100%);
+  }
+
   box-shadow: 0 2px 2px 0 rgba(0, 0, 0, $shadow-key-penumbra-opacity),
               0 3px 1px -2px rgba(0, 0, 0, $shadow-key-umbra-opacity),
               0 3px 5px 0 rgba(0, 0, 0, $shadow-ambient-shadow-opacity);
+   */
+
+  border-bottom: 1px solid #bbbbbb;
+}
+
+@mixin shadow-2dp-bottom-force() {
+  &::after {
+    content:" ";
+    display: block;
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    height: 10px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 100%);
+  }
+
+  box-shadow: 0 2px 2px 0 rgba(0, 0, 0, $shadow-key-penumbra-opacity),
+  0 3px 1px -2px rgba(0, 0, 0, $shadow-key-umbra-opacity),
+  0 3px 5px 0 rgba(0, 0, 0, $shadow-ambient-shadow-opacity);
+
+  height: 24px;
+  line-height: 24px;
+  border-radius: 12px;
 }

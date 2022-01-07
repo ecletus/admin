@@ -16,20 +16,24 @@ func (this *Resource) CreateMenu(plural bool) *Menu {
 		Permissioner: this,
 		Priority:     this.Config.Priority,
 		Ancestors:    this.Config.Menu,
-		URI:          this.GetIndexURI(),
-		Enabled:      this.Config.MenuEnabled,
+		EnabledFunc:  this.Config.MenuEnabled,
 		Resource:     this,
 		BaseResource: this,
 		subMenus:     make([]*Menu, 0),
+		Dir:          false,
 	}
 
-	if this.ParentResource != nil {
+	if this.ParentResource == nil {
+		menu.MakeLink = func(context *Context, args ...interface{}) string {
+			return this.GetContextIndexURI(context)
+		}
+	} else {
 		menu.MakeLink = func(context *Context, args ...interface{}) string {
 			var parentKeys = aorm.IDSlice(args...)
 			if len(parentKeys) == 0 {
-				return this.GetContextIndexURI(context.Context, context.ParentResourceID...)
+				return this.GetContextIndexURI(context, context.ParentResourceID...)
 			}
-			return this.GetContextIndexURI(context.Context, parentKeys...)
+			return this.GetContextIndexURI(context, parentKeys...)
 		}
 	}
 

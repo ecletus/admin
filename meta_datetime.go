@@ -4,68 +4,39 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
-	"github.com/ecletus/core/utils"
 )
 
 type DateTimeConfig struct {
-	DateConfig
 	TimeConfig
 }
 
-func (this *DateTimeConfig) FormattedValue(meta *Meta, value interface{}, context *core.Context) interface{} {
-	var t time.Time
-	switch date := meta.GetValuer()(value, context).(type) {
-	case *time.Time:
-		if date != nil {
-			t = *date
-		}
-	case time.Time:
-		t = date
-	default:
-		return date
+func (this *DateTimeConfig) Setup() {
+	if this.I18nKey == "" {
+		this.I18nKey = I18NGROUP + ".metas.datetime.format"
 	}
-	if !t.IsZero() {
-		var loc *time.Location
-		if meta.Resource != nil {
-			loc = OptGetLocation(meta.Resource, ContextFromCoreContext(context))
-		} else {
-			loc = OptGetLocation(meta.BaseResource, ContextFromCoreContext(context))
-		}
-		if loc == nil {
-			loc = context.TimeLocation
-		}
-		t = t.In(loc)
-		return utils.FormatTime(t, this.Layout(context), context)
+	if this.DefaultFormat == "" {
+		this.DefaultFormat = "yyyy-MM-dd hh:mm"
 	}
-	return ""
+	this.Type = TimeConfigDateTime
 }
 
 // ConfigureQorMeta configure select one meta
 func (this *DateTimeConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	meta := metaor.(*Meta)
-	meta.Type = "datetime"
-	if meta.FormattedValuer == nil {
-		meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
-			return this.FormattedValue(meta, value, context)
-		})
+	if meta.Type == "" {
+		meta.Type = "datetime"
 	}
-	if meta.Setter == nil || resource.IsDefaultMetaSetter(meta.Meta) {
-		TimeConfigSetter(meta)
+	this.Setup()
+	this.TimeConfig.ConfigureQorMeta(metaor)
+}
+
+func (this *DateTimeConfig) ConfigureQORAdminFilter(filter *Filter) {
+	if filter.Type == "" {
+		filter.Type = "datetime"
 	}
-}
-
-func (this *DateTimeConfig) Format(ctx *core.Context) string {
-	return this.DateConfig.FormatC(ctx) + " " + this.TimeConfig.FormatC(ctx)
-}
-
-func (this *DateTimeConfig) Layout(ctx *core.Context) string {
-	return this.DateConfig.Layout(ctx) + " " + this.TimeConfig.Layout(ctx)
-}
-
-func (this *DateTimeConfig) Parse(ctx *core.Context, value ...string) ([]time.Time, error) {
-	return ParseTimeArgs(this.Layout(ctx), this.LocationFallbackValue(ctx), value...)
+	this.Setup()
+	this.TimeConfig.ConfigureQORAdminFilter(filter)
 }
 
 func init() {

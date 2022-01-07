@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ecletus/fragment"
 	"github.com/moisespsena-go/i18n-modular/i18nmod"
 
 	"github.com/moisespsena-go/maps"
@@ -14,9 +15,10 @@ import (
 
 	"github.com/ecletus/core/helpers"
 
-	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/assetfs"
 	"github.com/moisespsena-go/edis"
+
+	"github.com/ecletus/roles"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
@@ -64,8 +66,9 @@ type DependencyValue struct {
 
 type MetaOutputValuer func(context *core.Context, record, value interface{}) interface{}
 type MetaValuer func(record interface{}, context *core.Context) interface{}
+type MetaFValuer func(record interface{}, context *core.Context) *FormattedValue
 type MetaSetter func(record interface{}, metaValue *resource.MetaValue, context *core.Context) error
-type MetaEnabled func(record interface{}, context *Context, meta *Meta) bool
+type MetaEnabled func(record interface{}, context *Context, meta *Meta, readOnly bool) bool
 
 type MetaPostFormatted interface {
 	MetaPostFormatted(meta *Meta, ctx *core.Context, record, value interface{}) interface{}
@@ -77,15 +80,18 @@ type Meta struct {
 
 	*resource.Meta
 
-	Name        string
-	DB          *aorm.Alias
-	Type        string
-	TypeHandler func(meta *Meta, recorde interface{}, context *Context) string
-	Enabled     MetaEnabled
+	Name             string
+	DB               *aorm.Alias
+	Type             string
+	ReadOnlyType     string
+	ReadOnlyStringer bool
+	TypeHandler      func(meta *Meta, recorde interface{}, ctx *Context) string
+	Enabled          MetaEnabled
 
 	SkipDefaultLabel     bool
 	DefaultLabel         string
 	Label                string
+	HiddenLabel          bool
 	recordLabelPairFuncs []func(meta *Meta, ctx *Context, record interface{}) (key string, defaul string, ok bool)
 
 	Help        string
@@ -101,8 +107,8 @@ type Meta struct {
 	EncodedName       string
 	Setter            MetaSetter
 	Valuer            MetaValuer
-	FormattedValuer   MetaValuer
-	ContextResourcer  func(meta resource.Metaor, context *core.Context) resource.Resourcer
+	FormattedValuer   MetaFValuer
+	ContextResourcer  func(meta resource.Metaor, ctx *core.Context) resource.Resourcer
 	ContextMetas      func(record interface{}, context *Context) []*Meta
 	SkipResourceModel bool
 	Resource          *Resource
@@ -119,6 +125,7 @@ type Meta struct {
 	i18nGroup             string
 	Dependency            []interface{}
 	ProxyTo               *Meta
+	Proxies               []*Meta
 	Include               bool
 	ForceShowZero         bool
 	IsZeroFunc            func(meta *Meta, record, value interface{}) bool
@@ -127,11 +134,14 @@ type Meta struct {
 	OutputFormattedValuer MetaOutputValuer
 	DefaultValueFunc      MetaValuer
 	proxyPath             []ProxyPath
+	Typ                   reflect.Type
+	DefaultDeny           bool
 	Virtual               bool
 
 	SectionNotAllowed bool
 	ReadOnly          bool
 	ReadOnlyFunc      func(meta *Meta, ctx *Context, record interface{}) bool
+	ReadOnlyItemFunc  func(meta *Meta, ctx *Context, record, item interface{}) bool
 	URIForFunc        func(meta *Meta, ctx *Context, record interface{}) string
 	URLForFunc        func(meta *Meta, ctx *Context, record interface{}) string
 
@@ -154,7 +164,7 @@ type Meta struct {
 
 	AdminData maps.SyncedMap
 
-	ReadOnlyFormattedValuerFunc func(meta *Meta, ctx *Context, record interface{}) interface{}
+	ReadOnlyFormattedValuerFunc func(meta *Meta, ctx *Context, record interface{}) *FormattedValue
 
 	RecordLabelFormatter,
 	RecordHelpFormatter,
@@ -164,6 +174,26 @@ type Meta struct {
 	HelpFormatter func(meta *Meta, ctx *Context, s string) string
 
 	LockedFunc func(meta *Meta, ctx *Context, record interface{}) bool
+
+	RecordRequirerFunc func(ctx *core.Context, record interface{}) bool
+
+	CanCreateItemFunc func(ctx *Context, record interface{}) bool
+	CanDeleteItemFunc func(ctx *Context, record, item interface{}) bool
+	CanUpdateItemFunc func(ctx *Context, record, item interface{}) bool
+
+	Disabled       bool
+	ItemUrlFunc    func(ctx *Context, record, item interface{}) string
+	ParentMetaName string
+
+	Permissioners []Permissioner
+
+	updateCallbacks []func(m *Meta)
+
+	SortHandler func(s *Searcher, m *Meta, order aorm.Order) aorm.Clauser
+
+	beforeRenderHandlers   []func(ctx *MetaContext, record interface{})
+	beforeDoRenderHandlers []func(ctx *MetaContext, record interface{})
+	prepareContextHandlers []func(ctx *MetaContext, record interface{})
 }
 
 func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
@@ -178,9 +208,170 @@ func MetaAliases(tuples ...[]string) map[string]*resource.MetaName {
 	return m
 }
 
-func (this *Meta) ReadOnlyFormattedValue(ctx *Context, record interface{}) interface{} {
+// GetName get meta's name
+func (this *Meta) GetName() string {
+	return this.Name
+}
+
+func (this *Meta) BeforeRender(f func(ctx *MetaContext, record interface{})) *Meta {
+	this.beforeRenderHandlers = append(this.beforeRenderHandlers, f)
+	return this
+}
+
+func (this *Meta) BeforeDoRender(f func(ctx *MetaContext, record interface{})) *Meta {
+	this.beforeDoRenderHandlers = append(this.beforeDoRenderHandlers, f)
+	return this
+}
+
+func (this *Meta) PrepareContext(f func(ctx *MetaContext, record interface{})) *Meta {
+	this.prepareContextHandlers = append(this.prepareContextHandlers, f)
+	return this
+}
+
+func (this *Meta) RecordLookup(ctx *core.Context, record interface{}) interface{} {
+	if this.ProxyTo != nil {
+		if len(this.proxyPath) > 0 {
+			for _, p := range this.proxyPath {
+				if pm, ok := p.(proxyPathMeta); ok {
+					if record = pm.Meta.Value(ctx, record); record == nil {
+						return record
+					}
+				}
+			}
+		}
+	}
+	return record
+}
+
+func (this *Meta) CallBeforeRenderHandlers(ctx *MetaContext, record interface{}) {
+	if br, ok := this.Config.(MetaConfigBeforeRenderer1); ok {
+		br.BeforeRender1(ctx, record)
+	}
+	for _, h := range this.beforeRenderHandlers {
+		h(ctx, record)
+	}
+	if br, ok := this.Config.(MetaConfigBeforeRenderer2); ok {
+		br.BeforeRender2(ctx, record)
+	}
+	if this.ProxyTo != nil {
+		record = this.RecordLookup(ctx.Context.Context, record)
+		this.ProxyTo.CallBeforeRenderHandlers(ctx, record)
+	}
+	if br, ok := this.Config.(MetaConfigBeforeRenderer3); ok {
+		br.BeforeRender3(ctx, record)
+	}
+}
+
+func (this *Meta) CallBeforeDoRenderHandler(ctx *MetaContext, record interface{}) {
+	for _, h := range this.beforeDoRenderHandlers {
+		h(ctx, record)
+	}
+	if this.ProxyTo != nil {
+		record = this.RecordLookup(ctx.Context.Context, record)
+		this.ProxyTo.CallBeforeDoRenderHandler(ctx, record)
+	}
+}
+
+func (this *Meta) CallPrepareContextHandlers(ctx *MetaContext, record interface{}) {
+	if br, ok := this.Config.(MetaConfigContextPreparer); ok {
+		br.PrepareMetaContext(ctx, record)
+	}
+	for _, h := range this.prepareContextHandlers {
+		h(ctx, record)
+	}
+	if this.ProxyTo != nil {
+		record = this.RecordLookup(ctx.Context.Context, record)
+		this.ProxyTo.CallPrepareContextHandlers(ctx, record)
+	}
+}
+
+func (this *Meta) MakeError(ctx *core.Context, record interface{}, err error) error {
+	return resource.ErrField(ctx, record, this.GetFieldName(), this.GetRecordLabelC(ctx, record))(err)
+}
+
+func (this *Meta) Sortable() bool {
+	if this.SortHandler != nil {
+		return true
+	}
+	return this.FieldStruct != nil && this.FieldStruct.IsNormal && this.FieldStruct.DBName != ""
+}
+
+func (this *Meta) Sort(s *Searcher, order aorm.Order) aorm.Clauser {
+	if this.SortHandler != nil {
+		return this.SortHandler(s, this, order)
+	}
+	return nil
+}
+
+func (this *Meta) GetRecordValueOrLoad(ctx *Context, record interface{}) (rec interface{}, err error) {
+	if rec = this.Value(ctx.Context, record); rec != nil || this.ProxyTo != nil || this.FieldStruct == nil {
+		return
+	}
+
+	if id := this.FieldStruct.Relationship.GetRelatedID(record); !id.IsZero() {
+		rec = this.Resource.New()
+		id.SetTo(rec)
+		DB := ctx.DB().ModelStruct(this.Resource.ModelStruct).First(rec)
+		if DB.Error == nil {
+			this.BaseResource.FieldOf(record, this.Name).Set(rec)
+		}
+		return rec, DB.Error
+	}
+	return rec, nil
+}
+
+func (this *Meta) AsReadOnly() *Meta {
+	this.ReadOnly = true
+	this.ReadOnlyFunc = func(meta *Meta, ctx *Context, record interface{}) bool {
+		return true
+	}
+	return this
+}
+
+func (this *Meta) OnUpdate(f func(m *Meta)) {
+	this.updateCallbacks = append(this.updateCallbacks, f)
+}
+
+func (this *Meta) Permissioner(p ...Permissioner) {
+	this.Permissioners = append(this.Permissioners, p...)
+}
+
+func (this *Meta) GetItemUrl(ctx *Context, record, item interface{}) string {
+	if this.ItemUrlFunc != nil {
+		return this.ItemUrlFunc(ctx, record, item)
+	}
+	return ctx.URLFor(item, this.Resource)
+}
+
+// GetItemUrlC get item url from item context
+func (this *Meta) GetItemUrlC(ctx *Context) string {
+	if this.ItemUrlFunc != nil {
+		return this.ItemUrlFunc(ctx.Parent, ctx.Parent.ResourceRecord, ctx.ResourceRecord)
+	}
+	if this.Resource.ParentResource == ctx.Parent.Resource {
+		var keys []aorm.ID
+		var p = ctx.Parent
+		for p != nil {
+			if p.ResourceID != nil {
+				keys = append(keys, p.ResourceID)
+			}
+			p = p.Parent
+		}
+		uri := this.Resource.URLFor(ctx.Parent, ctx.ResourceRecord, keys...)
+		return ctx.URL(uri)
+	}
+	return ctx.URLFor(ctx.ResourceRecord, this.Resource)
+}
+
+func (this *Meta) SetRequired(v bool) *Meta {
+	this.Required = v
+	this.Meta.Required = v
+	return this
+}
+
+func (this *Meta) ReadOnlyFormattedValue(ctx *Context, record interface{}) *FormattedValue {
 	if this.ReadOnlyFormattedValuerFunc != nil {
-		return this.ReadOnlyFormattedValuerFunc(this, ctx, record)
+		return this.Severitify(this.ReadOnlyFormattedValuerFunc(this, ctx, record))
 	}
 	return nil
 }
@@ -189,18 +380,96 @@ func (this *Meta) AfterUpdate(f ...func()) {
 	this.afterUpdate = append(this.afterUpdate, f...)
 }
 
+func (this *Meta) IsEnabled(record interface{}, context *Context, meta *Meta, readOnly bool) bool {
+	if len(this.proxyPath) > 0 {
+		rec := record
+		for _, p := range this.proxyPath {
+			if pm, ok := p.(proxyPathMeta); ok {
+				if !pm.Meta.IsEnabled(rec, context, pm.Meta, readOnly) {
+					return false
+				}
+				if rec != nil {
+					rec = pm.Meta.Value(context.Context, rec)
+				}
+			}
+		}
+	}
+
+	if this.GetRecordHandler != nil {
+		record = this.GetRecordHandler(nil, record)
+	}
+	if this.Enabled != nil {
+		return this.Enabled(record, context, meta, readOnly)
+	}
+	if readOnly && context.Type.Has(NEW) {
+		return false
+	}
+	return true
+}
+
 func (this *Meta) IsReadOnly(ctx *Context, recorde interface{}) bool {
+	var rec = recorde
 	if this.ReadOnly {
 		return true
 	}
 	if this.ReadOnlyFunc != nil {
 		return this.ReadOnlyFunc(this, ctx, recorde)
 	}
+	if len(this.proxyPath) > 0 {
+		for _, p := range this.proxyPath {
+			if pm, ok := p.(proxyPathMeta); ok {
+				if pm.Meta.IsReadOnly(ctx, rec) {
+					return true
+				}
+				rec = pm.Meta.Value(ctx.Context, rec)
+			}
+		}
+	}
+	if this.ProxyTo != nil {
+		if this.ProxyTo.ReadOnly {
+			return true
+		}
+		if this.ProxyTo.ReadOnlyFunc != nil {
+			return this.ProxyTo.IsReadOnly(ctx, rec)
+		}
+	}
 	switch this.Type {
 	case "single_edit", "collection_edit", "select_one", "select_many":
 		return false
 	}
 	return this.GetSetter() == nil
+}
+
+func (this *Meta) IsReadOnlyItem(ctx *Context, recorde, item interface{}) bool {
+	if this.ReadOnlyItemFunc != nil {
+		return this.ReadOnlyItemFunc(this, ctx, recorde, item)
+	}
+	return false
+}
+
+func (this *Meta) RecordRequirer() func(ctx *core.Context, record interface{}) bool {
+	if this.ReadOnlyFunc != nil {
+		return func(ctx *core.Context, record interface{}) bool {
+			return this.RecordRequired(ContextFromContext(ctx), record)
+		}
+	}
+	return this.RecordRequirerFunc
+}
+
+func (this *Meta) RecordRequired(ctx *Context, record interface{}) bool {
+	if this.ReadOnlyFunc != nil {
+		if !this.IsReadOnly(ctx, record) {
+			if this.RecordRequirerFunc != nil {
+				return this.RecordRequirerFunc(ctx.Context, record)
+			}
+			return this.Required
+		}
+		return true
+	}
+	if this.RecordRequirerFunc != nil {
+		return this.RecordRequirerFunc(ctx.Context, record)
+	}
+	return this.Required
 }
 
 func (this *Meta) I18nGroup(defaul ...bool) string {
@@ -244,19 +513,25 @@ func (this *Meta) NewValuer(f func(meta *Meta, old MetaValuer, recorde interface
 	return this
 }
 
-func (this *Meta) NewFormattedValuer(f func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{}) *Meta {
+func (this *Meta) NewFormattedValuer(f func(meta *Meta, old MetaFValuer, recorde interface{}, ctx *core.Context) *FormattedValue) *Meta {
 	old := this.Meta.FormattedValuer
 	if old == nil {
-		old = this.Meta.Valuer
+		old = func(record interface{}, context *core.Context) *resource.FormattedValue {
+			v := this.Value(context, record)
+			if v == nil {
+				return nil
+			}
+			return &FormattedValue{Record: record, Raw: v}
+		}
 	}
-	this.FormattedValuer = func(recorde interface{}, ctx *core.Context) interface{} {
-		return f(this, old, recorde, ctx)
+	this.FormattedValuer = func(record interface{}, ctx *core.Context) *FormattedValue {
+		return f(this, old, record, ctx)
 	}
 	this.Meta.FormattedValuer = this.FormattedValuer
 	return this
 }
 
-func (this *Meta) NewOutputFormattedValuer(f func(meta *Meta, old MetaOutputValuer, ctx *core.Context, recorde, value interface{}) interface{}) *Meta {
+func (this *Meta) NewOutputFormattedValuer(f func(meta *Meta, old MetaOutputValuer, ctx *core.Context, record, value interface{}) interface{}) *Meta {
 	old := this.OutputFormattedValuer
 	this.OutputFormattedValuer = func(ctx *core.Context, recorde, value interface{}) interface{} {
 		return f(this, old, ctx, recorde, value)
@@ -269,15 +544,20 @@ func (this *Meta) SetValuer(f func(recorde interface{}, ctx *core.Context) inter
 	this.Meta.SetValuer(f)
 }
 
-func (this *Meta) SetFormattedValuer(f func(recorde interface{}, ctx *core.Context) interface{}) {
+func (this *Meta) SetFormattedValuer(f MetaFValuer) {
 	this.FormattedValuer = f
 	this.Meta.SetFormattedValuer(f)
 }
 
-func (this *Meta) NewEnabled(f func(old MetaEnabled, recorde interface{}, ctx *Context, meta *Meta) bool) *Meta {
+func (this *Meta) NewEnabled(f func(old MetaEnabled, record interface{}, ctx *Context, meta *Meta, readOnly bool) bool) *Meta {
 	old := this.Enabled
-	this.Enabled = func(recorde interface{}, ctx *Context, meta *Meta) bool {
-		return f(old, recorde, ctx, meta)
+	if old == nil {
+		old = func(record interface{}, context *Context, meta *Meta, readOnly bool) bool {
+			return true
+		}
+	}
+	this.Enabled = func(recorde interface{}, ctx *Context, meta *Meta, readOnly bool) bool {
+		return f(old, recorde, ctx, meta, readOnly)
 	}
 	return this
 }
@@ -290,7 +570,13 @@ func (this *Meta) Locked(ctx *Context, record interface{}) bool {
 	return false
 }
 
-func (this *Meta) GetType(record interface{}, context *Context) string {
+func (this *Meta) GetType(record interface{}, context *Context, readOnly ...bool) string {
+	if len(readOnly) > 0 && readOnly[0] && this.ReadOnlyType != "" {
+		return this.ReadOnlyType
+	}
+	if this.GetRecordHandler != nil {
+		record = this.GetRecordHandler(nil, record)
+	}
 	if this.TypeHandler != nil {
 		return this.TypeHandler(this, record, context)
 	}
@@ -514,7 +800,7 @@ func (this *Meta) URIFor(ctx *Context, record interface{}) string {
 	if this.URIForFunc != nil {
 		return this.URIForFunc(this, ctx, record)
 	}
-	return this.Resource.GetContextURI(ctx.Context, this.Resource.GetKey(record))
+	return this.Resource.GetContextURI(ctx, this.Resource.GetKey(record))
 }
 
 func (this *Meta) URLFor(ctx *Context, record interface{}) string {
@@ -538,6 +824,22 @@ type MetaConfigInterface interface {
 	resource.MetaConfigInterface
 }
 
+type MetaConfigContextPreparer interface {
+	PrepareMetaContext(ctx *MetaContext, record interface{})
+}
+
+type MetaConfigBeforeRenderer1 interface {
+	BeforeRender1(ctx *MetaContext, record interface{})
+}
+
+type MetaConfigBeforeRenderer2 interface {
+	BeforeRender2(ctx *MetaContext, record interface{})
+}
+
+type MetaConfigBeforeRenderer3 interface {
+	BeforeRender3(ctx *MetaContext, record interface{})
+}
+
 // GetMetas get sub metas
 func (this *Meta) GetMetas() []resource.Metaor {
 	if len(this.Metas) > 0 {
@@ -551,12 +853,18 @@ func (this *Meta) GetMetas() []resource.Metaor {
 	}
 }
 
-func (this *Meta) GetContextMetas(recorde interface{}, context *core.Context) []resource.Metaor {
+func (this *Meta) GetContextMetas(recorde interface{}, context *core.Context) (result []resource.Metaor) {
 	if this.ContextMetas != nil {
 		metas := this.ContextMetas(recorde, GetContext(context))
 		r := make([]resource.Metaor, len(metas))
 		for i, m := range metas {
 			r[i] = m
+		}
+		if this.Type == "single_edit" {
+			if this.Typ.Kind() == reflect.Ptr {
+				// TODO: add meta for '@enabled'
+				// r = append(r, )
+			}
 		}
 		return r
 	}
@@ -602,23 +910,36 @@ func (this *Meta) GetContextResource(context *core.Context) resource.Resourcer {
 func (this *Meta) SetPermission(permission *roles.Permission) {
 	this.Permission = permission
 	this.Meta.Permission = permission
-	if this.Resource != nil {
+	if this.Resource != nil && this.Resource.metaEmbedded {
 		this.Resource.Permission = permission
 	}
 }
 
-// HasContextPermission check has permission or not
 func (this *Meta) HasPermission(mode roles.PermissionMode, context *core.Context) (perm roles.Perm) {
-	if this.Permission != nil {
-		if perm = this.Permission.HasPermission(context, mode, context.Roles.Interfaces()...); perm != roles.UNDEF {
-			return
-		}
+	return this.AdminHasPermission(mode, ContextFromCoreContext(context))
+}
+
+// AdminHasContextPermission check has permission or not
+func (this *Meta) AdminHasPermission(mode roles.PermissionMode, context *Context) (perm roles.Perm) {
+	if perm = this.Meta.HasPermission(mode, context.Context); perm != roles.UNDEF {
+		return
 	}
 
+	if mode == roles.Read && this.DefaultPermissionDeny() {
+		return roles.DENY
+	}
+
+	if perm = this.adminHasPermission(mode, context); perm != roles.UNDEF {
+		return
+	}
+	return
+}
+
+// AdminHasContextPermission check has permission or not
+func (this *Meta) adminHasPermission(mode roles.PermissionMode, context *Context) (perm roles.Perm) {
 	if this.BaseResource != nil {
-		return this.BaseResource.HasPermission(mode, context)
+		return this.BaseResource.HasLocalPermission(mode, context)
 	}
-
 	return
 }
 
@@ -695,7 +1016,19 @@ func (this *Meta) TriggerValueChangedEvent(ename string, recorde interface{}, ct
 
 // GetValuer get valuer from meta
 func (this *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
-	if valuer := this.Meta.GetValuer(); valuer != nil {
+	var valuer func(interface{}, *core.Context) interface{}
+	if this.ProxyTo != nil {
+		valuer = func(i interface{}, context *core.Context) interface{} {
+			if i = this.GetRecordHandler(context, i); i != nil {
+				vlr := this.ProxyTo.GetValuer()
+				return vlr(i, context)
+			}
+			return nil
+		}
+	} else {
+		valuer = this.Meta.GetValuer()
+	}
+	if valuer != nil {
 		if this.mustValuer {
 			return valuer
 		}
@@ -711,42 +1044,148 @@ func (this *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
 }
 
 // GetFormattedValuer get formatted valuer from meta
-func (this *Meta) GetFormattedValuer() func(interface{}, *core.Context) interface{} {
-	var valuer MetaValuer
+func (this *Meta) GetFormattedValuer() func(interface{}, *core.Context) *FormattedValue {
+	var valuer MetaFValuer
 	if this.FormattedValuer != nil {
-		valuer = this.FormattedValuer
+		if this.ProxyTo != nil {
+			valuer = func(record interface{}, context *core.Context) *FormattedValue {
+				if record = this.GetRecordHandler(context, record); record == nil {
+					return nil
+				}
+				if this.ProxyTo.FormattedValuer != nil {
+					return this.ProxyTo.FormattedValuer(record, context)
+				}
+				return this.ProxyTo.FormattedValue(context, record)
+			}
+		} else {
+			valuer = this.FormattedValuer
+		}
+	} else if this.ProxyTo != nil {
+		valuer = func(r interface{}, ctx *core.Context) *FormattedValue {
+			if r = this.GetRecordHandler(ctx, r); r != nil {
+				vlr := this.ProxyTo.GetFormattedValuer()
+				return vlr(r, ctx)
+			}
+			return nil
+		}
 	} else {
-		valuer = this.GetValuer()
+		valuer = func(record interface{}, context *core.Context) *FormattedValue {
+			v := this.Value(context, record)
+			if v == nil {
+				return nil
+			}
+			if _, ok := v.(*resource.SliceValue); ok {
+				return &FormattedValue{Record: record, Raw: v}
+			}
+			return &FormattedValue{Record: record, Raw: v, IsZeroF: this.IsZero}
+		}
 	}
+
 	if this.mustValuer {
 		return valuer
 	}
-	return func(i interface{}, context *core.Context) (v interface{}) {
-		var err error
-		if v, err = this.TriggerValuerEvent(E_META_FORMATTED_VALUE, i, context, valuer); err != nil {
+
+	return func(record interface{}, context *core.Context) *FormattedValue {
+		var (
+			err error
+			v   interface{}
+		)
+		if v, err = this.TriggerValuerEvent(E_META_FORMATTED_VALUE, record, context, func(record interface{}, context *core.Context) interface{} {
+			return valuer(record, context)
+		}); err != nil {
 			panic(MetaEventError{this, E_META_FORMATTED_VALUE, err})
 		}
-		if v, err = this.TriggerValuerEvent(E_META_POST_FORMATTED_VALUE, i, context, nil, v); err != nil {
+		if v, err = this.TriggerValuerEvent(E_META_POST_FORMATTED_VALUE, record, context, nil, v); err != nil {
 			panic(MetaEventError{this, E_META_POST_FORMATTED_VALUE, err})
 		}
-		return
+		if v == nil {
+			return nil
+		}
+		if fv, ok := v.(*FormattedValue); ok {
+			if fv == nil {
+				return fv
+			}
+			return fv
+		}
+		return &FormattedValue{Record: record, Raw: v, IsZeroF: this.IsZero}
 	}
 }
 
 // FormattedValue get formatted valuer from meta
-func (this *Meta) Value(ctx *core.Context, recorde interface{}) interface{} {
+func (this *Meta) Value(ctx *core.Context, record interface{}) interface{} {
 	if valuer := this.GetValuer(); valuer != nil {
-		return valuer(recorde, ctx)
+		return valuer(record, ctx)
 	}
 	return nil
 }
 
 // FormattedValue get formatted valuer from meta
-func (this *Meta) FormattedValue(ctx *core.Context, recorde interface{}) interface{} {
+func (this *Meta) FormattedValue(ctx *core.Context, record interface{}) (fv *FormattedValue) {
 	if formattedValuer := this.GetFormattedValuer(); formattedValuer != nil {
-		return formattedValuer(recorde, ctx)
+		fv := formattedValuer(record, ctx)
+
+		if fv == nil {
+			return nil
+		}
+
+		var toString = func(raw interface{}) string {
+			switch t := raw.(type) {
+			case MetaFormattedValuer:
+				return t.FormattedValue(ContextFromCoreContext(ctx), this, record)
+			case MetaorFormattedValuer:
+				return t.FormattedValue(ctx, this, record)
+			case MetaSingleFormattedValuer:
+				return t.FormattedValue()
+			case Stringer:
+				return t.AdminString(ContextFromCoreContext(ctx), maps.Map{})
+			case core.ContextStringer:
+				return t.ContextString(ctx)
+			case fmt.Stringer:
+				return t.String()
+			default:
+				if !aorm.IsBlank(reflect.Indirect(reflect.ValueOf(fv.Raw))) {
+					return fmt.Sprint(fv.Raw)
+				}
+				return ""
+			}
+		}
+
+		if fv.Raw != nil {
+			if fv.Slice {
+				if len(fv.Values) == 0 && len(fv.SafeValues) == 0 {
+					var (
+						slice = reflect.ValueOf(fv.Raws)
+						l     = slice.Len()
+					)
+					fv.Values = make([]string, l)
+					for i := 0; i < l; i++ {
+						fv.Values[i] = toString(slice.Index(i).Interface())
+					}
+				}
+				if fv.Value == "" {
+					fv.Value = strings.Join(fv.Values, ", ")
+				}
+				if fv.SafeValue == "" {
+					fv.SafeValue = strings.Join(fv.SafeValues, ", ")
+				}
+			} else {
+				if fv.Value == "" && fv.SafeValue == "" {
+					fv.Value = toString(fv.Raw)
+				}
+			}
+		}
+		return this.Severitify(fv)
 	}
-	return ""
+	return
+}
+
+func (this *Meta) GetFormattedValue(ctx *Context, record interface{}, ro bool) (v *FormattedValue) {
+	if ro && this.Resource == nil {
+		if v = this.ReadOnlyFormattedValue(ctx, record); v != nil {
+			return
+		}
+	}
+	return this.FormattedValue(ctx.Context, record)
 }
 
 // FormattedValue get formatted valuer from meta
@@ -769,18 +1208,28 @@ func (this *Meta) GetDefaultValue(ctx *core.Context, recorde interface{}) (v int
 	return
 }
 
-func (this *Meta) IsZero(recorde, value interface{}) (zero bool) {
+func (this *Meta) IsZeroInput(record interface{}, ctx *core.Context) (zero bool) {
+	return this.IsZero(record, this.Value(ctx, record))
+}
+
+func (this *Meta) IsZero(record, value interface{}) (zero bool) {
 	if value == nil {
 		if this.FieldStruct != nil && this.FieldStruct.Relationship != nil && indirectType(this.FieldStruct.Struct.Type).Kind() == reflect.Struct {
-			return this.FieldStruct.Relationship.GetRelatedID(recorde).IsZero()
+			return this.FieldStruct.Relationship.GetRelatedID(record).IsZero()
 		}
 		return true
+	}
+	if this.GetRecordHandler != nil {
+		record = this.GetRecordHandler(nil, record)
+		if record == nil {
+			return true
+		}
 	}
 	if this.NilAsZero {
 		return value == nil
 	}
 	if this.IsZeroFunc != nil {
-		return this.IsZeroFunc(this, recorde, value)
+		return this.IsZeroFunc(this, record, value)
 	}
 	switch vt := value.(type) {
 	case helpers.Zeroer:
@@ -790,7 +1239,7 @@ func (this *Meta) IsZero(recorde, value interface{}) (zero bool) {
 	case *time.Time:
 		return vt == nil || vt.IsZero()
 	case interface{ PrimaryGoValue() interface{} }:
-		return this.IsZero(recorde, vt.PrimaryGoValue())
+		return this.IsZero(record, vt.PrimaryGoValue())
 	case bool:
 		return false
 	case *bool:
@@ -856,6 +1305,59 @@ func (this *Meta) ID() string {
 	return this.BaseResource.FullID() + "#" + this.Name
 }
 
+func (this *Meta) CanCreateItem(ctx *Context, record interface{}) bool {
+	if this.CanCreateItemFunc != nil {
+		return this.CanCreateItemFunc(ctx, record)
+	}
+	if this.Tags.Flag("ITEM_CREATE_DISABLED") {
+		return false
+	}
+	return true
+}
+
+func (this *Meta) CanDeleteItem(ctx *Context, record, item interface{}) bool {
+	if this.CanDeleteItemFunc != nil {
+		return this.CanDeleteItemFunc(ctx, record, item)
+	}
+	if this.Tags.Flag("ITEM_DELETE_DISABLED") {
+		return false
+	}
+	return true
+}
+
+func (this *Meta) CanUpdateItem(ctx *Context, record, item interface{}) bool {
+	if this.CanUpdateItemFunc != nil {
+		return this.CanUpdateItemFunc(ctx, record, item)
+	}
+	if this.Tags.Flag("ITEM_UPDATE_DISABLED") {
+		return false
+	}
+	return true
+}
+
+func (this *Meta) GetReflectStructValueOrInstantiate(record reflect.Value) reflect.Value {
+	if this.Resource != nil && this.Resource.Fragment != nil {
+		f := record.Addr().Interface().(fragment.FragmentedModelInterface)
+		frag := this.Resource.Fragment
+		if frag.IsForm {
+			v := f.GetFormFragment(frag.ID)
+			if v == nil {
+				v = this.Resource.New().(fragment.FormFragmentModelInterface)
+				f.SetFormFragment(f, frag.ID, v)
+			}
+			return reflect.ValueOf(v).Elem()
+		} else {
+			v := f.GetFragment(frag.ID)
+			if v == nil {
+				v = this.Resource.New().(fragment.FragmentModelInterface)
+				f.SetFragment(f, frag.ID, v)
+			}
+			return reflect.ValueOf(v).Elem()
+		}
+	}
+	return this.Meta.GetReflectStructValueOrInstantiate(record)
+}
+
 type MetaEventError struct {
 	Meta  *Meta
 	Event string
@@ -881,4 +1383,17 @@ func (this MetaEventError) Error() string {
 
 func (this MetaEventError) Cause() error {
 	return this.Err
+}
+
+type ReadOnlyMeta struct {
+	*Meta
+	ro bool
+}
+
+func (this *ReadOnlyMeta) CanReadOnly() bool {
+	return this.ro
+}
+
+func (this *ReadOnlyMeta) Metaor() resource.Metaor {
+	return this.Meta
 }

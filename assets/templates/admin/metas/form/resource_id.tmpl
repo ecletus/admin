@@ -1,0 +1,84 @@
+{{$current_value := (raw_value_of .Record .Meta)}}
+{{define "helpers" -}}
+    {{- wrap -}}
+        {{- if (defined_resource_show_page .Meta.Resource) -}}
+            {{- $url := (.Meta.URLFor (admin_context) $current_value) -}}
+            {{- if $url -}}
+                {{- if not (.Meta.IsNewRecord $current_value) -}}
+                    {{.Value}}<a data-url="{{$url}}" href="{{$url}}" ><span style="font-size: inherit" class="material-icons">open_in_new</span></a>
+                {{- end -}}
+            {{- else -}}
+                {{.Value}}
+            {{- end -}}
+        {{- else -}}
+            {{.Value}}
+        {{- end -}}
+    {{- begin -}}
+        <div id="{{.InputId}}-string" class="qor-field__help left-aligned" style="color: #0243bd">
+            {{after}}
+        </div>
+    {{- else -}}
+        <div id="{{.InputId}}-string" class="qor-field__help left-aligned" style="color: #0243bd;display: none"></div>
+    {{- end}}
+{{- end}}
+
+<div class="qor-field">
+  <div class="mdl-textfield mdl-js-textfield {{if .ModeSingle}}left-aligned {{end}}">
+    {{if not .ModeSingle}}
+        <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
+          {{meta_record_label .Meta .Record}}{{if and (not .ReadOnly) .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+        </label>
+        {{$help := meta_record_help .Meta .Record}}
+        {{if $help}}
+          <div class="qor-field__help">{{$help}}</div>
+        {{end}}
+    {{end}}
+    {{if or .ReadOnly (not (has_update_permission .Meta))}}
+      <div class="qor-field__value">
+        {{- $primaryKey := .Meta.Resource.GetKey $current_value -}}
+        {{- if (defined_resource_show_page .Meta.Resource) -}}
+            {{- $url := (.Meta.URLFor (admin_context) $current_value) -}}
+            {{- if $url -}}
+                {{- if not (.Meta.IsNewRecord $current_value) -}}
+                    <a data-url="{{$url}}" href="{{$url}}">{{$primaryKey}}</a>
+                {{- end -}}
+            {{- else -}}
+                {{$primaryKey}}
+            {{- end -}}
+        {{- else -}}
+            {{$primaryKey}}
+        {{- end}}
+        <span style="font-size:80%;color: #0243bd">{{.Value}}</span>
+      </div>
+    {{else}}
+      {{if not .ModeSingle}}
+          <div class="qor-field__show">
+            {{.Value}}
+          </div>
+      {{end}}
+      {{- $cfg := .Meta.Config -}}
+
+      <div class="qor-field__edit qor-field__left-1-icon">
+        <template name="selected-template" type="x-tmpl-mustache">
+            {{- if $cfg.SelectedTemplateJS -}}
+              [[ $cfg.SelectedTemplateJS ]]
+            {{- else if $cfg.SelectedTemplate -}}
+              {{$cfg.SelectedTemplate}}
+            {{- else -}}
+              [[ {{if $cfg.DisplayField}}{{$cfg.DisplayField}}{{else}}displayText{{end}} ]]
+            {{- end -}}
+        </template>
+        {{$pk := ""}}
+        {{if $current_value}}
+          {{$pk = ($cfg.Resource.GetKey $current_value).String}}
+        {{end}}
+        <input type="hidden" name="{{.InputName}}" value="{{$pk}}">
+        <input class="mdl-textfield__input qor-input__icon-as-rigth" type="text" id="{{.InputId}}" value="{{$pk}}"
+          data-target-val="[name='{{.InputName}}']" data-target-loading="#{{.InputId}}-loading" data-target-string="#{{.InputId}}-string" data-target-error="#{{.InputId}}-error" data-toggle="qor.load_resource" data-resource-url="{{$cfg.GetUrl .Context .Record}}" />
+        <span id="{{.InputId}}-loading" class="qor-input__icon"><i class="material-icons">hourglass_empty</i></span>
+      </div>
+      {{tpl_yield "helpers" .}}
+      <div id="{{.InputId}}-error" class="mdl-textfield__error"></div>
+    {{end}}
+  </div>
+</div>

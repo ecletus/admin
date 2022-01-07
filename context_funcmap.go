@@ -8,13 +8,14 @@ import (
 	"html"
 	"path"
 	"reflect"
-	"regexp"
 	"strings"
-	"time"
 
 	"github.com/ecletus/about"
+	"github.com/ecletus/core/resource"
+	"github.com/ecletus/core/utils/url"
 	"github.com/ecletus/helpers"
 	"github.com/ecletus/render"
+	"github.com/moisespsena-go/maps"
 	"github.com/pkg/errors"
 	"unapu.com/lib"
 
@@ -22,6 +23,8 @@ import (
 	oscommon "github.com/moisespsena-go/os-common"
 	path_helpers "github.com/moisespsena-go/path-helpers"
 
+	"github.com/ecletus/auth"
+	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/i18n-modular/i18nmod"
 
 	"github.com/ecletus/common"
@@ -34,6 +37,44 @@ import (
 	"github.com/moisespsena/template/funcs"
 	"github.com/moisespsena/template/html/template"
 )
+
+func hasPermission(defaul *Context, do func(this *Context, perm Permissioner) bool) func(arg interface{}, args ...interface{}) bool {
+	return func(arg interface{}, args ...interface{}) bool {
+		this := defaul
+		switch t := arg.(type) {
+		case *Context:
+			this = t
+			arg = args[0]
+		}
+		switch t := arg.(type) {
+		case *Resource:
+			return do(this, t)
+		case *Meta:
+			return do(this, t)
+		case core.Permissioner:
+			return do(this, NewPermissioner(func(mode roles.PermissionMode, ctx *Context) (perm roles.Perm) {
+				return t.HasPermission(mode, ctx.Context)
+			}))
+		default:
+			return do(this, arg.(Permissioner))
+		}
+	}
+}
+
+func hasRecordPermission(defaul *Context, do func(this *Context) bool) func(args ...interface{}) (bool, error) {
+	return func(args ...interface{}) (bool, error) {
+		switch len(args) {
+		case 0:
+			return do(defaul), nil
+		case 1:
+			return do(args[0].(*Context)), nil
+		case 2:
+			return do(defaul.CreateChild(args[0].(*Resource), args[1])), nil
+		default:
+			return false, fmt.Errorf("wrong number of args for admin.Context.hasRecordPermission: want at least 0 or 1 or 2, but got %d", len(args))
+		}
+	}
+}
 
 // FuncMap return funcs map
 func (this *Context) FuncMaps() []funcs.FuncMap {
@@ -51,6 +92,23 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			}
 			return lib.FromBytes(dep, b)
 		})
+	}
+
+	renderMeta := func(state *template.State, this *Context, value interface{}, meta *Meta, types ...string) {
+		var (
+			typ  = "index"
+			mode string
+		)
+
+		for _, t := range types {
+			if strings.HasPrefix(t, "mode-") {
+				mode = strings.TrimPrefix(t, "mode-")
+			} else if t != "" {
+				typ = t
+			}
+		}
+
+		this.renderMeta(state, meta, value, []string{}, typ, mode, NewTrimLeftWriter(state.Writer()))
 	}
 
 	funcMaps := []template.FuncMap{
@@ -116,6 +174,18 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			"lower": func(value interface{}) string {
 				return strings.ToLower(fmt.Sprint(value))
 			},
+			"make_opts": func(args ...interface{}) maps.Map {
+				if len(args) == 0 {
+					return nil
+				}
+				m := maps.Map{}
+				if len(args)%2 == 0 {
+					for i := 0; i < len(args); i += 2 {
+						m[args[i]] = args[i+1]
+					}
+				}
+				return m
+			},
 			"plural": func(value interface{}) string {
 				return inflection.Plural(fmt.Sprint(value))
 			},
@@ -135,11 +205,19 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			},
 
 			"yield": func(s *template.State) string {
-				this.Yield(s.Writer(), this.Result)
+				if this.Yield == nil {
+					this.Yielder(s.Writer(), this.Result)
+				} else {
+					this.Yield(s.Writer(), this.Result)
+				}
 				return ""
 			},
 			"include": func(s *template.State, name string, result ...interface{}) string {
 				this.Include(s.Writer(), name, result...)
+				return ""
+			},
+			"include_record": func(s *template.State, name string, record interface{}) string {
+				this.IncludeRecord(s.Writer(), name, record)
 				return ""
 			},
 			"render":      this.RenderHtml,
@@ -147,26 +225,45 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			"render_with": this.renderWith,
 			"render_form": this.renderForm,
 			"render_meta": func(state *template.State, value interface{}, meta *Meta, types ...string) {
-				var (
-					typ = "index"
-				)
-
-				for _, t := range types {
-					typ = t
-				}
-
-				this.renderMeta(state, meta, value, []string{}, typ, NewTrimLeftWriter(state.Writer()))
+				renderMeta(state, this, value, meta, types...)
+			},
+			"render_meta_ctx":       renderMeta,
+			"render_meta_with_path": this.renderMetaWithPath,
+			"render_meta_with_path_ctx": func(state *template.State, ctx *Context, pth string, meta *Meta, types ...string) {
+				ctx.renderMetaWithPath(state, pth, ctx.Result, meta, types...)
 			},
 			"render_filter": this.renderFilter,
 			"saved_filters": this.savedFilters,
 			"has_filter": func() bool {
 				query := this.Request.URL.Query()
 				for key := range query {
-					if regexp.MustCompile("filter[(\\w+)]").MatchString(key) && query.Get(key) != "" {
+					if name, _ := GetFilterFromQS(key); name != "" && query.Get(key) != "" {
 						return true
 					}
 				}
 				return false
+			},
+			"requested_filters_and_scopes": func() (res struct {
+				Filters map[string][]struct{ Name, Value string }
+				Scopes  []string
+			}) {
+				var (
+					query = this.Request.URL.Query()
+				)
+				res.Filters = map[string][]struct{ Name, Value string }{}
+
+				for key := range query {
+					if name, fKey := GetFilterFromQS(key); name != "" {
+						if value := query.Get(key); value != "" {
+							if _, ok := res.Filters[name]; !ok {
+								res.Filters[name] = nil
+							}
+							res.Filters[name] = append(res.Filters[name], struct{ Name, Value string }{Name: fKey, Value: value})
+						}
+					}
+				}
+				res.Scopes = query["scope[]"]
+				return
 			},
 			"page_title": this.pageTitle,
 			"meta_label": func(meta *Meta) template.HTML {
@@ -175,18 +272,40 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			"meta_help": func(meta *Meta) template.HTML {
 				return template.HTML(meta.GetHelp(this))
 			},
+			"meta_help_ctx": func(this *Context, meta *Meta) template.HTML {
+				return template.HTML(meta.GetHelp(this))
+			},
 			"meta_record_label": func(meta *Meta, record interface{}) template.HTML {
 				return template.HTML(meta.GetRecordLabel(this, record))
 			},
-			"meta_record_help": func(meta *Meta, record interface{}) template.HTML {
-				if this.Type.Has(SHOW) {
+			"meta_record_help": func(meta *Meta, record interface{}, ro ...bool) template.HTML {
+				if (len(ro) > 0 && ro[0]) || this.ReadOnly || this.Type.Has(SHOW) {
 					return template.HTML(meta.GetRecordShowHelp(this, record))
 				}
 				return template.HTML(meta.GetRecordHelp(this, record))
 			},
-			"section_title": func(section *Section) (s template.HTML) {
-				key := section.Resource.I18nPrefix + ".sections." + section.Title
-				return template.HTML(strings.TrimSpace(this.Admin.Ts(this.Context, key, section.Title)))
+			"table_header_title": func(h *MetaTableHeader) template.HTML {
+				if h.Section != nil {
+					key := h.Section.Resource.I18nPrefix + ".sections." + h.Section.Title
+					return template.HTML(strings.TrimSpace(this.Admin.Ts(this.Context, key, h.Section.Title)))
+				}
+				return template.HTML(h.Meta.GetLabelC(this.Context))
+			},
+			"section_title": func(s interface{}) template.HTML {
+				var section *Section
+				switch t := s.(type) {
+				case *Section:
+					section = t
+				case *TreeSection:
+					section = t.Section
+				case *MetaTableHeader:
+					section = t.Section
+				}
+				if section.Title != "" {
+					key := section.Resource.I18nPrefix + ".sections." + section.Title
+					return template.HTML(strings.TrimSpace(this.Admin.Ts(this.Context, key, section.Title)))
+				}
+				return ""
 			},
 			"section_help": func(section *Section, readOnly bool) (s template.HTML) {
 				key := section.Resource.I18nPrefix + ".sections." + section.Title + "_"
@@ -234,14 +353,24 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 				})
 			},
 
-			"url_for":            this.URLFor,
-			"top_url_for":        this.TopURLFor,
-			"link_to":            this.linkTo,
-			"link_to_ajax_load":  this.linkToAjaxLoad,
-			"patch_current_url":  this.PatchCurrentURL,
-			"patch_url":          this.PatchURL,
-			"join_current_url":   this.JoinCurrentURL,
-			"join_url":           this.JoinURL,
+			"url_for":           this.URLFor,
+			"top_url_for":       this.TopURLFor,
+			"link_to":           this.linkTo,
+			"link_to_ajax_load": this.linkToAjaxLoad,
+			"patch_current_url": this.PatchCurrentURL,
+			"patch_url":         this.PatchURL,
+			"join_current_url":  this.JoinCurrentURL,
+			"join_url":          this.JoinURL,
+			"url_param": func(name string, values ...interface{}) *url.Param {
+				var p = &url.Param{Name: name}
+				for _, v := range values {
+					p.Values = append(p.Values, fmt.Sprint(v))
+				}
+				return p
+			},
+			"url_flag": func(name string, value bool) *url.FlagParam {
+				return &url.FlagParam{Name: name, Value: value}
+			},
 			"logout_url":         this.logoutURL,
 			"login_url":          this.loginURL,
 			"profile_url":        this.profileURL,
@@ -249,7 +378,7 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			"new_resource_path":  this.newResourcePath,
 			"defined_resource_show_page": func(res *Resource) bool {
 				if res != nil {
-					if res.Top().isSetShowAttrs {
+					if res.Top().Scheme.Sections.Default.Screen.Show.IsSetI() {
 						return true
 					}
 				}
@@ -261,24 +390,83 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			"get_resource_item_menus":   this.getResourceItemMenus,
 			"get_resource_menu_actions": this.getResourceMenuActions,
 			"get_scopes":                this.GetScopes,
-			"get_formatted_errors":      this.getFormattedErrors,
-			"load_actions":              this.loadActions,
-			"allowed_actions":           this.AllowedActions,
-			"is_sortable_meta":          this.isSortableMeta,
-			"index_sections":            this.indexSections,
-			"show_sections":             this.showSections,
-			"new_sections":              this.newSections,
-			"edit_sections":             this.editSections,
-			"show_meta_sections":        this.showMetaSections,
-			"new_meta_sections":         this.newMetaSections,
-			"edit_meta_sections":        this.editMetaSections,
-			"convert_sections_to_metas": this.convertSectionToMetas,
+			"get_formatted_errors": func() []core.FormattedError {
+				return append(this.GetCleanFormattedErrors(), this.GetCleanFormattedErrorsOf(&this.Warnings)...)
+			},
+			"load_actions":    this.loadActions,
+			"allowed_actions": this.AllowedActions,
 
-			"has_create_permission": this.hasCreatePermission,
-			"has_read_permission":   this.hasReadPermission,
-			"has_update_permission": this.hasUpdatePermission,
-			"has_delete_permission": this.hasDeletePermission,
-
+			"index_sections": func(...interface{}) {
+				panic("deprecated. uses 'index_sections_ctx'")
+			},
+			"index_sections_ctx": func(this *Context) []*Section {
+				return this.indexSections()
+			},
+			"show_sections": func(...interface{}) {
+				panic("deprecated. uses 'show_sections_ctx'")
+			},
+			"show_sections_ctx": func(this *Context) []*Section {
+				return this.showSections()
+			},
+			"new_sections": func(...interface{}) {
+				panic("deprecated. uses 'new_sections_ctx'")
+			},
+			"new_sections_ctx": func(this *Context, res *Resource) []*Section {
+				return this.newSections(res)
+			},
+			"edit_sections": this.editSections,
+			"edit_sections_ctx": func(this *Context, res *Resource, rec ...interface{}) []*Section {
+				return this.editSections(res, rec...)
+			},
+			"show_meta_sections": func(...interface{}) {
+				panic("deprecated. uses 'show_meta_sections_ctx'")
+			},
+			"show_meta_sections_ctx": func(this *Context, meta *Meta) []*Section {
+				return this.showMetaSections(meta)
+			},
+			"new_meta_sections": func(...interface{}) {
+				panic("deprecated. uses 'new_meta_sections_ctx'")
+			},
+			"new_meta_sections_ctx": func(this *Context, meta *Meta) []*Section {
+				return this.newMetaSections(meta)
+			},
+			"edit_meta_sections": func(...interface{}) {
+				panic("deprecated. uses 'edit_meta_sections_ctx'")
+			},
+			"edit_meta_sections_ctx": func(self *Context, meta *Meta) []*Section {
+				_ = this
+				return self.editMetaSections(meta)
+			},
+			"convert_sections_to_metas": func(...interface{}) {
+				panic("deprecated. uses 'convert_sections_to_metas_ctx'")
+			},
+			"convert_sections_to_metas_ctx": func(this *Context, secs []*Section) []*Meta {
+				return this.convertSectionToMetas(secs)
+			},
+			"convert_sections_to_metas_table": func(this *Context, secs []*Section) *MetasTable {
+				return this.convertSectionToMetasTable(this.Resource, secs)
+			},
+			"has_create_permission": hasPermission(this, func(this *Context, p Permissioner) bool {
+				return this.hasCreatePermission(p)
+			}),
+			"has_read_permission": hasPermission(this, func(this *Context, p Permissioner) bool {
+				return this.hasReadPermission(p)
+			}),
+			"has_rec_read_permission": hasRecordPermission(this, func(this *Context) bool {
+				return this.HasPermission(this.Resource, roles.Read) && !this.Resource.HasRecordPermission(roles.Read, this.Context, this.Result).Deny()
+			}),
+			"has_update_permission": hasPermission(this, func(this *Context, p Permissioner) bool {
+				return this.hasUpdatePermission(p)
+			}),
+			"has_rec_update_permission": hasRecordPermission(this, func(this *Context) bool {
+				return this.HasPermission(this.Resource, roles.Update) && !this.Resource.HasRecordPermission(roles.Update, this.Context, this.Result).Deny()
+			}),
+			"has_delete_permission": hasPermission(this, func(this *Context, p Permissioner) bool {
+				return this.hasDeletePermission(p)
+			}),
+			"has_rec_delete_permission": hasRecordPermission(this, func(this *Context) bool {
+				return this.HasPermission(this.Resource, roles.Delete) && !this.Resource.HasRecordPermission(roles.Delete, this.Context, this.Result).Deny()
+			}),
 			"read_permission_filter": this.readPermissionFilter,
 
 			"qor_theme_class": this.themesClass,
@@ -300,7 +488,7 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			"load_resource_stylesheets": this.loadResourceStyleSheets,
 			"load_resource_javascripts": this.loadResourceJavaScripts,
 			"load_print_mode_stylesheeets": func() template.HTML {
-				if _, ok := this.Request.URL.Query()["print"]; ok {
+				if this.Type.Has(PRINT) {
 					return this.styleSheetTag("print")
 				}
 				return ""
@@ -319,11 +507,12 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			"locale": func() string {
 				return this.Locale
 			},
-			"time_loc": func() *time.Location {
-				return this.TimeLocation
-			},
+			"time_loc": this.TimeLocation,
 			"crumbs": func() []core.Breadcrumb {
 				return this.Breadcrumbs().ItemsWithoutLast()
+			},
+			"current_crumb": func() core.Breadcrumb {
+				return this.Breadcrumbs().Last()
 			},
 			"resource_key": func() aorm.ID {
 				return this.ResourceID
@@ -374,13 +563,13 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			},
 
 			"record_frame": func(s *template.State, res *Resource, record interface{}, name string) {
-				if renderer := res.GetFrameRenderer(name); renderer != nil {
+				if renderer := GetFrameRenderer(res, name); renderer != nil {
 					if err := renderer.Render(this, s); err != nil {
 						panic(errors.Wrapf(err, "record frame renderer of %q", name))
 					}
 					return
 				}
-				templateNames := res.GetFrameRendererTemplateName(this, name)
+				templateNames := GetFrameRendererTemplateName(res, this, name)
 				if this.Anonymous() {
 					var newTemplateNames []string
 					for _, templateName := range templateNames {
@@ -388,8 +577,19 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 					}
 					templateNames = newTemplateNames
 				}
+
+				var gt = func(name string) (*template.Executor, error) {
+					return this.GetTemplate(name)
+				}
+
+				if this.Type.Has(PRINT) {
+					gt = func(name string) (*template.Executor, error) {
+						return this.GetTemplate(name+".print", name)
+					}
+				}
+
 				for _, templateName := range templateNames {
-					if executor, err := this.GetTemplate(templateName); err == nil {
+					if executor, err := gt(templateName); err == nil {
 						defer this.WithResult(record)()
 						if err = executor.Execute(s.Writer(), this); err != nil {
 							panic(errors.Wrapf(err, "record frame render of %q", name))
@@ -397,6 +597,45 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 						return
 					} else if !oscommon.IsNotFound(err) {
 						panic(errors.Wrapf(err, "record frame render of %q", name))
+					}
+				}
+			},
+
+			"action_frame": func(s *template.State, arg *ActionArgument, name string) {
+				if renderer := GetFrameRenderer(arg.Action, name); renderer != nil {
+					if err := renderer.Render(this, s); err != nil {
+						panic(errors.Wrapf(err, "action argument frame renderer of %q", name))
+					}
+					return
+				}
+				templateNames := GetFrameRendererTemplateName(arg.Action, this, name)
+				if this.Anonymous() {
+					var newTemplateNames []string
+					for _, templateName := range templateNames {
+						newTemplateNames = append(newTemplateNames, path.Join(path.Dir(templateName), AnonymousDirName, path.Base(templateName)), templateName)
+					}
+					templateNames = newTemplateNames
+				}
+
+				var gt = func(name string) (*template.Executor, error) {
+					return this.GetTemplate(name)
+				}
+
+				if this.Type.Has(PRINT) {
+					gt = func(name string) (*template.Executor, error) {
+						return this.GetTemplate(name+".print", name)
+					}
+				}
+
+				for _, templateName := range templateNames {
+					if executor, err := gt(templateName); err == nil {
+						defer this.WithResult(arg)()
+						if err = executor.Execute(s.Writer(), this); err != nil {
+							panic(errors.Wrapf(err, "action argument frame render of %q", name))
+						}
+						return
+					} else if !oscommon.IsNotFound(err) {
+						panic(errors.Wrapf(err, "action argument frame render of %q", name))
 					}
 				}
 			},
@@ -469,6 +708,43 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 					return this.MediaURL("default", pth)
 				}
 				return this.MediaURL(storageName[0], pth)
+			},
+
+			"auth_alternated": func() bool {
+				return auth.IsAlternated(this.Admin.Auth.Auth(), this.Context)
+			},
+
+			"admin_ctx_set_section_layout": func(ctx *Context, layout string) {
+				ctx.SectionLayout = layout
+			},
+
+			"admin_ctx_set_type": func(ctx *Context, typ ...interface{}) string {
+				ctx.Type = 0
+				for _, t := range typ {
+					switch t := t.(type) {
+					case ContextType:
+						ctx.Type |= t
+					case string:
+						ctx.Type.ParseMerge(t)
+					}
+				}
+				return ""
+			},
+
+			"now": func(layout ...string) template.HTML {
+				n := this.Now()
+				for _, l := range layout {
+					return template.HTML(n.Format(ParseTimeLayout(l)))
+				}
+				return template.HTML(n.String())
+			},
+
+			"slice_value_get_deleted_map": func(v interface{}) map[string]bool {
+				switch t := v.(type) {
+				case *resource.SliceValue:
+					return t.DeletedMap()
+				}
+				return make(map[string]bool, 0)
 			},
 		},
 		this.Admin.funcMaps,

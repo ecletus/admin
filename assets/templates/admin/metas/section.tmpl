@@ -1,9 +1,18 @@
 {{define "rows"}}
     {{range .Rows}}
-        {{$columnsHTML := (trim .ColumnsHTML)}}
-        {{if $columnsHTML}}
-            <div class="qor-form-section-rows qor-section-columns-{{.Length}} clearfix">
-                {{.ColumnsHTML}}
+        {{wrap -}}
+            {{range .}}
+                {{wrap -}}
+                  {{.}}
+                {{- begin}}
+                    <div class="sec-col"><div>
+                {{after}}
+                    </div></div>
+                {{end}}
+            {{end}}
+        {{- begin}}
+            <div class="sec-row">
+        {{after}}
             </div>
         {{end}}
     {{end}}

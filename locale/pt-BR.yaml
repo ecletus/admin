@@ -1,12 +1,14 @@
 view_site: Visualizar Site
-recordes:
+records:
   count: "%v registros"
+  deletion_empty: "Não existem registros para serem EXCLUÍDOS"
 menus:
   Dashboard: Painel
   Site Management: Configuração do Site
   Actions: Ações
   Resources: Recursos
   Deleted: Excluídos
+  Print: Imprimir
 form:
   successfully_created~: "{{.}} Cadastrado com sucesso!"
   successfully_updated~: "{{.}} Atualizado com sucesso!"
@@ -26,6 +28,7 @@ form:
   cancel_edit: Cancelar Edição
   save_changes: Salvar Alterações
   are_you_sure: Você tem certeza?
+  are_you_sure_not_undo: "<strong>ATENÇÃO:</strong> Esta ação NÃO poderá ser DESFEITA. Você tem certeza?"
   submit: Enviar
   select_many_hint: item(ns) selecionados
   select_many_hint_button: FEITO
@@ -44,6 +47,9 @@ form:
     next: Próximo
     prev: Voltar
     done: Fim
+  range:
+    start: De
+    end: Até
 action:
   new: "Cadastrar {{.}}"
   edit: "Editar {{.}}"
@@ -64,6 +70,8 @@ actions:
   bulk_delete: Excluir vários
   restore: Restaurar
   bulk_restore: Restaurar vários
+  executed_successfully: Ação "%s" executada com sucesso!
+  executed_failed: Ação "%s" falhou.
   header:
     actions: Ações
 search_center:
@@ -131,7 +139,9 @@ metas:
     placeholder: Escolha uma Opção
 
   date:
-    format: dd/mm/yyyy
+    format: dd/MM/yyyy
+  datetime:
+    format: dd/MM/yyyy hh:mm
 
   Descriptify: Descrição
 
@@ -151,3 +161,6 @@ errors:
 
 
 lovely_message: "Graciosamente desenvolvido com <a href=\"https://ecletus.unapu.com\">Ecletus</a>"
+
+common:
+  all: Tudo

@@ -37,7 +37,7 @@ func (this *MaskConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	meta := metaor.(*Meta)
 	meta.Type = "string_mask"
 	if meta.Setter == nil && this.Unmask != nil {
-		meta.Meta.Setter = resource.SingleFieldSetter(meta.Meta, meta.FieldName, func(_ bool, field reflect.Value, metaValue *resource.MetaValue, context *core.Context, record interface{}) (err error) {
+		meta.Meta.Setter = resource.SingleFieldSetter(meta.FieldName, func(_ bool, field reflect.Value, metaValue *resource.MetaValue, context *core.Context, record interface{}) (err error) {
 			if value := metaValue.FirstStringValue(); value == "" {
 				value = this.Unmask(context, record, value)
 				utils.SetNonZero(field, value)
@@ -67,7 +67,7 @@ func init() {
 			if maskTags.Flag("reverse") {
 				code += ", {reverse: true}"
 			} else if options := maskTags["options"]; options != "" {
-				code += ", "+options
+				code += ", " + options
 			}
 			code += ")"
 			m := &MaskConfig{JsCode: code}

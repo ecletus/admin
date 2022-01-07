@@ -1,28 +1,37 @@
 package admin
 
 import (
+	"github.com/moisespsena-go/maps"
 	"github.com/moisespsena/template/text/template"
 
 	"github.com/ecletus/core"
 )
 
-type frameRendererKey struct{ name string }
-
-func (this *Resource) SetFrameRenderer(name string, renderer FrameRenderer) {
-	this.Data.Set(frameRendererKey{name}, renderer)
+type PathTemplater interface {
+	core.Configor
+	GetTemplatePaths() []string
+	GetData() maps.Interface
 }
 
-func (this *Resource) GetFrameRenderer(name string) (renderer FrameRenderer) {
-	if v := this.Data.MustGetInterface(frameRendererKey{name}); v != nil {
+type frameRendererKey struct{ name string }
+
+func SetFrameRenderer(ptr PathTemplater, name string, renderer FrameRenderer) {
+	ptr.GetData().Set(frameRendererKey{name}, renderer)
+}
+
+func GetFrameRenderer(ptr PathTemplater, name string) (renderer FrameRenderer) {
+	if v, ok := ptr.GetData().Get(frameRendererKey{name}); ok && v != nil {
 		return v.(FrameRenderer)
 	}
 	return
 }
 
-func (this *Resource) GetFrameRendererTemplateName(ctx *Context, name string) (templateNames []string) {
-	templateNames = append(templateNames, this.TemplatePath + "/frames/" + name)
-	if f := GetOptFrameRendererTemplateNames(this, name); f != nil {
-		templateNames = f(ctx, templateNames)
+func GetFrameRendererTemplateName(ptr PathTemplater, ctx *Context, name string) (templateNames []string) {
+	for _, pth := range ptr.GetTemplatePaths() {
+		templateNames = append(templateNames, pth+"/frames/"+name)
+		if f := GetOptFrameRendererTemplateNames(ptr, name); f != nil {
+			templateNames = f(ctx, templateNames)
+		}
 	}
 	return
 }
@@ -49,7 +58,7 @@ func OptFrameRendererTemplateNames(frameName string, f func(ctx *Context, names 
 }
 func GetOptFrameRendererTemplateNames(configor core.Configor, frameName string) (f func(ctx *Context, names []string) (templateNames []string)) {
 	if value, ok := configor.ConfigGet("frame_renderer:" + frameName + ":template"); ok {
-		f = value.(func(ctx *Context, names []string) ([]string))
+		f = value.(func(ctx *Context, names []string) []string)
 	}
 	return
 }

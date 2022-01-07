@@ -54,10 +54,10 @@ func (this *ResourceControllerBuilder) HasDefaultAction(name string) (ok bool) {
 }
 
 func (this *ResourceControllerBuilder) RegisterDefaultRouters() {
-	if this.Resource.Config.Singleton {
-		this.RegisterDefaultSingletonRouters()
-	} else if this.Resource.Config.Wizard != nil {
+	if this.Resource.Config.Wizard != nil {
 		this.RegisterWizardRouters()
+	} else if this.Resource.Config.Singleton {
+		this.RegisterDefaultSingletonRouters()
 	} else {
 		this.RegisterDefaultNormalRouters()
 	}
@@ -141,7 +141,7 @@ func (this *ResourceControllerBuilder) HasMode(mode roles.PermissionMode) (ok *b
 	var b bool
 	switch mode {
 	case roles.Create:
-		b = this.Resource.createWizard != nil || this.IsCreator()
+		b = len(this.Resource.createWizards) > 0 || this.IsCreator()
 	case roles.Read:
 		b = this.IsReader()
 	case roles.Update:

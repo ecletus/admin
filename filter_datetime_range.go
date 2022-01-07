@@ -1,31 +1,44 @@
 package admin
 
-import (
-	"time"
-)
-
 type TimeRange struct {
-	Start, End time.Time
+	Start, End TimeValue
+}
+
+func (t TimeRange) UTC() TimeRange {
+	return TimeRange{t.Start.UTC(), t.End.UTC()}
+}
+
+func (t TimeRange) Date() TimeRange {
+	return TimeRange{t.Start.ToDate(), t.End.ToDate()}
+}
+
+func (t TimeRange) TimeStamp() TimeRange {
+	return TimeRange{t.Start.ToTimeStamp(), t.End.ToTimeStamp()}
+}
+
+func (t TimeRange) TimeStampTz() TimeRange {
+	return TimeRange{t.Start.ToTimeStampTz(), t.End.ToTimeStampTz()}
+}
+
+func (t TimeRange) Time() TimeRange {
+	return TimeRange{t.Start.ToTime(), t.End.ToTime()}
+}
+
+func (t TimeRange) TimeTz() TimeRange {
+	return TimeRange{t.Start.ToTimeTz(), t.End.ToTimeTz()}
+}
+
+func (t TimeRange) IsZero() bool {
+	return t.Start.IsZero() && t.End.IsZero()
 }
 
 type FilterDateTimeRange struct {
 	DateTimeConfig
 }
 
-func (this *FilterDateTimeRange) GetValue(arg *FilterArgument) (pair interface{}, err error) {
-	var times []time.Time
-	if times, err = ParseTimeArgs(this.Layout(arg.Context), this.LocationFallbackValue(arg.Context),
-		arg.Value.GetString("Start"), arg.Value.GetString("End")); err != nil {
-		return
-	}
-
-	return TimeRange{times[0], times[1]}, nil
-}
-
 func (this *FilterDateTimeRange) ConfigureQORAdminFilter(filter *Filter) {
-	filter.Type = "datetime_range"
-	if filter.Valuer == nil {
-		filter.Valuer = this.GetValue
+	if filter.Type == "" {
+		filter.Type = "datetime_range"
 	}
-	this.DateTimeConfig.Configure()
+	this.DateTimeConfig.ConfigureQORAdminFilter(filter)
 }

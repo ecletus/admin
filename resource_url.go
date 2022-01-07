@@ -2,17 +2,20 @@ package admin
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
+
+	"github.com/moisespsena-go/maps"
 
 	"github.com/ecletus/core/utils"
 	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena-go/maps"
 )
 
 type ResourceURL struct {
 	Resource       *Resource
 	Scopes         []string
 	Filters        map[string]string
+	FilterF        map[string]func(ctx *Context) string
 	DynamicFilters func(context *Context, filters map[string]string)
 	Layout         string
 	Display        string
@@ -22,68 +25,89 @@ type ResourceURL struct {
 	FormatURI      func(data *ResourceURL, context *Context, uri string) string
 	Scheme         string
 	Suffix         string
+	URLHandlers    []func(ctx *Context, uri string, query *[]string)
 }
 
-func (url *ResourceURL) Dependency(dep ...interface{}) *ResourceURL {
-	depLoop:
+func (this *ResourceURL) Scope(scope ...string) {
+	this.Scopes = append(this.Scopes, scope...)
+}
+
+func (this *ResourceURL) Handler(f func(ctx *Context, uri string, query *[]string)) *ResourceURL {
+	this.URLHandlers = append(this.URLHandlers, f)
+	return this
+}
+
+func (this *ResourceURL) Dependency(dep ...interface{}) *ResourceURL {
+depLoop:
 	for _, dep := range dep {
 		switch dp := dep.(type) {
 		case *DependencyParent:
-			for i, other := range url.Dependencies {
+			for i, other := range this.Dependencies {
 				if parent, ok := other.(*DependencyParent); ok && parent.Meta.Name == dp.Meta.Name {
-					url.Dependencies[i] = dp
+					this.Dependencies[i] = dp
 					continue depLoop
 				}
 			}
 		case *DependencyQuery:
-			for i, other := range url.Dependencies {
+			for i, other := range this.Dependencies {
 				if parent, ok := other.(*DependencyQuery); ok && parent.Meta.Name == dp.Meta.Name {
-					url.Dependencies[i] = dp
+					this.Dependencies[i] = dp
 					continue depLoop
 				}
 			}
 		case *DependencyValue:
-			for i, other := range url.Dependencies {
+			for i, other := range this.Dependencies {
 				if parent, ok := other.(*DependencyValue); ok && parent.Param == dp.Param {
-					url.Dependencies[i] = dp
+					this.Dependencies[i] = dp
 					continue depLoop
 				}
 			}
 		}
-		url.Dependencies = append(url.Dependencies, dep)
+		this.Dependencies = append(this.Dependencies, dep)
 	}
-	return url
+	return this
 }
 
-func (url *ResourceURL) Filter(name string, value string) *ResourceURL {
-	if url.Filters == nil {
-		url.Filters = make(map[string]string)
+func (this *ResourceURL) Filter(name string, value string) *ResourceURL {
+	if this.Filters == nil {
+		this.Filters = make(map[string]string)
 	}
-	url.Filters[name] = value
-	return url
+	this.Filters[name] = value
+	return this
 }
 
-func (url *ResourceURL) With(f func(r *ResourceURL)) *ResourceURL {
-	f(url)
-	return url
+func (this *ResourceURL) FilterFunc(name string, value func(ctx *Context) string) *ResourceURL {
+	if this.FilterF == nil {
+		this.FilterF = make(map[string]func(ctx *Context) string)
+	}
+	this.FilterF[name] = value
+	return this
 }
 
-func (url *ResourceURL) Basic() *ResourceURL {
-	url.Layout = BASIC_LAYOUT_HTML_WITH_ICON
-	return url
+func (this *ResourceURL) With(f func(r *ResourceURL)) *ResourceURL {
+	f(this)
+	return this
+}
+
+func (this *ResourceURL) Basic() *ResourceURL {
+	this.Layout = BASIC_LAYOUT_HTML_WITH_ICON
+	return this
 }
 
 // GenURL Convert to URL string using dependencies
-func (url *ResourceURL) GenURL(context *Context, dependencies []interface{}) string {
-	var parents []aorm.ID
-	var query []string
+func (this *ResourceURL) GenURL(context *Context, dependencies []interface{}) string {
+	var (
+		parents []aorm.ID
+		query   []string
+		e       = url.QueryEscape
+	)
 
 	if len(dependencies) > 0 {
 		for _, dep := range dependencies {
 			switch dp := dep.(type) {
 			case *DependencyParent:
 				if len(parents) == 0 {
-					parents = make([]aorm.ID, url.Resource.PathLevel, url.Resource.PathLevel)
+					parents = make([]aorm.ID, this.Resource.PathLevel, this.Resource.PathLevel)
 				}
 				if dp.Value != nil {
 					parents[dp.Meta.Resource.PathLevel] = dp.Value
@@ -93,14 +117,14 @@ func (url *ResourceURL) GenURL(context *Context, dependencies []interface{}) str
 			case *DependencyQuery:
 				query = append(query, dp.Param+"={"+dp.Meta.Name+"}")
 			case *DependencyValue:
-				query = append(query, dp.Param+"="+fmt.Sprint(dp.Value))
+				query = append(query, dp.Param+"="+e(fmt.Sprint(dp.Value)))
 			}
 		}
 	}
 
 	if len(parents) > 0 {
-		parent := url.Resource
-		for pathLevel := url.Resource.PathLevel - 1; pathLevel >= 0; pathLevel-- {
+		parent := this.Resource
+		for pathLevel := this.Resource.PathLevel - 1; pathLevel >= 0; pathLevel-- {
 			parent = parent.ParentResource
 			if parents[pathLevel].IsZero() {
 				parents[pathLevel] = aorm.FakeID(context.URLParam(parent.ParamIDName()))
@@ -109,57 +133,67 @@ func (url *ResourceURL) GenURL(context *Context, dependencies []interface{}) str
 	}
 
 	var uri string
-	if url.recorde {
-		uri = url.Resource.GetContextURI(context.Context, aorm.FakeID("{ID}"), parents...)
+	if this.recorde {
+		uri = this.Resource.GetContextURI(context, aorm.FakeID("{ID}"), parents...)
 	} else {
-		uri = url.Resource.GetContextIndexURI(context.Context, parents...)
+		uri = this.Resource.GetContextIndexURI(context, parents...)
 	}
 
-	if url.Scheme != "" {
-		s := url.Resource.GetSchemeByName(url.Scheme)
+	if this.Scheme != "" {
+		s := this.Resource.GetSchemeByName(this.Scheme)
 		uri += s.Path()
 	}
 
-	uri += url.Suffix
+	uri += this.Suffix
 
-	if url.FormatURI != nil {
-		uri = url.FormatURI(url, context, uri)
+	if this.FormatURI != nil {
+		uri = this.FormatURI(this, context, uri)
 	}
 
-	if url.Layout != "" {
-		query = append(query, P_LAYOUT+"="+url.Layout)
+	if this.Layout != "" {
+		query = append(query, P_LAYOUT+"="+e(this.Layout))
 	}
 
-	if url.Display != "" {
-		query = append(query, P_DISPLAY+"="+url.Display)
+	if this.Display != "" {
+		query = append(query, P_DISPLAY+"="+e(this.Display))
 	}
 
-	for _, scope := range url.Scopes {
-		query = append(query, "scopes="+scope)
+	for _, scope := range this.Scopes {
+		query = append(query, "scope[]="+e(scope))
 	}
 
-	for fname, fvalue := range url.Filters {
-		query = append(query, "filtersByName["+fname+"].Value="+fvalue)
+	for fname, fvalue := range this.Filters {
+		query = append(query, "filter["+fname+"].Value="+e(fvalue))
 	}
 
-	if url.DynamicFilters != nil {
-		dynamicFilters := make(map[string]string)
-		url.DynamicFilters(context, dynamicFilters)
-
-		for fname, fvalue := range dynamicFilters {
-			query = append(query, "filtersByName["+fname+"].Value="+fvalue)
+	if this.FilterF != nil {
+		for fname, fvalue := range this.FilterF {
+			query = append(query, "filter["+fname+"].Value="+e(fvalue(context)))
 		}
 	}
 
-	for name, value := range url.Query {
+	if this.DynamicFilters != nil {
+		dynamicFilters := make(map[string]string)
+		this.DynamicFilters(context, dynamicFilters)
+
+		for fname, fvalue := range dynamicFilters {
+			query = append(query, "filter["+fname+"].Value="+e(fvalue))
+		}
+	}
+
+	for name, value := range this.Query {
 		switch t := value.(type) {
 		case func(ctx *Context) (string, bool):
 			if value, ok := t(context); ok {
-				query = append(query, name+"="+value)
+				query = append(query, name+"="+e(value))
 			}
 		default:
-			query = append(query, name+"="+utils.ToString(value))
+			query = append(query, name+"="+e(utils.ToString(value)))
 		}
+	}
+
+	for _, handler := range this.URLHandlers {
+		handler(context, uri, &query)
 	}
 
 	if len(query) > 0 {
@@ -170,6 +204,6 @@ func (url *ResourceURL) GenURL(context *Context, dependencies []interface{}) str
 }
 
 // URL Convert to URL string
-func (url *ResourceURL) URL(context *Context,dependencies ...interface{}) string {
-	return url.GenURL(context, append(url.Dependencies, dependencies...))
+func (this *ResourceURL) URL(context *Context, dependencies ...interface{}) string {
+	return this.GenURL(context, append(this.Dependencies, dependencies...))
 }

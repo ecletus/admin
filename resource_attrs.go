@@ -24,7 +24,7 @@ func (this *Resource) allAttrs() []string {
 			continue
 		}
 
-		if (field.IsNormal || field.Relationship != nil) && !field.IsIgnored {
+		if (field.IsNormal || field.Relationship != nil) && (field.IsEmbedded || !field.IsIgnored) {
 			attrs = append(attrs, field.Name)
 			continue
 		}

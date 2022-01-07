@@ -20,6 +20,10 @@ type filterField struct {
 }
 
 func (f filterField) Apply(arg interface{}) (query string, argx interface{}) {
+	if f.Field.Applyer != nil {
+		return f.Field.Applyer(f.Field.FormatTerm(arg))
+	}
+
 	op := f.Operation
 	fieldName := f.Field.QueryField()
 
@@ -65,22 +69,27 @@ func (f filterField) Apply(arg interface{}) (query string, argx interface{}) {
 	return cb(), f.Field.FormatTerm(arg)
 }
 
-func filterResourceByFields(res *Resource, filterFields []filterField, keyword string, db *aorm.DB, context *core.Context) *aorm.DB {
+func filterResourceByFields(res *Resource, filterFields []*filterField, keyword string, db *aorm.DB, context *core.Context) *aorm.DB {
 	var (
 		joinConditionsMap  = map[string][]string{}
 		conditions         []string
 		keywords           []interface{}
-		generateConditions func(field filterField, scope *aorm.Scope)
+		wheres             []interface{}
+		generateConditions func(field *filterField, scope *aorm.Scope)
 	)
 
-	generateConditions = func(filterfield filterField, scope *aorm.Scope) {
-		field := filterfield.Field.Struct
+	generateConditions = func(ff *filterField, scope *aorm.Scope) {
+		field := ff.Field.Struct
 
 		apply := func(kw interface{}) {
-			query, arg := filterfield.Apply(kw)
-			conditions = append(conditions, query)
-			if arg != nil {
-				keywords = append(keywords, arg)
+			query, arg := ff.Apply(kw)
+			if query != "" {
+				conditions = append(conditions, query)
+				if arg != nil {
+					keywords = append(keywords, arg)
+				}
+			} else if arg != nil {
+				wheres = append(wheres, arg.(aorm.WhereClauser))
 			}
 		}
 
@@ -113,8 +122,8 @@ func filterResourceByFields(res *Resource, filterFields []filterField, keyword s
 		}
 
 		appendStruct := func() {
-			v := reflect.New(field.Struct.Type).Elem()
-			switch v.Interface().(type) {
+			v := reflect.New(field.Struct.Type)
+			switch v.Elem().Interface().(type) {
 			case time.Time, *time.Time:
 				appendTime()
 			case sql.NullInt64:
@@ -126,6 +135,11 @@ func filterResourceByFields(res *Resource, filterFields []filterField, keyword s
 			case sql.NullBool:
 				appendBool()
 			default:
+				switch t := v.Interface().(type) {
+				case aorm.StringParser:
+					t.ParseString(keyword)
+					apply(t)
+				}
 				// if we don't recognize the struct type, just ignore it
 			}
 		}
@@ -143,6 +157,13 @@ func filterResourceByFields(res *Resource, filterFields []filterField, keyword s
 			appendStruct()
 		default:
 			apply(keyword)
+		}
+
+		if ff.Field.InlineQueryName[0] == '{' {
+			// has inline preload
+			if preloadName := ff.Field.InlineQueryName[1:strings.IndexByte(ff.Field.InlineQueryName, '}')]; preloadName != "" {
+				db = db.InlinePreload(preloadName)
+			}
 		}
 	}
 
@@ -162,7 +183,11 @@ func filterResourceByFields(res *Resource, filterFields []filterField, keyword s
 
 	// search conditions
 	if len(conditions) > 0 {
-		return db.Where(aorm.IQ(strings.Join(conditions, " OR ")), keywords...)
+		db = db.Where(aorm.IQ(strings.Join(conditions, " OR ")), keywords...)
+	}
+
+	for _, c := range wheres {
+		db = db.Where(c)
 	}
 
 	return db

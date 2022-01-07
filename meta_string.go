@@ -41,17 +41,28 @@ func (this *StringConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	}
 
 	if meta.FormattedValuer == nil {
-		meta.SetFormattedValuer(func(value interface{}, context *core.Context) interface{} {
-			switch str := meta.Value(context, value).(type) {
+		meta.SetFormattedValuer(func(record interface{}, context *core.Context) *FormattedValue {
+			value := meta.Value(context, record)
+			if value == nil {
+				return nil
+			}
+			switch str := value.(type) {
 			case *string:
 				if str != nil {
-					return *str
+					return (&FormattedValue{Record: record, Raw: str, Value: *str}).SetNonZero()
 				}
-				return ""
+				return nil
 			case string:
-				return str
+				if str == "" {
+					return nil
+				}
+				return (&FormattedValue{Record: record, Raw: str, Value: str}).SetNonZero()
 			default:
-				return str
+				fv := (&FormattedValue{Record: record, Raw: value}).SetNonZero()
+				if meta.Tags.Flag("SAFE") {
+					fv.SafeValue = ContextFromCoreContext(context).Stringify(value)
+				}
+				return fv
 			}
 		})
 	}

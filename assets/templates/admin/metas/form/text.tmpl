@@ -1,31 +1,49 @@
-<div class="qor-field">
-  <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
-    <label class="qor-field__label" for="{{.InputId}}">
-      {{- meta_record_label .Meta .Record -}}{{if  and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
-      {{if .Meta.Config.Copy -}}
-      <a data-content-copy data-value-b64="{{b64 .Value}}" title="{{t (admin_i18n ":messages.copy_to_clipboard")}}"><i class="material-icons">file_copy</i></a>
-      {{- end}}
-    </label>
-    {{$help := meta_record_help .Meta .Record}}
-    {{if $help}}
-      <div class="qor-field__help">{{$help}}</div>
+<div class="qor-field" data-meta-type="{{.MetaType}}">
+  {{if .ReadOnly}}
+    {{if not .ModeSingle}}
+      <label class="qor-field__label" for="{{.InputId}}">
+        {{meta_record_label .Meta .Record}}
+      </label>
     {{end}}
-
-
-    {{if .ReadOnly}}
-      <div class="qor-field__value"
-              {{$style := .Meta.Config.WordBreak.Style}}
-              {{if $style}}
-                style="word-break: {{$style}}"
-              {{end}}
-      >
-          {{.Value}}
+    <div class="qor-field__value{{if .MetaValue.Severity}} severity_{{.MetaValue.Severity}} severity--text severity--bg{{end}}" {{$style := .Meta.Config.WordBreak.Style}}{{if $style}}style="word-break: {{$style}}"{{end}}>
+      {{.Value}}
+    </div>
+  {{else}}
+    <div class="qor-field__edit mdl-textfield mdl-textfield--full-width mdl-js-textfield mdl-textfield--floating-label">
+      {{$label := ""}}
+      {{$help := ""}}
+      {{$value := raw_value_of .Record .Meta}}
+      <div class="qor-field__row">
+        <textarea class="mdl-textfield__input qor-js-autoheight" id="{{.InputId}}" name="{{.InputName}}" rows="1">{{.Value}}</textarea>
+        {{if not .ModeSingle}}
+          {{$label = meta_record_label .Meta .Record}}
+          {{$help = meta_record_help .Meta .Record .ReadOnly}}
+          {{- if $help}}
+            <span data-dialog="#{{.InputId}}--tooltip" class="material-icons qor-meta-help__icon">help</span>
+          {{end -}}
+        {{end}}
+        {{if .Meta.Config.Copy -}}
+          <a data-content-copy data-value-b64="{{b64 .Value}}" title="{{t (admin_i18n ":messages.copy_to_clipboard")}}"><i class="material-icons">file_copy</i></a>
+        {{- end}}
       </div>
-    {{else}}
-      <div class="qor-field__show">{{.Value}}</div>
-      <div class="qor-field__edit">
-        <textarea class="mdl-textfield__input qor-js-autoheight" id="{{.InputId}}" name="{{.InputName}}" rows="1" {{if not (has_update_permission .Meta)}}disabled{{end}}>{{.Value}}</textarea>
-      </div>
-    {{end}}
-  </div>
+
+      {{if not .ModeSingle}}
+        <label class="mdl-textfield__label" for="{{.InputId}}">
+          {{- $label -}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end -}}
+        </label>
+
+        {{if $help}}
+          <dialog id="{{.InputId}}--tooltip" class="qo-modal mdl-dialog" >
+            <h4 class="mdl-dialog__title">{{$label}}</h4>
+            <div class="mdl-dialog__content">
+              {{$help}}
+            </div>
+            <div class="mdl-dialog__actions">
+              <button type="button" class="close mdl-button mdl-js-button mdl-button--fab mdl-button--mini-fab mdl-button--colored"><i class="material-icons">close</i></button>
+            </div>
+          </dialog>
+        {{end}}
+      {{end}}
+    </div>
+  {{end}}
 </div>

@@ -1,0 +1,7 @@
+{{arg | alert -}}
+     {{t "github_com:ecletus:admin:layout.record_not_found"}}
+{{- end}}
+<div class="qor-page__body">
+  {{record_frame .Resource .Result "show/page_start"}}
+  {{include "shared/alerts"}}
+</div>

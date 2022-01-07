@@ -1,0 +1,6 @@
+[submodule "_git_submodules/material-design-icons"]
+	path = _git_submodules/material-design-icons
+	url = https://github.com/google/material-design-icons
+[submodule "_git_submodules/material-design-lite"]
+	path = _git_submodules/material-design-lite
+	url = https://github.com/google/material-design-lite

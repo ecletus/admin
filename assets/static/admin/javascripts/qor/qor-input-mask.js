@@ -56,9 +56,9 @@
 
     QorInputMask.plugin = function(options) {
         return this.each(function() {
-            var $this = $(this);
-            var data = $this.data(NAMESPACE);
-            var fn;
+            let $this = $(this),
+                data = $this.data(NAMESPACE),
+                fn;
 
             if (!data) {
                 if (/destroy/.test(options)) {
@@ -79,8 +79,8 @@
     };
 
     $(function() {
-        var selector = '[data-masker]';
-        var options = {};
+        let selector = '[data-masker]',
+            options = {};
 
         $(document)
             .on(EVENT_DISABLE, function(e) {

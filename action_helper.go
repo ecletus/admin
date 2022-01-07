@@ -9,6 +9,7 @@ func ActionIndexBulkExport(res *Resource, action *Action, handler func(arg *Acti
 	action.TargetWindow = true
 	action.Modes = []string{"index"}
 	action.Method = http.MethodPost
+	action.FormType = ActionFormShow
 
 	if action.Name == "" {
 		action.Name = "bulk_export"

@@ -1,9 +1,9 @@
 package admin
 
 import (
-	"github.com/ecletus/roles"
+	"reflect"
 
-	"github.com/ecletus/core"
+	"github.com/ecletus/roles"
 )
 
 func (this *Context) DefaultDenyMode() bool {
@@ -13,33 +13,55 @@ func (this *Context) DefaultDenyMode() bool {
 	return this.Admin.DefaultDenyMode
 }
 
-func (this *Context) HasPermission(permissioner core.Permissioner, mode roles.PermissionMode, modeN ...roles.PermissionMode) (ok bool) {
+func (this *Context) HasPermission(permissioner Permissioner, mode roles.PermissionMode, modeN ...roles.PermissionMode) (ok bool) {
 	if res, ok := permissioner.(*Resource); ok {
 		if ok := res.ControllerBuilder.HasModes(mode, modeN...); ok != nil && !*ok {
 			return false
 		}
+		if mode == roles.Create {
+			if res.Config.CreationAllowed != nil && !res.Config.CreationAllowed(this) {
+				return false
+			}
+		}
 	}
-	if rp, ok := permissioner.(core.RecordPermissioner); ok {
-		if perm := rp.HasRecordPermission(mode, this.Context, this.Result); perm != roles.UNDEF {
+	if rp, ok := permissioner.(RecordPermissioner); ok && this.Result != nil && indirectType(reflect.TypeOf(this.Result)).Kind() == reflect.Struct {
+		if perm := rp.AdminHasRecordPermission(mode, this, this.Result); perm != roles.UNDEF {
 			return perm.Allow()
 		}
 	}
 	if this.IsSuperUser() {
 		return true
 	}
-	if perm := permissioner.HasPermission(mode, this.Context); perm != roles.UNDEF {
+	if perm := permissioner.AdminHasPermission(mode, this); perm != roles.UNDEF {
 		return perm.Allow()
 	}
 	for _, mode := range modeN {
-		if perm := permissioner.HasPermission(mode, this.Context); perm != roles.UNDEF {
+		if perm := permissioner.AdminHasPermission(mode, this); perm != roles.UNDEF {
 			return perm.Allow()
 		}
+	}
+	if _, ok := permissioner.(*Meta); ok {
+		return true
 	}
 	ok = !this.DefaultDenyMode()
 	return
 }
 
-func (this *Context) HasAnyPermission(permissioner core.Permissioner, mode ...roles.PermissionMode) (ok bool) {
+func (this *Context) HasRecordPermission(resource *Resource, record interface{}, mode roles.PermissionMode) (ok bool) {
+	if !this.HasPermission(resource, mode) {
+		return false
+	}
+	if perm := resource.AdminHasRecordPermission(mode, this, record); perm == roles.UNDEF {
+		return true
+	} else {
+		return perm.Allow()
+	}
+}
+func (this *Context) HasAnyPermission(permissioner Permissioner, mode ...roles.PermissionMode) (ok bool) {
+	return this.HasAnyPermissionDefault(permissioner, !this.DefaultDenyMode(), mode...)
+}
+
+func (this *Context) HasAnyPermissionDefault(permissioner Permissioner, defaul bool, mode ...roles.PermissionMode) (ok bool) {
 	if res, ok := permissioner.(*Resource); ok {
 		if ok := res.ControllerBuilder.HasModes(mode[0], mode[1:]...); ok != nil && !*ok {
 			return false
@@ -49,11 +71,11 @@ func (this *Context) HasAnyPermission(permissioner core.Permissioner, mode ...ro
 		return true
 	}
 	for _, mode := range mode {
-		if perm := permissioner.HasPermission(mode, this.Context); perm.Allow() {
-			return true
+		if perm := permissioner.AdminHasPermission(mode, this); perm != roles.UNDEF {
+			return perm.Allow()
 		}
 	}
-	return !this.DefaultDenyMode()
+	return defaul
 }
 
 func (this *Context) HasRolePermission(permissioner roles.Permissioner, mode roles.PermissionMode, modeN ...roles.PermissionMode) (ok bool) {
@@ -71,23 +93,23 @@ func (this *Context) HasRolePermission(permissioner roles.Permissioner, mode rol
 	return !this.DefaultDenyMode()
 }
 
-func (this *Context) hasCreatePermission(permissioner core.Permissioner) bool {
+func (this *Context) hasCreatePermission(permissioner Permissioner) bool {
 	return this.HasPermission(permissioner, roles.Create)
 }
 
-func (this *Context) hasReadPermission(permissioner core.Permissioner) bool {
+func (this *Context) hasReadPermission(permissioner Permissioner) bool {
 	return this.HasPermission(permissioner, roles.Read)
 }
 
-func (this *Context) hasUpdatePermission(permissioner core.Permissioner) bool {
+func (this *Context) hasUpdatePermission(permissioner Permissioner) bool {
 	return this.HasPermission(permissioner, roles.Update)
 }
 
-func (this *Context) hasDeletePermission(permissioner core.Permissioner) bool {
+func (this *Context) hasDeletePermission(permissioner Permissioner) bool {
 	return this.HasPermission(permissioner, roles.Delete)
 }
 
-func (this *Context) readPermissionFilter(permissioners []core.Permissioner, result ...interface{}) (filtered []interface{}) {
+func (this *Context) readPermissionFilter(permissioners []Permissioner, result ...interface{}) (filtered []interface{}) {
 	if len(result) > 0 {
 		defer this.WithResult(result[0])()
 	}
@@ -121,4 +143,8 @@ func (this *Context) AllowedActions(actions []*Action, mode string, records ...i
 		}
 	}
 	return Actions(allowedActions).Sort()
+}
+
+type ContextPermissioner interface {
+	AdminHasContextPermission(mode roles.PermissionMode, ctx *Context) (perm roles.Perm)
 }

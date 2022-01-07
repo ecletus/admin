@@ -152,6 +152,7 @@ func (this *ResourceControllerBuilder) RegisterWizardRouters() {
 		createForm    = vc.Handlers.Require(VA_CREATE_FROM)
 		createHandler = vc.Handlers.Require(VA_CREATE)
 	)
+
 	createForm.Path = "/"
 	createHandler.Path = "/"
 

@@ -52,7 +52,7 @@ func (d *Display) ConfigAdminTheme(res *Resource) {
 
 func (d *Display) GetLayoutName() string {
 	if d.LayoutName == "" {
-		return DEFAULT_LAYOUT
+		return SectionLayoutDefault
 	}
 	return d.LayoutName
 }

@@ -10,7 +10,6 @@
     factory(jQuery);
   }
 })(function ($) {
-
   'use strict';
 
   var location = window.location;
@@ -35,7 +34,10 @@
     },
 
     bind: function () {
-      this.$element.on(EVENT_CLICK, '> thead > tr > th', $.proxy(this.sort, this));
+      if (window.PRINT_MODE) {
+        return;
+      }
+      this.$element.on(EVENT_CLICK, '> thead > tr > th', this.sort.bind(this));
     },
 
     unbind: function () {
@@ -43,6 +45,10 @@
     },
 
     sort: function (e) {
+      if (e.target !== e.currentTarget) {
+        return;
+      }
+
       var $target = $(e.currentTarget);
       var orderBy = $target.data('orderBy');
       var search = location.search;

@@ -38,7 +38,7 @@ func (rr *ResourceRecorde) String() string {
 	}
 	if rr.Recorde != nil {
 		r += " (" + utils.Stringify(rr.Recorde) + ")"
-	} else if rr.Recordes != nil {
+	} else if len(rr.Recordes) > 0 {
 		var ss []string
 		for i, recorde := range rr.Recordes {
 			ss = append(ss, fmt.Sprintf("%d: %s", i+1, utils.Stringify(recorde)))

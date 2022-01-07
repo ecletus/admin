@@ -14,6 +14,35 @@ $zindex-bottomsheets: 1005;
 $zindex-modal: 1010;
 $color-main-header: #0277bd;
 $color-slideout-header: unquote("rgb(#{$color-primary})");
-$color-dash: #ededed;
+$color-dash: #bbb;
 $color-body-bg: #f5f5f5;
+$table-header-bg: #eee;
 $width-bottomsheet: 640px;
+$input-border-width: 1px;
+
+$severity-default-color: null;
+$severity-default-bg: null;
+// Debug means debug or trace information.
+$severity-debug-color: null;
+$severity-debug-bg: null;
+// Info means routine information, such as ongoing status or performance.
+$severity-info-color: rgb(33, 118, 18);
+$severity-info-bg: rgb(222, 255, 217);
+// Notice means normal but significant events, such as start up, shut down, or configuration.
+$severity-notice-color: rgb(0, 112, 170);
+$severity-notice-bg: rgb(171, 224, 253);
+// Warning means events that might cause problems.
+$severity-warning-color: rgb(170, 88, 0);
+$severity-warning-bg: rgb(236, 227, 182);
+// Error means events that are likely to cause problems.
+$severity-error-color: rgb(170, 20, 0);
+$severity-error-bg: rgb(255, 227, 226);
+// Critical means events that cause more severe problems or brief outages.
+$severity-critical-color: rgb(250, 230, 230);
+$severity-critical-bg: rgb(170, 20, 0);
+// Alert means a person must take an action immediately.
+$severity-alert-color: null;
+$severity-alert-bg: null;
+// Emergency means one or more systems are unusable.
+$severity-emergency-color: null;
+$severity-emergency-bg: null;

@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/moisespsena-go/assetfs"
+	"github.com/moisespsena-go/maps"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
@@ -44,6 +45,7 @@ func (selectManyConfig SelectManyConfig) GetTemplate(context *Context, metaType 
 // ConfigureQorMeta configure select many meta
 func (selectManyConfig *SelectManyConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	if meta, ok := metaor.(*Meta); ok {
+		meta.IsCollection = true
 		if selectManyConfig.Placeholder != "" {
 			selectManyConfig.SelectOneConfig.Placeholder = selectManyConfig.Placeholder
 		}
@@ -68,15 +70,29 @@ func (selectManyConfig *SelectManyConfig) ConfigureQorMeta(metaor resource.Metao
 
 		// Set FormattedValuer
 		if meta.FormattedValuer == nil {
-			meta.SetFormattedValuer(func(record interface{}, context *core.Context) interface{} {
-				reflectValues := reflect.Indirect(reflect.ValueOf(meta.GetValuer()(record, context)))
-				var results []string
+			meta.SetFormattedValuer(func(record interface{}, context *core.Context) *FormattedValue {
+				var (
+					values        = reflect.ValueOf(meta.GetValuer()(record, context))
+					reflectValues = reflect.Indirect(values)
+					ctx           = ContextFromCoreContext(context)
+					results       []string
+				)
 				if reflectValues.IsValid() {
 					for i := 0; i < reflectValues.Len(); i++ {
-						results = append(results, utils.Stringify(reflectValues.Index(i).Interface()))
+						var rec = reflectValues.Index(i).Interface()
+						switch t := rec.(type) {
+						case Stringer:
+							results = append(results, t.AdminString(ctx, maps.Map{}))
+						case core.ContextStringer:
+							results = append(results, t.ContextString(context))
+						default:
+							results = append(results, utils.Stringify(reflectValues.Index(i).Interface()))
+						}
 					}
 				}
-				return results
+				return &FormattedValue{Record: record, Slice: true, Raw: values, Values: results, IsZeroF: func(record, value interface{}) bool {
+					return len(value.([]string)) == 0
+				}}
 			})
 		}
 	}

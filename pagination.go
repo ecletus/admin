@@ -1,7 +1,7 @@
 package admin
 
 // PaginationPageCount default pagination page count
-var PaginationPageCount = 20
+var PaginationPageCount = 100
 
 // Pagination is used to hold pagination related information when rendering tables
 type Pagination struct {
@@ -11,7 +11,7 @@ type Pagination struct {
 	PerPage          int
 	UnlimitedEnabled bool
 	// TODO: example (paginath by month)
-	PageLabels       []string
+	PageLabels []string
 }
 
 func (this *Pagination) Unlimited() bool {

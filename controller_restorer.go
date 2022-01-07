@@ -16,7 +16,7 @@ func (this *Controller) DeletedIndex(context *Context) {
 		context.NotFound = true
 		http.NotFound(context.Writer, context.Request)
 	}
-	context.Type = INDEX | DELETED
+	context.SetBasicType(INDEX | DELETED)
 	context.DefaulLayout()
 
 	if setuper, ok := this.controller.(ControllerSetuper); ok {
@@ -74,7 +74,7 @@ func (this *Controller) Restore(context *Context) {
 				context.AddError(err)
 			}
 		} else {
-			keys = context.Request.Form["primary_values[]"]
+			keys = GetPrimaryValues(context.Request.Form)
 		}
 	} else {
 		if keySep == "" {
@@ -121,7 +121,7 @@ prepare:
 
 	responder.With("html", func() {
 		if status == http.StatusOK {
-			url := res.GetContextIndexURI(context.Context)
+			url := res.GetContextIndexURI(context)
 
 			if context.Request.URL.Query().Get("continue_editing") != "" {
 				http.Redirect(context.Writer, context.Request, url+"/"+keys[0], http.StatusFound)
@@ -148,7 +148,7 @@ prepare:
 		}
 		context.Layout = "OK"
 		context.Encode(map[string]string{"message": msg, "status": messageStatus})
-		uri := res.GetContextIndexURI(context.Context, context.Context.ParentResourceID...)
+		uri := res.GetContextIndexURI(context, context.Context.ParentResourceID...)
 		http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
 	}).Respond(context.Request)
 }

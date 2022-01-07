@@ -93,7 +93,7 @@
     $.fn.select2.ajaxFormatResult = function (data, tmpl) {
         var result = "";
         if (tmpl.length > 0) {
-            result = window.Mustache.render(tmpl.html().replace(/{{(.*?)}}/g, '[[$1]]'), data);
+            result = window.Mustache.render(tmpl.html().replace(/{{(.*?)}}/g, '[[&$1]]'), data);
         } else {
             result = data.text || data.html || data.Name || data.Title || data.Code || data[Object.keys(data)[0]];
         }

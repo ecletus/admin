@@ -7,8 +7,11 @@ import (
 
 	errwrap "github.com/moisespsena-go/error-wrap"
 	"github.com/moisespsena-go/logging"
+
 	"github.com/moisespsena-go/xroute"
 
+	"github.com/ecletus/core"
+	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/aorm"
 
 	"github.com/ecletus/fragment"
@@ -25,6 +28,10 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 	var log = newResourceLog
 	if config == nil {
 		config = &Config{}
+	}
+
+	if config.Protected {
+		config.NotMount = true
 	}
 
 	var typ reflect.Type
@@ -69,12 +76,21 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 		config.Invisible = true
 	}
 
-	var uid, uidSufix string
+	var (
+		uid        = config.UID
+		uidDefined = uid != ""
+		uidSufix   string
+	)
+
 	if config.Sub != nil && config.Sub.Parent != nil {
-		uid = config.Sub.Parent.UID
+		if !uidDefined {
+			uid = config.Sub.Parent.UID
+		}
 		if config.Name == "" && config.ID == "" && config.Sub.FieldName != "" {
 			config.ID = config.Sub.FieldName
-			uidSufix = config.Sub.FieldName
+			if !uidDefined {
+				uidSufix = config.Sub.FieldName
+			}
 		}
 
 		if config.Param == "" {
@@ -92,14 +108,17 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 		config.ModelStruct = aorm.StructOf(typ)
 	}
 
-	if uidSufix == "" {
-		if uid != "" {
-			uid += "@"
+	if !uidDefined {
+		if uidSufix == "" {
+			if uid != "" {
+				uid += "@"
+			}
+			uid += utils.TypeId(typ)
+		} else {
+			uid += "#" + uidSufix
 		}
-		uid += utils.TypeId(typ)
-	} else {
-		uid += "#" + uidSufix
 	}
+
 	log = logging.WithPrefix(newResourceLog, uid)
 	log.Debug("create")
 
@@ -110,11 +129,13 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 
 	value = reflect.New(typ).Interface()
 
-	if res, ok := this.ResourcesByUID[uid]; ok {
-		if config.Duplicated != nil {
-			config.Duplicated(uid, res)
+	if !config.Protected {
+		if res, ok := this.ResourcesByUID[uid]; ok {
+			if config.Duplicated != nil {
+				config.Duplicated(uid, res)
+			}
+			return res
 		}
-		return res
 	}
 
 	if onUid != nil {
@@ -122,21 +143,27 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 	}
 
 	res := &Resource{
-		Resource:         resource.New(value, config.ID, uid, config.ModelStruct),
-		Config:           config,
-		cachedMetas:      &map[string][]*Meta{},
-		Admin:            this,
-		Resources:        make(map[string]*Resource),
-		ResourcesByParam: make(map[string]*Resource),
-		MetaAliases:      make(map[string]*resource.MetaName),
-		MetasByName:      make(map[string]*Meta),
-		MetasByFieldName: make(map[string]*Meta),
-		Inherits:         make(map[string]*Child),
-		RouteHandlers:    make(map[string]*RouteHandler),
-		labelKey:         config.LabelKey,
-		Param:            config.Param,
-		Tags:             &ResourceTags{},
+		Resource:            resource.New(value, config.ID, uid, config.ModelStruct),
+		Config:              config,
+		cachedMetas:         &map[string][]*Meta{},
+		Admin:               this,
+		Resources:           make(map[string]*Resource),
+		ResourcesByParam:    make(map[string]*Resource),
+		MetaAliases:         make(map[string]*resource.MetaName),
+		MetaLinks:           make(map[string]string),
+		MetasByName:         make(map[string]*Meta),
+		MetasByFieldName:    make(map[string]*Meta),
+		Inherits:            make(map[string]*Child),
+		RouteHandlers:       make(map[string]*RouteHandler),
+		labelKey:            config.LabelKey,
+		Param:               config.Param,
+		Tags:                &ResourceTags{},
+		AllSectionsProvider: &SchemeSectionsProvider{Name: uid + "#all"},
 	}
+
+	res.Resource.Permissioner(core.NewPermissioner(func(mode roles.PermissionMode, ctx *core.Context) (perm roles.Perm) {
+		return res.adminHasPermission(mode, ContextFromCoreContext(ctx))
+	}))
 
 	res.SetLogger(log)
 
@@ -147,7 +174,7 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 	if config.Controller == nil {
 		if config.Wizard != nil {
 			config.Controller = NewWizardController()
-		} else if config.CreateWizard != nil {
+		} else if len(config.CreateWizards) > 0 {
 			config.Controller = &ResourceWithCreateWizardController{}
 		} else {
 			config.Controller = NewCrudSearchIndexController()
@@ -176,7 +203,9 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 
 	res.ControllerBuilder.ViewController = res.ViewControllerBuilder
 
-	_, res.softDelete = value.(aorm.SoftDeleter)
+	if _, res.softDelete = res.Value.(SoftDeleter); !res.softDelete {
+		_, res.softDelete = res.ModelStruct.FieldsByName[aorm.SoftDeleteFieldDeletedAt]
+	}
 
 	res.Scheme = NewScheme(res, "Default")
 	res.Resource.SetDispatcher(res)
@@ -253,16 +282,39 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 			if config.Sub.FieldName != "" {
 				if field, ok := config.Sub.Parent.ModelStruct.FieldsByName[config.Sub.FieldName]; ok {
 					if field.Relationship != nil {
-						res.SetParentResource(config.Sub.Parent, field.Relationship)
+						res.SetParentResource(config.Sub.Parent, &resource.ParentRelationship{
+							Relationship: *field.Relationship,
+						})
 					} else {
 						res.SetParentResource(config.Sub.Parent, nil)
 					}
 				} else {
 					log.Fatalf("invalid field name %q", config.Sub.FieldName)
 				}
-			} else if config.Sub.ParentFieldName != "" {
-				res.SetParentResource(config.Sub.Parent, res.ModelStruct.FieldsByName[config.Sub.ParentFieldName].Relationship)
-			} else if config.Sub.Relation != nil {
+			} else if config.Sub.ParentFieldName != "" && !res.ModelStruct.FieldsByName[config.Sub.ParentFieldName].IsPrimaryKey {
+				res.SetParentResource(config.Sub.Parent, &resource.ParentRelationship{
+					Relationship: *res.ModelStruct.FieldsByName[config.Sub.ParentFieldName].Relationship,
+				})
+			} else if rel := config.Sub.Relation; rel != nil {
+				if rel.AssociationModel == nil {
+					rel.AssociationModel = config.Sub.Parent.ModelStruct
+				}
+				if rel.Model == nil {
+					rel.Model = res.ModelStruct
+				}
+
+				if rel.ForeignFieldNames == nil {
+					for _, f := range rel.Model.PrimaryFields {
+						rel.ForeignFieldNames = append(rel.ForeignFieldNames, f.Name)
+						rel.ForeignDBNames = append(rel.AssociationDBNames, f.DBName)
+					}
+				}
+				if rel.AssociationFieldNames == nil {
+					for _, f := range rel.AssociationModel.PrimaryFields {
+						rel.AssociationFieldNames = append(rel.AssociationFieldNames, f.Name)
+						rel.AssociationDBNames = append(rel.AssociationDBNames, f.DBName)
+					}
+				}
 				res.SetParentResource(config.Sub.Parent, config.Sub.Relation)
 			}
 
@@ -270,6 +322,10 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 				subResourceConfigureFilters(res)
 			}
 		}
+	}
+
+	for _, cb := range this.BeforeResourceInitializeCallbacks {
+		cb(res)
 	}
 
 	// Configure resource when initializing
@@ -299,10 +355,18 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 		res.UseTheme("slideout")
 
 		if res.ParentRelation != nil {
-			if res.ParentRelation.FieldName != "" {
-				res.MetaDisable(res.ParentRelation.FieldName)
+			if v, ok := res.ParentRelation.Data.Get("hidden_fields_disabled"); !ok || !v.(bool) {
+				if res.ParentRelation.FieldName != "" {
+					res.MetaDisable(res.ParentRelation.FieldName)
+				}
+				var ffNames []string
+				for _, ff := range res.ParentRelation.ForeignFields() {
+					if !ff.IsPrimaryKey {
+						ffNames = append(ffNames, ff.Name)
+					}
+				}
+				res.MetaDisable(ffNames...)
 			}
-			res.MetaDisable(res.ParentRelation.ForeignFieldNames...)
 		}
 
 		parts := strings.Split(strings.ReplaceAll(res.UID, ".models.", "."), "@")
@@ -310,7 +374,12 @@ func (this *Admin) newResource(value interface{}, config *Config, onUid func(uid
 			pos := strings.LastIndexByte(p, '.')
 			parts[i] = p[0:pos] + "/" + p[pos+1:]
 		}
-		res.TemplatePath = utils.ToUri(strings.ReplaceAll(strings.Join(parts, "/sub/"), "#", "/_"))
+
+		if res.ParentResource != nil {
+			res.TemplatePath = res.ParentResource.TemplatePath + "/sub/" + utils.ToParamString(res.ID)
+		} else {
+			res.TemplatePath = utils.ToUri(strings.ReplaceAll(strings.Join(parts, "/sub/"), "#", "/"))
+		}
 
 		configureDefaultLayouts(res)
 	}
@@ -348,7 +417,7 @@ func (this *Admin) NewResourceConfig(value interface{}, cfg *Config) (res *Resou
 
 	res.configure()
 
-	res.AfterRegister(func() {
+	res.PostInitialize(func() {
 		for _, layout := range res.Layouts {
 			if l, ok := layout.(*Layout); ok {
 				l.Resource = res
@@ -363,7 +432,9 @@ func (this *Admin) NewResourceConfig(value interface{}, cfg *Config) (res *Resou
 				res.Config.Setup(res)
 			}
 			for _, setup := range res.Config.Setups {
-				setup(res)
+				if setup != nil {
+					setup(res)
+				}
 			}
 		})
 	} else {
@@ -371,16 +442,25 @@ func (this *Admin) NewResourceConfig(value interface{}, cfg *Config) (res *Resou
 			res.Config.Setup(res)
 		}
 		for _, setup := range res.Config.Setups {
-			setup(res)
+			if setup != nil {
+				setup(res)
+			}
 		}
 	}
 
 	res.initializeLayouts()
-	for _, cb := range res.afterRegister {
+	res.initialized = true
+
+	for _, cb := range res.postInitializeCallbacks {
 		cb()
 	}
-	res.afterRegister = nil
-	res.registered = true
+
+	for _, cb := range this.AfterResourceInitializeCallbacks {
+		cb(res)
+	}
+
+	res.postInitializeCallbacks = nil
+
 	err := this.TriggerResource(&ResourceEvent{edis.NewEvent(E_RESOURCE_ADDED), res, nil, false})
 	if err != nil {
 		panic(errwrap.Wrap(err, "Trigger Resource Added"))
@@ -389,7 +469,7 @@ func (this *Admin) NewResourceConfig(value interface{}, cfg *Config) (res *Resou
 }
 
 // AddResource make a model manageable from admin interface
-func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
+func (this *Admin) AddResource(value interface{}, config ...*Config) (res *Resource) {
 	var cfg *Config
 	for _, cfg = range config {
 	}
@@ -403,21 +483,40 @@ func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
 		}
 	}
 
-	var log logging.Logger
-	var donea func()
+	var (
+		log       logging.Logger
+		donea     func()
+		callbacks []func(res *Resource)
+	)
+
 	defer func() {
 		if donea != nil {
 			donea()
 		}
 	}()
-	res := this.newResource(value, cfg, func(uid string) {
+
+	for _, cb := range this.BeforeAddResourceCallbacks {
+		cb(value, cfg, func(f func(res *Resource)) {
+			callbacks = append(callbacks, f)
+		})
+	}
+
+	res = this.newResource(value, cfg, func(uid string) {
 		log = logging.WithPrefix(newResourceLog, uid)
 		donea = func() { log.Debug("done") }
 	})
+
+	res.SetDefaultDenyMode(func() bool {
+		return this.DefaultDenyMode
+	})
+
 	if _, ok := this.ResourcesByUID[res.UID]; ok {
 		return res
 	}
-	this.ResourcesByUID[res.UID] = res
+
+	if !cfg.Protected {
+		this.ResourcesByUID[res.UID] = res
+	}
 
 	res.configure()
 
@@ -426,19 +525,24 @@ func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
 		res.ParentResource.ResourcesByParam[res.Param] = res
 		if !res.Config.Invisible {
 			if res.IsSingleton() {
-				menu := res.ParentResource.AddMenu(res.DefaultMenu())
-				menu.Enabled = func(menu *Menu, context *Context) bool {
-					if !context.NotFound {
-						if res.Config.MenuEnabled != nil {
-							return res.Config.MenuEnabled(menu, context)
+				if res.ParentResource.IsSingleton() {
+					menu := res.ParentResource.AddMenu(res.DefaultMenu())
+					menu.EnabledFunc = func(menu *Menu, context *Context) bool {
+						if !context.NotFound {
+							if res.Config.MenuEnabled != nil {
+								return res.Config.MenuEnabled(menu, context)
+							}
+							return true
 						}
-						return true
+						return false
 					}
-					return false
+				} else {
+					menu := res.ParentResource.AddItemMenu(res.DefaultMenu())
+					menu.EnabledFunc = res.Config.MenuEnabled
 				}
 			} else {
 				menu := res.ParentResource.AddItemMenu(res.DefaultMenu())
-				menu.Enabled = func(menu *Menu, context *Context) bool {
+				menu.EnabledFunc = func(menu *Menu, context *Context) bool {
 					if !context.NotFound {
 						if !context.IsResultSlice() {
 							if !aorm.IdOf(context.Result).IsZero() {
@@ -465,11 +569,11 @@ func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
 		res.RegisterDefaultRouters()
 		res.mounted = true
 
-		for _, am := range res.afterMount {
+		for _, am := range res.postMountCallbacks {
 			am()
 		}
 
-		res.afterMount = nil
+		res.postMountCallbacks = nil
 	}
 
 	res.initializeLayouts()
@@ -494,15 +598,30 @@ func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
 			res.Config.Setup(res)
 			log.Debug("setup done ", reflect.TypeOf(res.Config.Setup).PkgPath())
 		}
-		res.registered = true
-		if len(res.afterRegister) > 0 {
-			for _, cb := range res.afterRegister {
-				log.Debug("after register start")
-				cb()
-				log.Debug("after register done")
+
+		for _, f := range res.ModelStruct.Fields {
+			if tags := ParseMetaTags(f.Tag); tags.Managed() != nil {
+				if res.ParentResource != nil && res.ParentResource.ModelStruct == res.ModelStruct {
+					res.Meta(&Meta{Name: f.Name, Disabled: true})
+				} else {
+					res.Meta(&Meta{Name: f.Name})
+				}
 			}
 		}
-		res.afterRegister = nil
+
+		res.initialized = true
+
+		for _, cb := range res.postInitializeCallbacks {
+			log.Debug("after register start")
+			cb()
+			log.Debug("after register done")
+		}
+
+		res.postInitializeCallbacks = nil
+
+		for _, cb := range this.AfterResourceInitializeCallbacks {
+			cb(res)
+		}
 
 		log.Debug("trigger added start")
 		if err := this.triggerResourceAdded(res); err != nil {
@@ -510,15 +629,21 @@ func (this *Admin) AddResource(value interface{}, config ...*Config) *Resource {
 		}
 		log.Debug("trigger added done")
 
-		if cfg.CreateWizard != nil {
-			res.AddCreateWizard(cfg.CreateWizard.Value, cfg.CreateWizard.Config)
+		if len(cfg.CreateWizards) > 0 {
+			for _, wz := range cfg.CreateWizards {
+				res.AddCreateWizard(wz.Value, wz.Config)
+			}
 		}
 	}
 
-	if res.ParentResource != nil && !res.ParentResource.registered {
-		res.ParentResource.AfterRegister(done)
+	if res.ParentResource != nil && !res.ParentResource.initialized {
+		res.ParentResource.PostInitialize(done)
 	} else {
 		done()
+	}
+
+	for _, cb := range callbacks {
+		cb(res)
 	}
 
 	return res

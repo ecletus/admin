@@ -1,0 +1,4 @@
+{{$value := (raw_value_of .Record .Meta)}}
+{{if $value}}
+  <a data-url="{{$value.Url}}" href="{{$value.Url}}">{{.Value}}</a>
+{{end}}

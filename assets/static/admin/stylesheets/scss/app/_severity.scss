@@ -1,0 +1,148 @@
+.severity--bg {
+  padding: 0 3px;
+}
+
+.severity--bordered {
+  border-style: solid;
+  border-width: 1px;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.severity--text-bold {
+  font-weight: 430;
+}
+
+.severity_default {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-default-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-default-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-default-bg;
+  }
+}
+
+// Debug means debug or trace information.
+.severity_debug {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-debug-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-debug-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-debug-bg
+  }
+}
+
+// Info means routine information, such as ongoing status or performance.
+.severity_info {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-info-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-info-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-info-bg;
+  }
+}
+
+// Notice means normal but significant events, such as start up, shut down, or configuration.
+.severity_notice {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-notice-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-notice-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-notice-bg
+  }
+}
+
+// Warning means events that might cause problems.
+.severity_warning {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-warning-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-warning-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-warning-bg;
+  }
+}
+
+// Error means events that are likely to cause problems.
+.severity_error {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-error-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-error-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-error-bg
+  }
+}
+
+// Critical means events that cause more severe problems or brief outages.
+.severity_critical {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-critical-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-critical-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-critical-bg
+  }
+}
+
+// Alert means a person must take an action immediately.
+.severity_alert {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-alert-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-alert-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-alert-bg
+  }
+}
+
+// Emergency means one or more systems are unusable.
+.severity_emergency {
+  &.severity--bordered, & .severity--bordered {
+    border-color: $severity-emergency-color
+  }
+
+  &.severity--text, & .severity--text {
+    color: $severity-emergency-color
+  }
+
+  &.severity--bg, & .severity--bg {
+    background-color: $severity-emergency-bg
+  }
+}

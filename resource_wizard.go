@@ -1,11 +1,10 @@
 package admin
 
 import (
-	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 
-	"github.com/moisespsena-go/bid"
 	"github.com/pkg/errors"
 
 	"github.com/ecletus/core"
@@ -24,7 +23,17 @@ func (this *Resource) AddCreateWizard(value interface{}, config ...*Config) *Res
 		cfg = &Config{}
 	}
 
-	cfg.Param = this.Param + "/new"
+	var name string
+
+	if len(this.createWizards) == 0 {
+		cfg.Param = "new"
+		name = "default"
+	} else {
+		if name = cfg.Param; name == "" {
+			name = strconv.Itoa(len(this.createWizards))
+		}
+		cfg.Param = "new/" + name
+	}
 	cfg.Wizard = &Wizard{}
 
 	if cfg.Permission == nil {
@@ -37,29 +46,62 @@ func (this *Resource) AddCreateWizard(value interface{}, config ...*Config) *Res
 		}
 	}
 
-	res := this.Admin.AddResource(value, cfg)
-	this.SetCreateWizard(res)
+	res := this.AddResource(&SubConfig{Parent: this, MountAsItemDisabled: true}, value, cfg)
+	res.Config.Wizard.Resource = res
+	res.Config.Wizard.Configure()
+	this.createWizards = append(this.createWizards, res.Config.Wizard)
+	res.I18nPrefix = this.I18nPrefix
+
+	if this.CreateWizardByName == nil {
+		this.CreateWizardByName = map[string]*Wizard{}
+	}
+	this.CreateWizardByName[name] = res.Config.Wizard
 	return res
 }
 
-func (this *Resource) SetCreateWizard(res *Resource) {
-	res.Config.Wizard.BaseResource = this
-	res.Config.Wizard.Resource = res
-	res.Config.Wizard.Configure()
-	this.createWizard = res.Config.Wizard
-	res.I18nPrefix = this.I18nPrefix
+func (this *Resource) NewWizardRecord(name string, rec ...WizardModelInterface) (model *aorm.ModelStruct, record WizardModelInterface) {
+	wz := this.CreateWizardByName[name]
+	return wz.Resource.ModelStruct, wz.New(rec...)
 }
 
-func (this *Resource) CreateWizard() *Wizard {
-	return this.createWizard
+func (this *Resource) CreateWizards() []*Wizard {
+	return this.createWizards
 }
 
 type Wizard struct {
-	BaseResource, Resource *Resource
-	GetStepsFunc           func() (steps []string, mainStep string)
-	steps                  []string
-	mainStep               string
-	DefaultEditSections    func(ctx *Context, record interface{}) []*Section
+	Resource            *Resource
+	GetStepsFunc        func() (steps []string, mainStep string)
+	steps               []string
+	mainStep            string
+	DefaultEditSections func(ctx *Context, record interface{}) []*Section
+	CompleteCallback    func(ctx *WizardCompleteContext, saveToDest func(*WizardCompleteContext) error) (err error)
+}
+
+func (this *Wizard) New(rec ...WizardModelInterface) (record WizardModelInterface) {
+	for _, record = range rec {
+	}
+	if record == nil {
+		record = this.Resource.New().(WizardModelInterface)
+	}
+	record.SetSteps([]string{this.mainStep})
+	return
+}
+
+func (this *Wizard) CreateSibling(name string, rec ...WizardModelInterface) (model *aorm.ModelStruct, record WizardModelInterface) {
+	return this.Resource.ParentResource.NewWizardRecord(name, rec...)
+}
+
+func (this *Wizard) NewStep(wz WizardModelInterface, name string) Steper {
+	return this.NewStepV(wz, reflect.ValueOf(wz).Elem(), name)
+}
+
+func (this *Wizard) NewStepV(wz WizardModelInterface, wzValue reflect.Value, name string) Steper {
+	wz.AddStep(name)
+	stepField := wzValue.FieldByName(name)
+	if stepField.IsNil() {
+		stepField.Set(reflect.New(stepField.Type().Elem()))
+	}
+	return stepField.Interface().(Steper)
 }
 
 func (this *Wizard) MainStep() string {
@@ -75,16 +117,19 @@ func (this *Wizard) Configure() {
 		this.steps, this.mainStep = stepsGetter.WzGetStepsNames()
 	} else {
 		for _, child := range this.Resource.ModelStruct.Children {
-			meta := this.Resource.Meta(&Meta{Name: child.ParentField.Name})
-			if sv := meta.Tags.Get("STEP"); sv == "STEP" {
+			meta := this.Resource.Meta(&Meta{Name: child.ChildConfig.ParentField.Name})
+			if meta.Tags.Flag("STEP") {
 				this.steps = append(this.steps, meta.Name)
-			} else if sv == "main" {
+			} else if meta.Tags.GetString("STEP") == "main" {
 				if this.mainStep != "" {
 					panic("duplicate main step")
 				}
 				this.mainStep = meta.Name
 				this.steps = append(this.steps, meta.Name)
+			} else {
+				continue
 			}
+			_ = child.Value.(Steper)
 		}
 	}
 
@@ -100,15 +145,15 @@ func (this *Wizard) Configure() {
 		this.Resource.MetaRequired(step)
 	}
 
-	this.Resource.NewSectionsFunc = func(ctx *Context) []*Section {
-		return []*Section{{Resource: this.Resource, Rows: [][]string{{this.mainStep}}}}
+	this.Resource.Sections.Default.Screen.New.GetContextFunc = func(ctx *SectionsContext) []*Section {
+		return []*Section{{Resource: this.Resource, Rows: [][]interface{}{{this.mainStep}}}}
 	}
-	this.Resource.EditSectionsFunc = func(ctx *Context, record interface{}) (sections []*Section) {
-		wz := record.(WizardModelInterface)
+	this.Resource.Sections.Default.Screen.Edit.GetContextFunc = func(ctx *SectionsContext) (sections []*Section) {
+		wz := ctx.Record.(WizardModelInterface)
 		if this.DefaultEditSections != nil {
-			sections = this.DefaultEditSections(ctx, record)
+			sections = this.DefaultEditSections(ctx.Ctx, ctx.Record)
 		}
-		sections = append(sections, []*Section{{Resource: this.Resource, Rows: [][]string{{wz.CurrentStepName()}}}}...)
+		sections = append(sections, []*Section{{Resource: this.Resource, Rows: [][]interface{}{{wz.CurrentStepName()}}}}...)
 		return
 	}
 	this.Resource.GetContextAttrsFunc = func(ctx *Context) []string {
@@ -147,7 +192,7 @@ func (this *Wizard) Configure() {
 	this.Resource.OnAfterUpdate(func(ctx *core.Context, old, record interface{}) (err error) {
 		wz := record.(WizardModelInterface)
 		if wz.IsDone() {
-			return this.SaveToRecord(ContextFromContext(ctx), wz)
+			return this.SaveToDestination(ContextFromContext(ctx), wz)
 		}
 		return
 	})
@@ -160,6 +205,13 @@ func (this *Wizard) Configure() {
 	this.Resource.OnAfterFindOne(func(ctx *core.Context, record interface{}) error {
 		return this.LoadHandle(ContextFromContext(ctx), record.(WizardModelInterface))
 	})
+}
+
+type WizardContextCompleteConfig struct {
+	RedirectTo           string
+	RedirectToStatus     int
+	RedirectToOther      bool
+	FlashMessageDisabled bool
 }
 
 type StepField struct {
@@ -306,7 +358,7 @@ func (this *Wizard) Save(ctx *Context, wz WizardModelInterface) (err error) {
 			WzRecord: wz,
 		}
 		for i := len(steps) - 1; i >= 0; i-- {
-			currentStepValue := recordValue.Elem().FieldByName("Step_" + steps[i])
+			currentStepValue := recordValue.Elem().FieldByName(steps[i])
 			currentStepRecord := currentStepValue.Interface()
 			if acceptor, ok := currentStepRecord.(StepGobackAcceptor); ok {
 				if !acceptor.AcceptGoback(wzContext) {
@@ -340,16 +392,12 @@ func (this *Wizard) Save(ctx *Context, wz WizardModelInterface) (err error) {
 			if saver, ok := step.(StepSaver); ok && !saver.WzStepCanSave() {
 				steps := wz.GetSteps()
 				wz.SetSteps(steps[0 : len(steps)-1])
-
 			}
-			wz.AddStep(nextStep.Name)
 			if nextStep.Value != nil {
+				wz.AddStep(nextStep.Name)
 				recordValue.Elem().FieldByName(nextStep.Name).Set(reflect.ValueOf(nextStep.Value))
 			} else {
-				nextStepField := recordValue.Elem().FieldByName(nextStep.Name)
-				if nextStepField.IsNil() {
-					nextStepField.Set(reflect.New(nextStepField.Type().Elem()))
-				}
+				this.NewStepV(wz, recordValue.Elem(), nextStep.Name)
 			}
 		}
 	}
@@ -367,9 +415,35 @@ stepsLoop:
 	return nil
 }
 
-func (this *Wizard) SaveToRecord(ctx *Context, wz WizardModelInterface) (err error) {
-	dest := this.BaseResource.NewStruct(ctx.Site)
-	destDB := ctx.DB().ModelStruct(this.BaseResource.ModelStruct)
+func (this *Wizard) SaveToDestination(ctx *Context, wz WizardModelInterface) (err error) {
+	ctx.WizardCompleteConfig = &WizardContextCompleteConfig{}
+
+	wzCtx := &WizardCompleteContext{
+		WizardContext{
+			Context:  ctx,
+			Wizard:   this,
+			WzRecord: wz,
+		},
+		this.Resource.ParentResource.ModelStruct,
+		this.Resource.ParentResource.NewStruct(ctx.Site),
+	}
+	if saver, ok := wzCtx.Dest.(WizardcallbackCompleter); ok {
+		return saver.OnWizardComplete(wzCtx, this.saveToDestination)
+	} else if this.CompleteCallback != nil {
+		return this.CompleteCallback(wzCtx, this.saveToDestination)
+	}
+	return this.saveToDestination(wzCtx)
+}
+
+func (this *Wizard) saveToDestination(wzCtx *WizardCompleteContext) (err error) {
+	ctx, wz, destModel, dest := wzCtx.Context, wzCtx.WzRecord, wzCtx.DestModel, wzCtx.Dest
+
+	// loads all related many fields recursively to apply all values to destination
+	if err = this.Resource.ModelStruct.LoadRelatedManyFields(ctx.DB(), wz); err != nil {
+		return
+	}
+
+	destDB := ctx.DB().ModelStruct(destModel)
 	recordValue := reflect.ValueOf(wz)
 	if recordValue.Kind() == reflect.Interface {
 		recordValue = recordValue.Elem()
@@ -394,11 +468,9 @@ func (this *Wizard) SaveToRecord(ctx *Context, wz WizardModelInterface) (err err
 		}
 		return
 	}
-	if destIdValuers := wz.GetDestinationID(); len(destIdValuers) > 0 {
-		if err = aorm.SetIDValuersToRecord(this.BaseResource.ModelStruct, dest, destIdValuers); err != nil {
-			return errors.Wrapf(err, "wizard: load destination: set destination id")
-		}
-
+	if destId := wz.GetDestinationID(); destId != "" {
+		destID, _ := destModel.ParseIDString(destId)
+		destID.SetTo(dest)
 		if err = destDB.First(dest).Error; err != nil {
 			return errors.Wrapf(err, "wizard: load destination")
 		}
@@ -432,7 +504,7 @@ func (this *Wizard) SaveToRecord(ctx *Context, wz WizardModelInterface) (err err
 		}
 	}
 	if err = destDB.Save(dest).Error; err == nil {
-		wz.SetDestinationID(this.BaseResource.ModelStruct.GetID(dest).Values())
+		wz.SetDestinationID(destModel.GetID(dest).String())
 		wz.SetDestination(dest)
 		// err = ctx.DB().ModelStruct(this.Resource.ModelStruct).Delete(record).Error
 	}
@@ -452,132 +524,33 @@ type WizardContext struct {
 	WzRecord WizardModelInterface
 }
 
+type WizardCompleteContext struct {
+	WizardContext
+	DestModel *aorm.ModelStruct
+	Dest      interface{}
+}
+
+func (this *WizardCompleteContext) RedirectToSibling(name string, record ...WizardModelInterface) (_ WizardModelInterface, err error) {
+	model, rec := this.Wizard.CreateSibling(name, record...)
+	aorm.MustCopyIdTo(this.Resource.ModelStruct.GetID(this.WzRecord), model.DefaultID()).SetTo(rec)
+
+	if err = this.DB().ModelStruct(model).Save(rec).Error; err != nil {
+		return
+	}
+	cfg := this.WizardCompleteConfig
+	cfg.RedirectToOther = true
+	cfg.RedirectTo = regexp.MustCompile("/(new|edit)/[^/?]+").ReplaceAllString(this.Request.RequestURI, "/$1/"+name+"/"+model.GetID(rec).String())
+	cfg.FlashMessageDisabled = true
+	return rec, nil
+}
+
+func (this *WizardCompleteContext) RedirectToIndex() {
+	this.WizardCompleteConfig.RedirectTo = this.Resource.ParentResource.GetContextIndexURI(this.Context)
+}
+
 type WizardStepModel struct {
 	aorm.Model
 	aorm.Timestamps
-}
-
-type WizardModelInterface interface {
-	GetSteps() []string
-	AddStep(name string)
-	SetSteps(steps []string)
-	CurrentStepName() string
-	Done()
-	IsDone() bool
-	IsGoingToBack() bool
-	GetDestinationID() []aorm.IDValuer
-	SetDestinationID(id []aorm.IDValuer)
-	GetDestination() interface{}
-	SetDestination(dest interface{})
-}
-
-type WizardModelStepsGetter interface {
-	WzGetStepsNames() (steps []string, mainStep string)
-}
-
-type WizardModelUpdater interface {
-	WizardModelInterface
-}
-
-type WizardModel struct {
-	aorm.Model
-	aorm.Audited
-	Steps         types.Strings
-	isDone        bool
-	GoBack        bool    `aorm:"-"`
-	DestinationID bid.BID `admin:"-"`
-	destination   interface{}
-}
-
-func (this *WizardModel) GetDestination() interface{} {
-	return this.destination
-}
-
-func (this *WizardModel) SetDestination(dest interface{}) {
-	this.destination = dest
-}
-
-func (this *WizardModel) SetDestinationID(id []aorm.IDValuer) {
-	if len(id) == 0 {
-		this.DestinationID = nil
-	} else {
-		this.DestinationID = id[0].Raw().(bid.BID)
-	}
-}
-
-func (this *WizardModel) GetDestinationID() []aorm.IDValuer {
-	if !this.DestinationID.IsZero() {
-		return []aorm.IDValuer{aorm.BIDIdValuer(this.DestinationID)}
-	}
-	return nil
-}
-
-func (this *WizardModel) AormAfterStructSetup(model *aorm.ModelStruct) {
-	// remove all unique indexes
-	var do func(model *aorm.ModelStruct)
-	do = func(model *aorm.ModelStruct) {
-		model.UniqueIndexes = nil
-		for _, child := range model.Children {
-			do(child)
-		}
-	}
-	do(model)
-}
-
-func (this *WizardModel) BeforeCommitMetaValues(ctx *core.Context, res resource.Resourcer, metaValues *resource.MetaValues) {
-	if metaValues.GetString("GoBack") == "true" {
-		this.GoBack = true
-		if len(metaValues.Values) > 1 {
-			metaValues.Values = []*resource.MetaValue{metaValues.Values[metaValues.ByName["GoBack"]]}
-			metaValues.ByName = map[string]int{"GoBack": 0}
-		}
-	}
-}
-
-func (this *WizardModel) Done() {
-	this.isDone = true
-}
-
-func (this *WizardModel) IsDone() bool {
-	return this.isDone
-}
-
-func (this *WizardModel) GetSteps() []string {
-	return this.Steps
-}
-
-func (this *WizardModel) BackStep() {
-	this.Steps = this.Steps[0 : len(this.Steps)-1]
-}
-
-func (this *WizardModel) SetSteps(steps []string) {
-	var hasm = map[string]bool{}
-	for _, s := range steps {
-		if _, ok := hasm[s]; !ok {
-			hasm[s] = true
-		} else {
-			panic(fmt.Errorf("recursive wizard step detected: %v", steps))
-		}
-	}
-	this.Steps = steps
-}
-
-func (this *WizardModel) AddStep(name string) {
-	this.SetSteps(append(this.Steps, name))
-}
-func (this *WizardModel) CurrentStepName() string {
-	if len(this.Steps) == 0 {
-		return ""
-	}
-	return this.Steps[len(this.Steps)-1]
-}
-
-func (this *WizardModel) IsGoingToBack() bool {
-	return this.GoBack
-}
-
-type StepSaver interface {
-	WzStepCanSave() bool
 }
 
 // StepLoadHandleResult resultado do StepLoadHandler.WzStepLoadHandle
@@ -593,29 +566,6 @@ type StepLoadHandleResult struct {
 	//    - havendo posteriores, para `PrevStep.Next(...).Index != NextStep.Index`, remove este e os posteriores,
 	//      e adiciona o novo step
 	Skip bool
-}
-
-type StepLoadHandler interface {
-	WzStepLoadHandle(ctx *WizardContext) (result StepLoadHandleResult, err error)
-}
-
-type Steper interface {
-	Next(ctx *WizardContext) (nextStep *NextStep, err error)
-	SaveToDestination(ctx *WizardContext, destination interface{}) (err error)
-}
-
-type StepDestinationCleaner interface {
-	Steper
-	CleanDestination(ctx *WizardContext, destination interface{})
-}
-
-type StepRecordReader interface {
-	Steper
-	ReadRecord(ctx *WizardContext, record interface{}) (err error)
-}
-
-type StepGobackAcceptor interface {
-	AcceptGoback(ctx *WizardContext) bool
 }
 
 type NextStep struct {

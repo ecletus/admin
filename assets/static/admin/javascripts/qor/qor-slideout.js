@@ -60,7 +60,7 @@
 
     function execSlideoutEvents(url, response) {
         // exec qorSliderAfterShow after script loaded
-        var qorSliderAfterShow = $.fn.qorSliderAfterShow;
+        let qorSliderAfterShow = $.fn.qorSliderAfterShow;
         for (var name in qorSliderAfterShow) {
             if (qorSliderAfterShow.hasOwnProperty(name) && !qorSliderAfterShow[name]['isLoaded']) {
                 qorSliderAfterShow[name]['isLoaded'] = true;
@@ -79,7 +79,7 @@
                 scriptsLoaded++;
 
                 if (scriptsLoaded === srcs.length) {
-                    if ($.isFunction(callback)) {
+                    if (callback && $.isFunction(callback)) {
                         callback();
                     }
                 }
@@ -127,9 +127,9 @@
     }
 
     function QorSlideout(element, options) {
-        this.$element = $(element);
+        this.$element = element ? $(element) : null;
         this.options = $.extend({}, QorSlideout.DEFAULTS, $.isPlainObject(options) && options);
-        this.options.language = this.options.language || this.$element.attr("lang") || $('html').attr('lang');
+        this.options.language = this.options.language || (this.$element ? this.$element.attr("lang") : null) || $('html').attr('lang');
         this.slided = false;
         this.disabled = false;
         this.slideoutType = false;
@@ -161,7 +161,7 @@
                 .on(EVENT_CLICK, '.qor-slideout__fullscreen', this.toggleSlideoutMode.bind(this))
                 .on(EVENT_CLICK, '[data-dismiss="slideout"]', this.closeSlideout.bind(this));
 
-            $document.on(EVENT_KEYUP, $.proxy(this.keyup, this));
+            $document.on(EVENT_KEYUP, this.keyup.bind(this));
         },
 
         unbind: function () {
@@ -195,7 +195,9 @@
         },
 
         removeSelectedClass: function () {
-            this.$element.find('[data-url]').removeClass(CLASS_IS_SELECTED);
+            if (this.$element) {
+                this.$element.find('[data-url]').removeClass(CLASS_IS_SELECTED);
+            }
         },
 
         addLoading: function () {
@@ -212,142 +214,168 @@
         },
 
         submit: function (e) {
-            var $slideout = this.$slideout;
-            var $body = this.$body;
-            var form = e.target;
-            var $form = $(form);
-            var _this = this;
-            var $submit = $form.find(':submit');
+            let $slideout = this.$slideout,
+                form = e.target,
+                $form = $(form),
+                $submit = $form.find(':submit'),
+                formData = new FormData(form);
+
+            if (e.originalEvent && e.originalEvent.constructor === SubmitEvent) {
+                const $submitter = $(e.originalEvent.submitter),
+                    name = $submitter.attr('name'),
+                    val = $submitter.attr('value');
+
+                if (name && val) {
+                    formData.append(name, val);
+                }
+            }
 
             $slideout.trigger(EVENT_SLIDEOUT_BEFORESEND);
 
-            if (FormData) {
-                e.preventDefault();
-                let action = $form.prop('action'),
-                    continueEditing = /[?|&]continue_editing=true/.test(action),
-                    headers = {
-                        'X-Layout': 'lite'
-                    };
+            e.preventDefault();
+            let action = $form.prop('action'),
+                continueEditing = /[?|&]continue_editing=true/.test(action),
+                headers = {
+                    'X-Layout': 'lite'
+                };
 
-                if (continueEditing) {
-                    action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
-                } else {
-                    headers["X-Redirection-Disabled"] = "true"
-                }
-                $.ajax(action, {
-                    method: $form.prop('method'),
-                    data: new FormData(form),
-                    dataType: 'html',
-                    processData: false,
-                    contentType: false,
-                    headers: headers,
-                    beforeSend: function () {
-                        $submit.prop('disabled', true);
-                        $.fn.qorSlideoutBeforeHide = null;
-                    },
-                    success: function (html, statusText, jqXHR) {
-                        $form.parent().find('.qor-error').remove();
-                        $slideout.trigger(EVENT_SLIDEOUT_SUBMIT_COMPLEMENT);
-                        let xLocation = jqXHR.getResponseHeader('X-Location');
+            QOR.prepareFormData(formData);
 
-                        if (xLocation) {
-                            if (e.originalEvent && e.originalEvent.explicitOriginalTarget) {
-                                let data = $(e.originalEvent.explicitOriginalTarget).data();
-                                if (data.submitSuccessTarget === "window") {
-                                    window.location.href = xLocation;
-                                    return;
-                                }
+            if (continueEditing) {
+                action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
+            } else {
+                headers["X-Redirection-Disabled"] = "true"
+            }
+
+            $.ajax(action, {
+                method: $form.prop('method'),
+                data: formData,
+                dataType: 'html',
+                processData: false,
+                contentType: false,
+                headers: headers,
+                beforeSend: function () {
+                    $submit.prop('disabled', true);
+                    $.fn.qorSlideoutBeforeHide = null;
+                },
+                success: (function (html, statusText, jqXHR) {
+                    $form.parent().find('.qor-error').remove();
+                    $slideout.trigger(EVENT_SLIDEOUT_SUBMIT_COMPLEMENT);
+                    let xLocation = jqXHR.getResponseHeader('X-Location');
+
+                    if (jqXHR.getResponseHeader('X-Frame-Reload') === 'render-body') {
+                        this.hide(true);
+                        this.$slideout.one(EVENT_HIDDEN, (function (){
+                            this.render(this.options, action, html)
+                        }).bind(this));
+                        return
+                    }
+
+                    if (xLocation) {
+                        if (e.originalEvent && e.originalEvent.explicitOriginalTarget) {
+                            let data = $(e.originalEvent.explicitOriginalTarget).data();
+                            if (data.submitSuccessTarget === "window") {
+                                window.location.href = xLocation;
+                                return;
                             }
-                            _this.load(xLocation);
-                            return
                         }
-
-                        var returnUrl = $form.data('returnUrl'),
-                            refreshUrl = $form.data('refreshUrl');
-
-                        if (refreshUrl) {
-                            window.location.href = refreshUrl;
+                        if (jqXHR.getResponseHeader('X-Steps-Done') === 'true') {
+                            window.location.href = xLocation;
                             return;
                         }
+                        this.load(xLocation);
+                        return
+                    }
 
-                        if (returnUrl === 'refresh') {
-                            _this.refresh();
-                            return;
-                        }
+                    let returnUrl = $form.data('returnUrl'),
+                        refreshUrl = $form.data('refreshUrl');
 
-                        if (returnUrl && returnUrl !== 'refresh') {
-                            _this.load(returnUrl);
-                        } else {
-                            var prefix = '/' + location.pathname.split('/')[1];
-                            var flashStructs = [];
-                            $(html)
-                                .find('.qor-alert')
-                                .each(function (i, e) {
-                                    var message = $(e)
-                                        .find('.qor-alert-message')
-                                        .text()
-                                        .trim();
-                                    var type = $(e).data('type');
-                                    if (message !== '') {
-                                        flashStructs.push({
-                                            Type: type,
-                                            Message: message,
-                                            Keep: true
-                                        });
-                                    }
-                                });
-                            if (flashStructs.length > 0) {
-                                document.cookie = 'qor-flashes=' + btoa(unescape(encodeURIComponent(JSON.stringify(flashStructs)))) + '; path=' + prefix;
-                            }
-                            _this.refresh();
-                        }
-                    },
-                    error: function (xhr, textStatus, errorThrown) {
-                        $form.parent().find('.qor-error').remove();
+                    if (refreshUrl) {
+                        window.location.href = refreshUrl;
+                        return;
+                    }
 
-                        var $error;
+                    if (returnUrl === 'refresh') {
+                        this.refresh();
+                        return;
+                    }
 
-                        if (xhr.status === 422) {
-                            $form
-                                .find('.qor-field')
-                                .removeClass('is-error')
-                                .find('.qor-field__error')
-                                .remove();
+                    if (returnUrl && returnUrl !== 'refresh') {
+                        this.load(returnUrl);
+                    } else {
+                        let prefix = '/' + location.pathname.split('/')[1],
+                            flashStructs = [];
 
-                            $error = $(xhr.responseText).find('.qor-error');
-                            $form.before($error);
-
-                            $error.find('> li > label').each(function () {
-                                var $label = $(this);
-                                var id = $label.attr('for');
-
-                                if (id) {
-                                    $form
-                                        .find('#' + id)
-                                        .closest('.qor-field')
-                                        .addClass('is-error')
-                                        .append($label.clone().addClass('qor-field__error'));
+                        $(html)
+                            .find('.qor-alert')
+                            .each(function (i, e) {
+                                let message = $(e)
+                                    .find('.qor-alert-message')
+                                    .text()
+                                    .trim(),
+                                    type = $(e).data('type');
+                                if (message !== '') {
+                                    flashStructs.push({
+                                        Type: type,
+                                        Message: message,
+                                        Keep: true
+                                    });
                                 }
                             });
-
-                            $slideout.scrollTop(0);
-                        } else {
-                            QOR.ajaxError.apply(this, arguments)
+                        if (flashStructs.length > 0) {
+                            document.cookie = 'qor-flashes=' + btoa(unescape(encodeURIComponent(JSON.stringify(flashStructs)))) + '; path=' + prefix;
                         }
-                    },
-                    complete: function () {
-                        $submit.prop('disabled', false);
+                        this.refresh();
                     }
-                });
-            }
+                }).bind(this),
+                error: (function (xhr, textStatus, errorThrown) {
+                    $form.parent().find('.qor-error').remove();
+
+                    let $error;
+
+                    if (xhr.status === 422) {
+                        $form
+                            .find('.qor-field')
+                            .removeClass('is-error')
+                            .find('.qor-field__error')
+                            .remove();
+
+                        $error = $(xhr.responseText).find('.qor-error');
+                        $form.before($error);
+
+                        $error.find('> li > label').each(function () {
+                            let $label = $(this),
+                                id = $label.attr('for');
+
+                            if (id) {
+                                $form
+                                    .find('#' + id)
+                                    .closest('.qor-field')
+                                    .addClass('is-error')
+                                    .append($label.clone().addClass('qor-field__error'));
+                            }
+                        });
+
+                        const $messages = $form.closest('.qor-page__body').find('#flashes,.qor-error').eq(0);
+                        if ($messages.length) {
+                            const $scroller = $messages.scrollParent();
+                            $scroller.scrollTop($messages.scrollTop() + $messages.offset().top)
+                        }
+                    } else {
+                        QOR.ajaxError.apply(this, arguments)
+                    }
+                }).bind(this),
+                complete: function () {
+                    $submit.prop('disabled', false);
+                }
+            });
         },
 
         showOnLoad: function(url, response) {
-            this.show();
-
             // callback for after slider loaded HTML
             // this callback is deprecated, use slideoutLoaded.qor.slideout event.
-            var qorSliderAfterShow = $.fn.qorSliderAfterShow;
+            let qorSliderAfterShow = $.fn.qorSliderAfterShow;
+
             if (qorSliderAfterShow) {
                 for (var name in qorSliderAfterShow) {
                     if (qorSliderAfterShow.hasOwnProperty(name) && $.isFunction(qorSliderAfterShow[name])) {
@@ -357,17 +385,107 @@
                 }
             }
 
+            this.$slideout.one(EVENT_SLIDEOUT_LOADED, function (){
+                this.show();
+            }.bind(this));
+
             // will trigger slideoutLoaded.qor.slideout event after slideout loaded
             this.$slideout.trigger(EVENT_SLIDEOUT_LOADED, [url, response]);
         },
 
+        render: function (options, url, response) {
+            const $slideout = this.$slideout;
+            let $response, $content, $qorFormContainer, $form, $scripts, $links, bodyClass;
+
+            $response = $(response);
+            $content = $response.find(CLASS_MAIN_CONTENT);
+
+            if (!$content.length) {
+                return;
+            }
+
+            $content.find(CLASS_ACTION_BUTTON).attr('data-disable-success-redirection', 'true');
+            $content.find(CLASS_FOOTER_COPYRIGTH).remove();
+            $qorFormContainer = $content.find('.qor-form-container');
+            this.slideoutType = $qorFormContainer.length && $qorFormContainer.data().slideoutType;
+
+            $form = $qorFormContainer.find('form');
+            if ($form.length === 1) {
+                $form.data(QOR.SUBMITER, this.submit.bind(this));
+            }
+
+            let bodyHtml = response.match(/<\s*body.*>[\s\S]*<\s*\/body\s*>/gi);
+            if (bodyHtml) {
+                bodyHtml = bodyHtml
+                    .join('')
+                    .replace(/<\s*body/gi, '<div')
+                    .replace(/<\s*\/body/gi, '</div');
+                bodyClass = $(bodyHtml).prop('class');
+                $('body').addClass(bodyClass);
+
+                let data = {
+                    $scripts: $response.filter('script'),
+                    $links: $response.filter('link'),
+                    url: url,
+                    response: response
+                };
+
+                this.loadExtraResource(data);
+            }
+
+            $content
+                .find('.qor-button--cancel')
+                .attr('data-dismiss', 'slideout')
+                .removeAttr('href');
+
+            $scripts = compareScripts($content.find('script[src]'));
+            $links = compareLinks($content.find('link[href]'));
+
+            if ($scripts.length) {
+                let data = {
+                    url: url || window.location.href,
+                    response: response
+                };
+
+                loadScripts($scripts, data);
+            }
+
+            if ($links.length) {
+                loadStyles($links);
+            }
+
+            $content.find('script[src],link[href]').remove();
+
+            // reset slideout header and body
+            $slideout.trigger('disable');
+            $slideout.html(this.$slideoutTemplate);
+            this.$title = $slideout.find('.qor-slideout__title');
+
+            this.$body = $slideout.find('.qor-slideout__body');
+
+            this.$title.html($response.find(options.title).html());
+            replaceHtml($slideout.find('.qor-slideout__body')[0], $content.html());
+            this.$body.find(CLASS_HEADER_LOCALE).remove();
+
+            $slideout
+                .attr('data-src', url)
+                .one(EVENT_SHOWN, function () {
+                    $(this).trigger('enable');
+                })
+                .one(EVENT_HIDDEN, function () {
+                    $(this).trigger('disable');
+                });
+
+            $slideout.find('.qor-slideout__opennew').attr('href', url);
+            $slideout.find('.qor-slideout__print').attr('href', url + (url.indexOf('?') !== -1 ? '&' : '?') + 'print');
+            this.showOnLoad(url, response);
+        },
+
         load: function (url, data) {
-            var options = this.options;
-            var method;
-            var dataType;
-            var load;
-            var $slideout = this.$slideout;
-            var $title;
+            let method,
+                dataType,
+                load,
+                $slideout = this.$slideout;
 
             if (!url) {
                 return;
@@ -376,6 +494,7 @@
             data = $.isPlainObject(data) ? data : {};
 
             if (data.image) {
+                $slideout.trigger('disable');
                 // reset slideout header and body
                 $slideout.html(this.$slideoutTemplate);
                 let $title = $slideout.find('.qor-slideout__title');
@@ -390,6 +509,7 @@
 
                 $(CLASS_BODY_LOADING).remove();
                 $slideout
+                    .attr('data-src', url)
                     .one(EVENT_SHOWN, function () {
                         $(this).trigger('enable');
                     })
@@ -403,99 +523,20 @@
             method = data.method ? data.method : 'GET';
             dataType = data.datatype ? data.datatype : 'html';
 
-            load = $.proxy(function () {
+            load = (function () {
                 $.ajax(url, {
                     method: method,
                     dataType: dataType,
                     cache: true,
                     ifModified: true,
                     headers: {
-                        'X-Layout': 'lite'
+                        'X-Layout': 'lite',
+                        'X-Requested-Frame': 'Action'
                     },
-                    success: $.proxy(function (response) {
-                        let $response, $content, $qorFormContainer, $form, $scripts, $links, bodyClass;
-
+                    success: (function (response) {
                         $(CLASS_BODY_LOADING).remove();
-
                         if (method === 'GET') {
-                            $response = $(response);
-                            $content = $response.find(CLASS_MAIN_CONTENT);
-                            if (!$content.length) {
-                                return;
-                            }
-
-                            $content.find(CLASS_ACTION_BUTTON).attr('data-disable-success-redirection', 'true');
-                            $content.find(CLASS_FOOTER_COPYRIGTH).remove();
-                            $qorFormContainer = $content.find('.qor-form-container');
-                            this.slideoutType = $qorFormContainer.length && $qorFormContainer.data().slideoutType;
-
-                            $form = $qorFormContainer.find('form');
-                            if ($form.length === 1) {
-                                $form.data(QOR.SUBMITER, this.submit.bind(this));
-                            }
-
-                            let bodyHtml = response.match(/<\s*body.*>[\s\S]*<\s*\/body\s*>/gi);
-                            if (bodyHtml) {
-                                bodyHtml = bodyHtml
-                                    .join('')
-                                    .replace(/<\s*body/gi, '<div')
-                                    .replace(/<\s*\/body/gi, '</div');
-                                bodyClass = $(bodyHtml).prop('class');
-                                $('body').addClass(bodyClass);
-
-                                let data = {
-                                    $scripts: $response.filter('script'),
-                                    $links: $response.filter('link'),
-                                    url: url,
-                                    response: response
-                                };
-
-                                this.loadExtraResource(data);
-                            }
-
-                            $content
-                                .find('.qor-button--cancel')
-                                .attr('data-dismiss', 'slideout')
-                                .removeAttr('href');
-
-                            $scripts = compareScripts($content.find('script[src]'));
-                            $links = compareLinks($content.find('link[href]'));
-
-                            if ($scripts.length) {
-                                let data = {
-                                    url: url,
-                                    response: response
-                                };
-
-                                loadScripts($scripts, data, function () {
-                                });
-                            }
-
-                            if ($links.length) {
-                                loadStyles($links);
-                            }
-
-                            $content.find('script[src],link[href]').remove();
-
-                            // reset slideout header and body
-                            $slideout.html(this.$slideoutTemplate);
-                            $title = $slideout.find('.qor-slideout__title');
-                            this.$body = $slideout.find('.qor-slideout__body');
-
-                            $title.html($response.find(options.title).html());
-                            replaceHtml($slideout.find('.qor-slideout__body')[0], $content.html());
-                            this.$body.find(CLASS_HEADER_LOCALE).remove();
-
-                            $slideout
-                                .one(EVENT_SHOWN, function () {
-                                    $(this).trigger('enable');
-                                })
-                                .one(EVENT_HIDDEN, function () {
-                                    $(this).trigger('disable');
-                                });
-
-                            $slideout.find('.qor-slideout__opennew').attr('href', url);
-                            this.showOnLoad(url, response);
+                            this.render(this.options, url, response)
                         } else {
                             if (data.returnUrl) {
                                 this.load(data.returnUrl);
@@ -503,12 +544,13 @@
                                 this.refresh();
                             }
                         }
-                    }, this),
+                    }).bind(this),
 
-                    error: $.proxy(function () {
+                    error: (function () {
                         $(CLASS_BODY_LOADING).remove();
-                        if ($('.qor-error span').length > 0) {
-                            let errors = $('.qor-error span')
+                        let errors = $('.qor-error span');
+                        if (errors.length > 0) {
+                            let errors = errors
                                 .map(function () {
                                     return $(this).text();
                                 })
@@ -518,9 +560,9 @@
                         } else {
                             QOR.ajaxError.apply(this, arguments)
                         }
-                    }, this)
+                    }).bind(this)
                 });
-            }, this);
+            }).bind(this);
 
             if (this.slided) {
                 this.hide(true);
@@ -532,6 +574,9 @@
 
         open: function (options) {
             this.addLoading();
+            if (typeof options === "string") {
+                options = {url:options}
+            }
             return this.load(options.url, options.data || options);
         },
 
@@ -541,8 +586,8 @@
         },
 
         show: function () {
-            var $slideout = this.$slideout;
-            var showEvent;
+            let $slideout = this.$slideout,
+                showEvent;
 
             if (this.slided) {
                 return;
@@ -556,11 +601,11 @@
             }
 
             $slideout.removeClass(CLASS_MINI);
-            this.slideoutType == 'mini' && $slideout.addClass(CLASS_MINI);
+            this.slideoutType === 'mini' && $slideout.addClass(CLASS_MINI);
 
             $slideout.addClass(CLASS_IS_SHOWN).get(0).offsetWidth;
             $slideout
-                .one(EVENT_TRANSITIONEND, $.proxy(this.shown, this))
+                .one(EVENT_TRANSITIONEND, this.shown.bind(this))
                 .addClass(CLASS_IS_SLIDED)
                 .scrollTop(0);
         },
@@ -597,9 +642,9 @@
         },
 
         hideSlideout: function (isReload) {
-            var $slideout = this.$slideout;
-            var hideEvent;
-            var $datePicker = $('.qor-datepicker').not('.hidden');
+            let $slideout = this.$slideout,
+                hideEvent,
+                $datePicker = $('.qor-datepicker').not('.hidden');
 
             // remove onbeforeunload event
             window.onbeforeunload = null;
@@ -620,7 +665,7 @@
                 return;
             }
 
-            $slideout.one(EVENT_TRANSITIONEND, $.proxy(this.hidden, this)).removeClass(`${CLASS_IS_SLIDED} qor-slideout__fullscreen`);
+            $slideout.one(EVENT_TRANSITIONEND, this.hidden.bind(this)).removeClass(`${CLASS_IS_SLIDED} qor-slideout__fullscreen`);
             !isReload && $slideout.trigger(EVENT_SLIDEOUT_CLOSED);
         },
 
@@ -631,6 +676,8 @@
             $('body').removeClass(CLASS_OPEN);
 
             this.$slideout.removeClass(CLASS_IS_SHOWN).trigger(EVENT_HIDDEN);
+            this.$slideout.find('.qor-slideout__header').trigger('disable');
+            this.$slideout.find('.qor-slideout__body').trigger('disable');
         },
 
         refresh: function () {
@@ -644,7 +691,9 @@
         destroy: function () {
             this.unbind();
             this.unbuild();
-            this.$element.removeData(NAMESPACE);
+            if (this.$element) {
+                this.$element.removeData(NAMESPACE)
+            }
         }
     };
 
@@ -663,6 +712,7 @@
     QorSlideout.TEMPLATE = `<div class="qor-slideout">
             <div class="qor-slideout__header">
                 <div class="qor-slideout__header-link">
+                    <a href="#" target="_blank" class="mdl-button mdl-button--icon mdl-js-button mdl-js-repple-effect qor-slideout__print"><i class="material-icons">print</i></a>
                     <a href="#" target="_blank" class="mdl-button mdl-button--icon mdl-js-button mdl-js-repple-effect qor-slideout__opennew"><i class="material-icons">open_in_new</i></a>
                     <a href="#" class="mdl-button mdl-button--icon mdl-js-button mdl-js-repple-effect qor-slideout__fullscreen">
                         <i class="material-icons">fullscreen</i>
@@ -681,11 +731,15 @@
             <div><div class="mdl-spinner mdl-js-spinner is-active qor-layout__bottomsheet-spinner"></div></div>
         </div>`;
 
+    QOR.slideout = function (options) {
+        return new QorSlideout(null, options)
+    };
+
     QorSlideout.plugin = function (options) {
         return this.each(function () {
-            var $this = $(this);
-            var data = $this.data(NAMESPACE);
-            var fn;
+            let $this = $(this),
+                data = $this.data(NAMESPACE),
+                fn;
 
             if (!data) {
                 if (/destroy/.test(options)) {

@@ -10,8 +10,8 @@
         {{T $action}}
       </a>
     {{else}}
-      <button class="mdl-button mdl-button--colored mdl-button--raised qor-action-button" type="button"
-        data-url="{{if $action.URL}}{{call $action.URL $result $context}}{{else}}{{join_url (url_for $resource) "!action" $action.ToParam}}{{end}}"
+      <button class="mdl-button mdl-button--colored mdl-button--raised qor-action-button qor-action-button--form" type="button"
+        data-url="{{if $action.URL}}{{call $action.URL $result $context}}{{else}}{{join_url (url_for $resource) "!action" $action.ToParam (url_param "!scheme" $context.Scheme.SchemeParam)}}{{end}}"
         {{- if not $action.Resource}} data-dataType="json"
           data-ajax-form="true"
           data-from-index="true"
@@ -21,6 +21,9 @@
           {{- if $action.ReturnURL}} data-return-url="{{call $action.ReturnURL $result $context}}"{{end -}}
           {{- if $action.RefreshURL}} data-refresh-url="{{call $action.RefreshURL $result $context}}"{{end -}}
           {{- if $action.PassCurrentParams}} data-pass-current-query="true"{{end -}}
+        {{- else if and $action.Resource -}}
+          data-ajax-form="true"
+          {{if $action.ReadOnly}}data-read-only="true" data-method="POST"{{end}}
         {{- end -}}>
         {{- T $action -}}
       </button>

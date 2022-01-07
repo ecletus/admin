@@ -1,3 +1,4 @@
+{{- $ctx := . -}}
 <div class="qor-page__body qor-page__edit">
   {{- render "shared/alerts" -}}
   {{- $help := resource_help .Resource -}}
@@ -17,11 +18,18 @@
     <form class="qor-form" action="{{$cfg.FormAction}}" data-id="{{.Context.ResourceID}}" method="POST" enctype="multipart/form-data" data-async="true">
       <input name="_method" value="PUT" type="hidden">
       {{- record_frame .Resource .Result "edit/form/start" -}}
-      <p><strong><i class="required-asterisk">*</i></strong> {{t "github_com:ecletus:admin.form.required_fields"}}</p>
+      <div class="qor-alert qor-alert--form-required-message" role="alert">(<strong><i class="required-asterisk">*</i></strong>) {{t "github_com:ecletus:admin.form.required_fields"}}</div>
       {{- render_form .Result (edit_sections .Resource .Result) -}}
       {{- record_frame .Resource .Result "edit/form/end" -}}
       {{- if has_update_permission .Resource -}}
         <div class="qor-form__actions">
+            {{range .Resource.UpdateStates}}
+                {{if .IsEnabled $ctx}}
+                    <button class="mdl-button {{.GetCssClass $ctx}} mdl-js-button mdl-js-ripple-effect" name="QorUpdateState" value="{{.Name}}" type="submit">{{.GetLabel $ctx}}</button>
+                {{end}}
+            {{end}}
+            <div style="flex-grow: 1"></div>
+
           {{if .Resource.Config.Wizard}}
             {{if .Result.IsDone}}
               <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{t "github_com:ecletus:admin.form.wizard.done" }}</button>
@@ -29,8 +37,8 @@
 
             <a class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" href="javascript:void(0);" onclick="QOR.submitContinueEditing(this);">{{t "github_com:ecletus:admin.form.wizard.next" }}</a>
 
-            {{if .Result.CurrentStepName}}
-              <a class="mdl-button mdl-button--colored mdl-js-button mdl-js-ripple-effect" href="javascript:void(0);" onclick="QOR.submitValues(this, 'QorResource.GoBack',['true']);">{{t "github_com:ecletus:admin.form.wizard.prev" }}</a>
+            {{if and .Result.CurrentStepName (not .Result.IsMainStep) }}
+                <a class="mdl-button mdl-button--colored mdl-js-button mdl-js-ripple-effect" href="javascript:void(0);" onclick="QOR.submitValues(this, 'QorResource.GoBack',['true']);">{{t "github_com:ecletus:admin.form.wizard.prev" }}</a>
             {{end}}
           {{else}}
             <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{$cfg.ButtonLabel}}</button>

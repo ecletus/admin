@@ -31,7 +31,7 @@ func (this *Admin) registerCompositePrimaryKeyCallback(router xroute.Router) {
 var DisableCompositePrimaryKeyMode = PKG + ".composite_primary_key:query:disable"
 
 func compositePrimaryKeyQueryCallback(scope *aorm.Scope) {
-	if scope.Value == nil {
+	if scope.Value == nil || scope.Search.IsRaw() {
 		return
 	}
 	if value, ok := scope.Get(DisableCompositePrimaryKeyMode); ok && value != "" {

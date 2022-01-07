@@ -13,22 +13,22 @@
 
     'use strict';
 
-    var $document = $(document);
-    var NAMESPACE = 'qor.modal';
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
-    var EVENT_CLICK = 'click.' + NAMESPACE;
-    var EVENT_KEYUP = 'keyup.' + NAMESPACE;
-    var EVENT_SHOW = 'show.' + NAMESPACE;
-    var EVENT_SHOWN = 'shown.' + NAMESPACE;
-    var EVENT_HIDE = 'hide.' + NAMESPACE;
-    var EVENT_HIDDEN = 'hidden.' + NAMESPACE;
-    var EVENT_TRANSITION_END = 'transitionend';
-    var CLASS_OPEN = 'qor-modal-open';
-    var CLASS_SHOWN = 'shown';
-    var CLASS_FADE = 'fade';
-    var CLASS_IN = 'in';
-    var ARIA_HIDDEN = 'aria-hidden';
+    const $document = $(document),
+        NAMESPACE = 'qor.modal',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_CLICK = 'click.' + NAMESPACE,
+        EVENT_KEYUP = 'keyup.' + NAMESPACE,
+        EVENT_SHOW = 'show.' + NAMESPACE,
+        EVENT_SHOWN = 'shown.' + NAMESPACE,
+        EVENT_HIDE = 'hide.' + NAMESPACE,
+        EVENT_HIDDEN = 'hidden.' + NAMESPACE,
+        EVENT_TRANSITION_END = 'transitionend',
+        CLASS_OPEN = 'qor-modal-open',
+        CLASS_SHOWN = 'shown',
+        CLASS_FADE = 'fade',
+        CLASS_IN = 'in',
+        ARIA_HIDDEN = 'aria-hidden';
 
     function QorModal(element, options) {
         this.$element = $(element);
@@ -68,8 +68,8 @@
         },
 
         click: function (e) {
-            var element = this.$element[0];
-            var target = e.target;
+            const element = this.$element[0];
+            let target = e.target;
 
             if (target === element && this.options.backdrop) {
                 this.hide();

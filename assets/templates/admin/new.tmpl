@@ -1,11 +1,23 @@
 {{define "form"}}
+    {{- $ctx := . -}}
     {{$cfg := create_config}}
     <form class="qor-form" action="{{$cfg.FormAction}}" method="POST" enctype="multipart/form-data" data-async="true">
         {{record_frame .Resource .Result "new/form/start"}}
-        {{render_form .Result (new_sections) }}
+
+        <div class="qor-alert qor-alert--form-required-message" role="alert">(<strong><i class="required-asterisk">*</i></strong>) {{t "github_com:ecletus:admin.form.required_fields"}}</div>
+
+        <div class="qor-form__sections">
+        {{render_form .Result (new_sections_ctx . .Resource) }}
+        </div>
         {{record_frame .Resource .Result "new/form/end"}}
         {{if has_create_permission .Resource}}
             <div class="qor-form__actions">
+                {{range .Resource.CreateStates}}
+                    {{if .IsEnabled $ctx}}
+                        <button class="mdl-button {{.GetCssClass $ctx}} mdl-js-button mdl-js-ripple-effect" name="QorCreateState" value="{{.Name}}" type="submit">{{.GetLabel $ctx}}</button>
+                    {{end}}
+                {{end}}
+                <div style="flex-grow: 1"></div>
                 {{if .Resource.Config.Wizard}}
                     <a class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" href="javascript:void(0);" onclick="QOR.submitContinueEditing(this);">{{t "github_com:ecletus:admin.form.wizard.next" }}</a>
                 {{else}}

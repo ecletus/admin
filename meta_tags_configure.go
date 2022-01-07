@@ -3,6 +3,8 @@ package admin
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/ecletus/core"
 )
 
 var MetaConfigureTagsHandlers []func(meta *Meta, tags *MetaTags)
@@ -22,10 +24,31 @@ func (this *Meta) tagsConfigure() {
 		return
 	}
 	var tags = ParseMetaTags(this.FieldStruct.Tag)
+
+	if this.FieldStruct.Struct.Type.Implements(reflect.TypeOf((*DefaultFieldMetaTagger)(nil)).Elem()) {
+		for key, value := range reflect.New(IndirectRealType(this.FieldStruct.Struct.Type)).Interface().(DefaultFieldMetaTagger).AdminDefaultMetaTags(this.FieldStruct, tags) {
+			if _, ok := tags.Tags[key]; !ok {
+				tags.Tags[key] = value
+			}
+		}
+	}
+
+	if this.FieldStruct.Struct.Type.Implements(reflect.TypeOf((*DefaultMetaTagger)(nil)).Elem()) {
+		for key, value := range reflect.New(IndirectRealType(this.FieldStruct.Struct.Type)).Interface().(DefaultMetaTagger).AdminDefaultMetaTags() {
+			if _, ok := tags.Tags[key]; !ok {
+				tags.Tags[key] = value
+			}
+		}
+	}
+
 	if tags.Empty() {
 		return
 	}
 	this.UITags = tags.UI()
+
+	if !this.HiddenLabel {
+		this.HiddenLabel = tags.Flag("-LABEL")
+	}
 
 	if this.Label == "" {
 		this.Label = tags.Label()
@@ -43,8 +66,14 @@ func (this *Meta) tagsConfigure() {
 	if tags.Readonly() {
 		this.ReadOnly = true
 	}
+	if tags.ReadonlyStringer() {
+		this.ReadOnlyStringer = true
+	}
 	if tags.NilAsZero() {
 		this.NilAsZero = true
+	}
+	if sv := tags.Severity(); sv != "" {
+		this.Severity.Parse(sv)
 	}
 	if lockedField := tags.LockedField(); lockedField != "" {
 		typ := indirectType(reflect.TypeOf(this.BaseResource.Value))
@@ -127,6 +156,46 @@ func (this *Meta) tagsConfigure() {
 			}
 		}
 	}
+
+	if edit := tags.Edit(); edit != nil {
+		if edit.ReadOnly() {
+			this.ReadOnlyFunc = func(meta *Meta, ctx *Context, record interface{}) bool {
+				if ctx.Type.Has(EDIT) {
+					return true
+				}
+				return false
+			}
+		}
+	}
+
+	if stringify := tags.GetString("STRINGIFY"); stringify != "" {
+		m, ok := reflect.PtrTo(this.BaseResource.ModelStruct.Type).MethodByName(stringify)
+		if !ok {
+			panic("Tag STRINGIFY: method " + stringify + " does not exists")
+		}
+		if m.Type.NumOut() != 2 {
+			panic("Tag STRINGIFY: method " + stringify + " does not returns (interface{}, string)")
+		}
+		this.FormattedValuer = func(record interface{}, ctx *core.Context) *FormattedValue {
+			values := reflect.ValueOf(record).Method(m.Index).Call(nil)
+			if !values[0].IsValid() || values[0].IsNil() || (values[0].Kind() == reflect.Interface && values[0].Elem().IsNil()) {
+				return nil
+			}
+			return (&FormattedValue{Record: record, Raw: values[0].Interface(), Value: values[1].String()}).SetNonZero()
+		}
+	} else if m, ok := reflect.PtrTo(this.BaseResource.ModelStruct.Type).MethodByName("Get" + this.Name + "String"); ok {
+		if m.Type.NumOut() != 2 {
+			panic("Tag STRINGIFY: method " + stringify + " does not returns (interface{}, string)")
+		}
+		this.FormattedValuer = func(record interface{}, ctx *core.Context) *FormattedValue {
+			values := reflect.ValueOf(record).Method(m.Index).Call(nil)
+			if !values[0].IsValid() || values[0].IsNil() || (values[0].Kind() == reflect.Interface && values[0].Elem().IsNil()) {
+				return nil
+			}
+			return (&FormattedValue{Record: record, Raw: values[0].Interface(), Value: values[1].String()}).SetNonZero()
+		}
+	}
+
 	for _, f := range MetaConfigureTagsHandlers {
 		f(this, &tags)
 	}

@@ -1,0 +1,14 @@
+<div class="qor-page__body">
+  {{include "shared/alerts"}}
+  {{include "shared/flashes"}}
+  {{include "shared/errors"}}
+
+  <ul class="mdl-list" style="margin: 0 auto">
+    {{$ctx := .}}
+  {{range $name, $item := .Result.Children}}
+    {{$pair := $item.I18nPair $ctx}}
+    <li class="mdl-list__item">
+      <span class="mdl-list__item-primary-content"><a class="mdl-list__item-secondary-action" href="{{$ctx.OriginalURL.Path}}/{{$pair.Path}}">{{$pair.Label}}</a></span>
+  {{end}}
+  </ul>
+</div>

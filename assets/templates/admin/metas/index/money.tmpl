@@ -1,0 +1,4 @@
+{{if .Value -}}
+    {{- $value := raw_value_of .Record .Meta -}}
+    <span class="qor-money__value money-{{if $value.IsNegative}}debit{{else}}credit{{end}}">{{.Value}}</span>
+{{- end}}

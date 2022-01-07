@@ -1,0 +1,47 @@
+{{- $argument := .Result -}}
+
+<div class="qor-page__body{{if ne .RequestLayout "lite"}} qor-page__new{{end}}">
+  {{render "shared/flashes"}}
+  {{render "shared/errors"}}
+  {{if not .Context.HasError}}
+  <div class="qor-form-container" data-toggle="qor-action-slideout">
+
+    {{- action_frame $argument "common/start" -}}
+    {{- action_frame $argument "new/start" -}}
+
+    {{if $argument.Action.Resource}}
+      {{- record_frame $argument.Action.Resource .Result "common/start" -}}
+      {{- record_frame $argument.Action.Resource .Result "new/start" -}}
+    {{end}}
+
+    <form action="{{.Context.Request.RequestURI}}" method="POST" enctype="multipart/form-data">
+      <input name="_method" value="PUT" type="hidden">
+
+      {{if $argument.Action.Resource}}
+        {{- record_frame $argument.Action.Resource .Result "new/form/start" -}}
+        {{render_form $argument.Argument (new_sections_ctx . $argument.Action.Resource)}}
+        {{- record_frame $argument.Action.Resource .Result "new/form/end" -}}
+      {{end}}
+
+      <div class="qor-form__actions">
+        {{range $argument.Action.States}}
+          {{if .IsEnabled $argument}}
+            <button class="mdl-button {{.GetCssClass $argument}} mdl-js-button mdl-js-ripple-effect" name="QorActionState.{{.Name}}" value="{{.GetValue $argument}}" type="submit">{{.GetLabel $argument}}</button>
+          {{end}}
+        {{end}}
+        <div style="flex-grow: 1"></div>
+        <a class="mdl-button mdl-button--primary mdl-js-button mdl-js-ripple-effect qor-button--cancel" href="javascript:history.back();">{{t "github_com:ecletus:admin.form.cancel"}}</a>
+        <button class="mdl-button mdl-button--colored mdl-button--raised mdl-js-button mdl-js-ripple-effect qor-button--save" type="submit">{{t "github_com:ecletus:admin.form.submit"}}</button>
+      </div>
+    </form>
+
+    {{if $argument.Action.Resource}}
+      {{- record_frame $argument.Action.Resource .Result "new/end" -}}
+      {{- record_frame $argument.Action.Resource .Result "common/end" -}}
+    {{end}}
+
+    {{- action_frame $argument "new/end" -}}
+    {{- action_frame $argument "common/end" -}}
+  </div>
+  {{end}}
+</div>

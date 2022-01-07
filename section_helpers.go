@@ -16,10 +16,9 @@ func ParseSections(s string) (secs []*Section) {
 	} else {
 		s = "{" + strings.ReplaceAll(strings.ReplaceAll(s, "\n", "};{"), ",", ";") + "}"
 	}
-	secs = []*Section{{}}
-	var (
-		last = secs[0]
-	)
+
+	last := &Section{}
+	secs = []*Section{last}
 	scanner.ScanAll(s, func(n tag_scanner.Node) {
 		switch n.Type() {
 		case tag_scanner.Flag:
@@ -28,7 +27,7 @@ func ParseSections(s string) (secs []*Section) {
 			s := n.(tag_scanner.NodeFlag).String()
 			if scanner.IsTags(s) {
 				// is a row
-				var row []string
+				var row []interface{}
 				scanner.ScanAll(s, func(n tag_scanner.Node) {
 					if n.Type() == tag_scanner.Flag {
 						row = append(row, n.String())
@@ -38,23 +37,23 @@ func ParseSections(s string) (secs []*Section) {
 					if last.Title == "" {
 						last.Rows = append(last.Rows, row)
 					} else {
-						last = &Section{Rows: [][]string{row}}
+						last = &Section{Rows: [][]interface{}{row}}
 						secs = append(secs, last)
 					}
 				}
 			} else {
 				// only column
 				if last.Title == "" {
-					last.Rows = append(last.Rows, []string{s})
+					last.Rows = append(last.Rows, []interface{}{s})
 				} else {
-					last = &Section{Rows: [][]string{{s}}}
+					last = &Section{Rows: [][]interface{}{{s}}}
 					secs = append(secs, last)
 				}
 			}
 		case tag_scanner.Tags:
 			// new row
 			// parse rows and columns
-			var row []string
+			var row []interface{}
 			scanner.ScanAll(n.(tag_scanner.NodeTags).String(), func(n tag_scanner.Node) {
 				if n.Type() == tag_scanner.Flag {
 					row = append(row, n.String())
@@ -65,38 +64,50 @@ func ParseSections(s string) (secs []*Section) {
 			}
 		case tag_scanner.KeyValue:
 			kv := n.(tag_scanner.NodeKeyValue)
-			last = &Section{Title: kv.Key}
+			sec := &Section{Title: kv.Key}
 			if scanner.IsTags(kv.Value) {
 				// parse rows and columns
 				scanner.ScanAll(kv.Value, func(n tag_scanner.Node) {
-					switch n.Type() {
-					case tag_scanner.Flag:
+					switch t := n.(type) {
+					case tag_scanner.NodeFlag:
 						// simple column
-						last.Rows = append(last.Rows, []string{n.String()})
-					case tag_scanner.Tags:
+						sec.Rows = append(sec.Rows, []interface{}{t.String()})
+					case tag_scanner.NodeTags:
 						// new row
 						// parse rows and columns
-						var row []string
-						scanner.ScanAll(n.(tag_scanner.NodeTags).String(), func(n tag_scanner.Node) {
+						var row []interface{}
+						scanner.ScanAll(t.String(), func(n tag_scanner.Node) {
 							if n.Type() == tag_scanner.Flag {
 								row = append(row, n.String())
 							}
 						})
 						if len(row) > 0 {
-							last.Rows = append(last.Rows, row)
+							sec.Rows = append(sec.Rows, row)
+						}
+					case tag_scanner.NodeKeyValue:
+						secs := ParseSections(t.Value)
+						if len(secs) > 0 {
+							secs[0].Title = t.Key
+							sec.Rows = append(sec.Rows, []interface{}{secs[0]})
 						}
 					}
 				})
 			}
 
-			if len(last.Rows) > 0 {
+			if len(sec.Rows) > 0 {
+				secs = append(secs, sec)
+				last = &Section{}
 				secs = append(secs, last)
 			}
 		}
 	})
 
-	if len(last.Rows) == 0 {
-		return nil
+	var newSecs []*Section
+	for _, sec := range secs {
+		if len(sec.Rows) > 0 {
+			newSecs = append(newSecs, sec)
+		}
 	}
-	return
+
+	return newSecs
 }

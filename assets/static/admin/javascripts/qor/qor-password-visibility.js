@@ -29,7 +29,7 @@
         init: function () {
             this.flag = false;
             this.$icon = this.$el.find('i');
-            this.$target = this.$el.siblings('input[type=password]');
+            this.$target = this.$el.parents('div:eq(0)').children('input[type=password]');
             this.icons = [this.$icon.text(), this.$el.data('toggleIcon')];
             this.bind();
         },
@@ -45,7 +45,7 @@
         },
 
         destroy: function () {
-            this.$el.of(EVENT_CLICK, this.toggle);
+            this.$el.off(EVENT_CLICK, this.toggle);
             this.$el.removeData(NAMESPACE);
         }
     };

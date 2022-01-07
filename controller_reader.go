@@ -36,21 +36,29 @@ func ParseShowConfig(context *Context) (cfg *ShowConfig) {
 }
 
 // Show render show page
-func (this *Controller) Show(context *Context) {
+func (this *Controller) Show(ctx *Context) {
 	if _, ok := this.controller.(ControllerReader); !ok {
-		context.NotFound = true
-		http.NotFound(context.Writer, context.Request)
+		ctx.NotFound = true
+		http.NotFound(ctx.Writer, ctx.Request)
 	}
-	context.Type = SHOW
-	if HasDeletedUrlQuery(context.Request.URL.Query()) {
-		context.Type |= DELETED
+
+	if ctx = ctx.ParentPreload(ParentPreloadShow); ctx.HasError() {
+		ctx.LogErrors()
+		return
 	}
-	this.showOrEdit(context, func(record interface{}) bool {
-		context.Result = record
-		if context.Type.Has(EDIT) {
-			ParseUpdateConfig(context)
+
+	ctx.SetBasicType(SHOW)
+	if HasDeletedUrlQuery(ctx.Request.URL.Query()) {
+		ctx.Type |= DELETED
+	}
+	this.showOrEdit(ctx, func(record interface{}) bool {
+		ctx.Result = record
+		ctx.ResourceRecord = record
+
+		if ctx.Type.Has(EDIT) {
+			ParseUpdateConfig(ctx)
 		} else {
-			ParseShowConfig(context)
+			ParseShowConfig(ctx)
 		}
 		return true
 	})

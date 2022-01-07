@@ -61,7 +61,7 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 				if meta.Label[0] == '.' {
 					meta.Label = fragRes.I18nPrefix + meta.Label
 				}
-				meta.Enabled = func(recorde interface{}, context *Context, meta *Meta) bool {
+				meta.Enabled = func(recorde interface{}, context *Context, meta *Meta, readOnly bool) bool {
 					if context.Type.Has(SHOW) {
 						return false
 					}
@@ -119,7 +119,7 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 					for id, fr := range r.GetFragments() {
 						fragRes := this.Fragments.Get(id).Resource
 						if ID := aorm.IdOf(fr); ID.IsZero() {
-							aorm.IdOf(r).SetTo(fr)
+							aorm.MustCopyIdToRecord(r, fr)
 						}
 						if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
 							return errwrap.Wrap(err, "Fragment "+id)
@@ -128,8 +128,7 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 					for id, fr := range r.GetFormFragments() {
 						fragRes := this.Fragments.Get(id).Resource
 						if ID := aorm.IdOf(fr); ID.IsZero() {
-							ID, _ = aorm.CopyIdTo(aorm.IdOf(r), ID)
-							ID.SetTo(fr)
+							aorm.MustCopyIdToRecord(r, fr)
 						}
 						if err = fragRes.Crud(e.OriginalContext()).Update(fr); err != nil {
 							return errwrap.Wrap(err, "Fragment "+id)
@@ -170,7 +169,7 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 				return fragmentedRecorde.GetFragment(frag.ID)
 			})
 			meta.Fragment = fragRes.Fragment
-			meta.Resource = this
+			meta.BaseResource = this
 			meta.NewValuer(func(meta *Meta, old MetaValuer, recorde interface{}, context *core.Context) interface{} {
 				fragmentedRecorde := recorde.(fragment.FragmentedModelInterface)
 				frag := meta.Fragment
@@ -197,9 +196,10 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 		this.ShowAttrs(append([]interface{}{this.ShowAttrs()}, fieldsNamesInterface...)...)
 	} else if !fragRes.Config.Virtual {
 		this.Meta(&Meta{
-			Name: metaName,
-			Type: "fragment",
-			Enabled: func(recorde interface{}, context *Context, meta *Meta) bool {
+			Name:     metaName,
+			Type:     "fragment",
+			Resource: fragRes,
+			Enabled: func(recorde interface{}, context *Context, meta *Meta, readOnly bool) bool {
 				if recorde == nil {
 					return true
 				}
@@ -213,20 +213,28 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 				f := fragRes.Fragment
 				if f.IsForm {
 					if ctx.Type.Has(NEW) {
-						return fragRes.ConvertSectionToMetas([]*Section{{Rows: [][]string{{AttrFragmentEnabled}}}})
+						return Sections{{Resource: fragRes, Rows: [][]interface{}{{AttrFragmentEnabled}}}}.ToMetas()
 					}
 				}
-				return fragRes.ConvertSectionToMetas(fragRes.ContextSections(ctx, record))
+				return fragRes.ContextSections(ctx, record).ToMetas()
 			},
 			Setter: func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 				if _, ok := this.Fragments.Fragments[metaValue.Name]; !ok {
 					return nil
 				}
 				value := fragRes.Fragment.FormGetOrNew(recorde.(fragment.FragmentedModelInterface), context)
-				err := resource.DecodeToResource(fragRes, value, metaValue.MetaValues, context).Start()
+				err := resource.DecodeToResource(fragRes, value, metaValue, context).Start()
 				return err
 			},
 			Valuer: func(recorde interface{}, context *core.Context) interface{} {
+				if recorde == nil {
+					return &FormFragmentRecordState{
+						fragRes.Fragment,
+						false,
+						nil,
+						true,
+					}
+				}
 				r := recorde.(fragment.FragmentedModelInterface)
 				value := r.GetFormFragment(fragRes.Fragment.ID)
 				isNil := value == nil
@@ -243,9 +251,9 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 		})
 
 		var hasEditMeta bool
-		if len(this.editSections) > 0 {
+		if secs := this.Sections.Default.Screen.Edit.sections; len(secs) > 0 {
 		root:
-			for _, sec := range this.editSections {
+			for _, sec := range secs {
 				for _, row := range sec.Rows {
 					for _, col := range row {
 						if col == metaName {
@@ -261,12 +269,12 @@ func (this *Resource) AddFragmentConfig(value fragment.FragmentModelInterface, c
 			this.EditAttrs(this.EditAttrs(), metaName)
 		}
 
-		if len(this.showSections) == 0 {
+		if len(this.Sections.Default.Screen.Show.sections) == 0 {
 			this.ShowAttrs(this.EditAttrs(), metaName)
 		} else {
 			var hasShowMeta bool
 		root2:
-			for _, sec := range this.showSections {
+			for _, sec := range this.Sections.Default.Screen.Show.sections {
 				for _, row := range sec.Rows {
 					for _, col := range row {
 						if col == metaName {

@@ -5,12 +5,44 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ecletus/roles"
-
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/core/utils"
+	"github.com/ecletus/roles"
+	"github.com/gobwas/glob"
 )
+
+func (this *Resource) EachMetas(cb func(m *Meta), names ...string) {
+	if len(names) == 0 {
+		for _, m := range this.GetMetas([]string{}) {
+			cb(m.(*Meta))
+		}
+	} else {
+		for _, name := range names {
+			if name[0] == '/' {
+				name = name[1:]
+				for _, secs := range this.Sections.Default.Screen.Cruds() {
+					for _, sec := range secs.sections {
+						if sec.Title == name {
+							sec.EachColumns(func(_, _ int, col string) {
+								cb(this.Meta(&Meta{Name: col}))
+							})
+						}
+					}
+				}
+			} else {
+				cb(this.Meta(&Meta{Name: name}))
+			}
+		}
+	}
+}
+func (this *Resource) EachFieldsMetaGlob(glob glob.Glob, cb func(m *Meta)) {
+	for name := range this.ModelStruct.FieldsByName {
+		if glob.Match(name) {
+			cb(this.Meta(&Meta{Name: name}))
+		}
+	}
+}
 
 func (this *Resource) GetDefinedMeta(name string) *Meta {
 	meta := this.MetasByName[name]
@@ -27,16 +59,48 @@ func (this *Resource) GetMetaOrSet(name string) (meta *Meta) {
 	return
 }
 
+func (this *Resource) GetMetaOrSetDefault(meta *Meta) *Meta {
+	if m := this.GetDefinedMeta(meta.Name); m == nil {
+		return this.Meta(meta)
+	} else {
+		return m
+	}
+}
+
 // GetMeta get meta with name
 func (this *Resource) GetMeta(name string) *Meta {
 	return this.getMeta(&Meta{Name: name})
 }
 
+func (this *Resource) DoMeta(meta *Meta, cb func(m *Meta)) *Meta {
+	m := this.Meta(meta)
+	cb(m)
+	return m
+}
+
+func (this *Resource) LinkMeta(name string, dst string) {
+	this.MetaLinks[name] = dst
+}
+
 func (this *Resource) getMeta(meta *Meta) *Meta {
+	func() {
+		var (
+			oldName string
+			name    = meta.Name
+		)
+
+		for name != "" {
+			oldName = name
+			name = this.MetaLinks[oldName]
+		}
+		if oldName != "" && oldName != meta.Name {
+			meta.Name = oldName
+		}
+	}()
 	fallbackMeta := this.MetasByName[meta.Name]
 
 	if meta.Type == "-" {
-		meta.Enabled = func(recorde interface{}, context *Context, meta *Meta) bool {
+		meta.Enabled = func(recorde interface{}, context *Context, meta *Meta, readOnly bool) bool {
 			return false
 		}
 		meta.Type = ""
@@ -108,8 +172,16 @@ func (this *Resource) getMeta(meta *Meta) *Meta {
 			if meta.BaseResource == nil {
 				meta.BaseResource = this
 			}
-			if field.IsPrimaryKey && meta.Type == "" {
-				meta.Type = "hidden_primary_key"
+			if field.IsPrimaryKey {
+				if !meta.ReadOnly && meta.ReadOnlyFunc == nil {
+					meta.ReadOnly = field.Serial
+				}
+				if meta.Type == "" {
+					meta.Type = "hidden_primary_key"
+				}
+				if meta.ReadOnlyType == "" {
+					meta.ReadOnlyType = "id"
+				}
 			}
 			this.MetasByName[meta.Name] = meta
 			this.MetasByFieldName[meta.Name] = meta
@@ -175,6 +247,23 @@ func (this *Resource) getMeta(meta *Meta) *Meta {
 				if pth != nil {
 					to := r.GetMeta(parts[len(parts)-1])
 					if to == nil {
+						if meta.Valuer != nil || meta.Virtual {
+							meta.BaseResource = this
+							this.MetasByName[meta.Name] = meta
+							this.Metas = append(this.Metas, meta)
+							if meta.Typ == nil {
+								meta.Typ = reflect.TypeOf("")
+							}
+							meta.Virtual = true
+							if meta.Setter == nil {
+								meta.ReadOnly = true
+								meta.Setter = func(record interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+									return fmt.Errorf("meta %q is read only", this.Name)
+								}
+							}
+							meta.updateMeta()
+							return meta
+						}
 						panic(fmt.Errorf("meta %q: destination does not exists", meta.Name))
 					}
 					meta = NewMetaFieldProxy(meta.Name, pth, this.Value, to)
@@ -198,34 +287,45 @@ func (this *Resource) SetMeta(meta *Meta) *Meta {
 }
 
 // MetaDisable disable metas by name
-func (this *Resource) MetaDisable(names ...string) {
+func (this *Resource) MetaDisable(names ...string) *Resource {
 	for _, name := range names {
-		this.Meta(&Meta{Name: name, Enabled: func(recorde interface{}, context *Context, meta *Meta) bool {
+		this.Meta(&Meta{Name: name, Enabled: func(recorde interface{}, context *Context, meta *Meta, readOnly bool) bool {
 			return false
 		}})
 	}
+	return this
 }
 
 // MetaRequired set metas as required
-func (this *Resource) MetaRequired(names ...string) {
+func (this *Resource) MetaRequired(names ...string) *Resource {
 	for _, name := range names {
 		this.Meta(&Meta{Name: name, Required: true})
 	}
+	return this
 }
 
 // MetaOptional set metas to optional
-func (this *Resource) MetaOptional(names ...string) {
+func (this *Resource) MetaOptional(names ...string) *Resource {
 	for _, name := range names {
 		m := this.Meta(&Meta{Name: name})
 		m.Required = false
 		m.Meta.Required = false
 		m.updateMeta()
 	}
+	return this
 }
 
 // MetaR register meta for admin resource and return this resource
 func (this *Resource) MetaR(meta *Meta) *Resource {
 	this.Meta(meta)
+	return this
+}
+
+// Meta register meta for admin resource
+func (this *Resource) SetMetasReadOnler(f func(meta *Meta, ctx *Context, record interface{}) bool, name ...string) *Resource {
+	for _, name := range name {
+		this.Meta(&Meta{Name: name, ReadOnlyFunc: f})
+	}
 	return this
 }
 
@@ -334,6 +434,28 @@ func (this *Resource) Meta(meta *Meta) *Meta {
 				oldMeta.Required = true
 			}
 
+			if meta.ReadOnlyStringer {
+				oldMeta.ReadOnlyStringer = true
+			}
+
+			if meta.RecordRequirerFunc != nil {
+				oldMeta.RecordRequirerFunc = meta.RecordRequirerFunc
+			}
+
+			if meta.SortHandler != nil {
+				oldMeta.SortHandler = meta.SortHandler
+			}
+
+			if meta.Typ != nil {
+				oldMeta.Typ = meta.Typ
+				oldMeta.Meta.Typ = meta.Typ
+			}
+
+			if meta.DefaultDeny {
+				oldMeta.DefaultDeny = true
+				oldMeta.Meta.DefaultDeny = true
+			}
+
 			oldMeta.updateMeta()
 			meta = oldMeta
 		}
@@ -402,7 +524,7 @@ func (this *Resource) MetasFromLayoutContext(l *Layout, context *Context, value 
 	} else if l.MetaNamesFunc != nil {
 		namess := l.MetaNamesFunc(this, context, value, roles...)
 		if len(namess) > 0 {
-			metas = this.ConvertSectionToMetas(this.allowedSections(value, this.generateSections(namess), context, roles...))
+			metas = this.generateSections(namess).Allowed(value, context, roles...).ToMetas()
 		}
 	} else if len(l.Metas) > 0 {
 		for _, metaName := range l.Metas {
@@ -446,8 +568,8 @@ func (this *Resource) MetasFromLayoutContext(l *Layout, context *Context, value 
 			Meta: &resource.Meta{
 				Typ: reflect.TypeOf((*string)(nil)).Elem(),
 			},
-			FormattedValuer: func(recorde interface{}, context *core.Context) interface{} {
-				return this.GetKey(recorde).String()
+			FormattedValuer: func(record interface{}, context *core.Context) *FormattedValue {
+				return &FormattedValue{Record: record, Raw: this.GetKey(record)}
 			},
 			mustValuer: true,
 		}
@@ -468,11 +590,20 @@ func (this *Resource) MetasFromLayoutNameContext(layout string, context *Context
 
 func (this *Resource) MetaContextGetter(ctx *Context) func(name string) *Meta {
 	if this.MetaContextGetterFunc != nil {
-		return this.MetaContextGetterFunc(ctx)
+		return func(name string) *Meta {
+			return this.MetaContextGetterFunc(ctx, name)
+		}
 	}
 	return func(name string) *Meta {
 		return this.GetMeta(name)
 	}
+}
+
+func (this *Resource) GetContextMeta(ctx *Context, name string) *Meta {
+	if this.MetaContextGetterFunc != nil {
+		return this.MetaContextGetterFunc(ctx, name)
+	}
+	return this.GetMeta(name)
 }
 
 func NewMeta(meta *Meta) *Meta {

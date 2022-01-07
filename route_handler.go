@@ -2,6 +2,8 @@ package admin
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -48,7 +50,7 @@ type RouteConfig struct {
 	Resource *Resource
 	IDParser func(ctx *Context, res *Resource, value string) (ID aorm.ID, err error)
 	Permissioner,
-	ContextPermissioner core.Permissioner
+	ContextPermissioner Permissioner
 	PermissionMode                roles.PermissionMode
 	Values                        map[interface{}]interface{}
 	Data                          DataStack
@@ -206,8 +208,7 @@ func (h *RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			context.DB(context.DB().SetCurrentUser(aorm.IDOf(currentUser)))
 			var superUser bool
 			if superUser, err = context.Admin.Auth.IsSuperAdmin(context); err != nil {
-				http.Error(context.Writer, err.Error(), http.StatusInternalServerError)
-				return
+				panic(err)
 			}
 			if context.Roles.Len() == 0 {
 				// all user roles
@@ -225,13 +226,32 @@ func (h *RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			context.Roles = context.Role.MatchedRoles(context.Request, nil)
 		}
 
+		if reqRolesValue := ctx.Request.URL.Query().Get("!roles"); reqRolesValue != "" {
+			if reqRolesValue, _ = url.PathUnescape(reqRolesValue); reqRolesValue != "" {
+				reqRoles := strings.Split(reqRolesValue, ",")
+				for _, v := range reqRoles {
+					if v == "" {
+						continue
+					}
+					op, v := v[0], v[1:]
+					switch op {
+					case '-':
+						context.Roles.Remove(v)
+					case '+', ' ':
+						// SPACE is escaped to '+'
+						context.Roles.Append(v)
+					}
+				}
+			}
+		}
+
 		if setuper, ok := context.Admin.Auth.(ContextSetuper); ok {
 			if err = setuper.ContextSetup(context); err != nil {
 				panic(err)
 			}
 		}
 
-		if !h.Config.GlobalPermissionCheckDisabled && !context.HasPermission(core.Permissioners(h, context.Admin.Auth), context.PermissionMode) {
+		if !h.Config.GlobalPermissionCheckDisabled && h.HasPermission(context.PermissionMode, context.Context).Deny() {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
@@ -239,6 +259,9 @@ func (h *RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		context.RouteHandler = h
 		h.generateCrumbs(context)
 
+		if context.Writer.WroteHeader() {
+			return
+		}
 		if context.HasError() {
 			http.Error(w, context.Error(), http.StatusInternalServerError)
 			return
@@ -256,7 +279,7 @@ func (h *RouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		if perm := context.Admin.HasContextPermission(context.PermissionMode, context); perm.Deny() {
+		if perm := context.Admin.AdminHasContextPermission(context.PermissionMode, context); perm.Deny() {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
@@ -288,7 +311,7 @@ func (h RouteHandler) HasPermission(mode roles.PermissionMode, ctx *core.Context
 		mode = h.Config.PermissionMode
 	}
 
-	return h.Config.Permissioner.HasPermission(mode, context.Context)
+	return h.Config.Permissioner.AdminHasPermission(mode, context)
 }
 
 func (h *RouteHandler) HasContextPermission(mode roles.PermissionMode, ctx *core.Context) (perm roles.Perm) {
@@ -300,7 +323,7 @@ func (h *RouteHandler) HasContextPermission(mode roles.PermissionMode, ctx *core
 	if h.Config.PermissionMode != "" {
 		mode = h.Config.PermissionMode
 	}
-	return h.Config.ContextPermissioner.HasPermission(mode, context.Context)
+	return h.Config.ContextPermissioner.AdminHasPermission(mode, context)
 }
 
 func NewHandler(handle Handler, configs ...*RouteConfig) *RouteHandler {

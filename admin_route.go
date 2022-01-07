@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -11,8 +12,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/moisespsena/template/html/template"
 	"github.com/pkg/errors"
+
+	"github.com/moisespsena/template/html/template"
 
 	"github.com/moisespsena-go/middleware"
 
@@ -25,15 +27,26 @@ import (
 	"github.com/ecletus/core"
 )
 
+const (
+	AuthRevertPath = "/!auth/revert"
+)
+
 type Interseptor func(w http.ResponseWriter, req *http.Request, serv func(w http.ResponseWriter, req *http.Request))
 
 // routeInterseptor dispatches the handler registered in the matched route
 func (this *Admin) routeInterseptor(chain *xroute.ChainHandler) {
 	mainContext := core.ContextFromRequest(chain.Request())
 	req, childContext := mainContext.NewChild(nil, this.Config.MountPath)
+	childContext.SetRawDB(childContext.DB().Set(DbKey, this))
 	childContext.StaticURL = mainContext.StaticURL + "/admin"
 	context := this.NewContext(childContext)
 	context.RouteContext = chain.Context
+	context.MetaContextFactory = func(parent *core.Context, res interface{}, record interface{}) *core.Context {
+		if res, ok := res.(*Resource); ok {
+			return ContextFromCoreContext(parent).CreateChild(res, record).Context
+		}
+		return parent
+	}
 	childContext.Parent.SetValue(CONTEXT_KEY, context)
 	chain.SetRequest(req)
 
@@ -104,6 +117,18 @@ func (this *Admin) InitRoutes(router xroute.Router) {
 	router.Get("/", NewHandler(adminController.Dashboard, &RouteConfig{
 		GlobalPermissionCheckDisabled: this.Config.Public,
 	}))
+	router.Get(AuthRevertPath, NewHandler(func(c *Context) {
+		Auth := c.Admin.Auth.Auth()
+		if err := auth.Revert(Auth, c.Context); err != nil {
+			http.Error(c.Writer, err.Error(), http.StatusPreconditionFailed)
+		} else {
+			to := c.Request.Header.Get("Referer")
+			if to == "" {
+				to = c.Path()
+			}
+			http.Redirect(c.Writer, c.Request, c.Path(), http.StatusSeeOther)
+		}
+	}))
 	router.Get("/search", NewHandler(adminController.SearchCenter))
 	router.HandleM(xroute.GET|xroute.HEAD, "/(assets|themes)/", this.StaticFS)
 
@@ -143,15 +168,83 @@ func (this *Admin) InitRoutes(router xroute.Router) {
 		Handler: this.handlerInterseptor,
 	})
 
+	for _, m := range this.menus {
+		if m.Resource == nil && m.URI != "" {
+			if m.URI == "/" {
+				this.RouteTree.Menu = m
+			} else {
+				//this.RouteTree.Add(strings.TrimPrefix(m.URI, "/"), &RouteNode{Menu: m})
+			}
+		}
+	}
+
+	var root = &this.RouteTree.RouteNode
+	root.Handler = router
+
+	if this.RouteTree.Children == nil {
+		this.RouteTree.Children = map[string]*RouteNode{}
+	}
 	for param, res := range this.ResourcesByParam {
 		pattern := "/" + param
-		r := res.InitRoutes()
+		r := res.InitRoutes(root)
 		router.Mount(pattern, r)
 	}
 
 	for _, r := range this.onRouter {
 		r(router)
 	}
+
+	var buf bytes.Buffer
+	buf.WriteString("Route tree:\n")
+
+	(&RouteNode{Children: map[string]*RouteNode{"": root}}).Walk(func(parents []*RouteNodeWalkerItem, item *RouteNodeWalkerItem) (err error) {
+		localPath, label := item.Node.Pair()
+
+		if item.Node.IsIndex() {
+			if item.Node.Parent != nil && item.Node.Parent.Handler != nil {
+				if mux, ok := item.Node.Parent.Handler.(xroute.Router); ok {
+					mux.Get("/"+strings.TrimSuffix(localPath, "/"), NewHandler(func(c *Context) {
+						c.Result = item.Node
+						adminController.MenuIndex(c, item.Node)
+					}))
+				}
+			}
+		}
+
+		var (
+			prefix string
+			args   = []interface{}{}
+		)
+
+		if item.Node.Depth > 0 {
+			for _, s := range parents {
+				if !s.Last {
+					prefix += "│   "
+				} else {
+					prefix += "   "
+				}
+			}
+			if item.Last {
+				prefix += "└──"
+			} else {
+				prefix += "├──"
+			}
+
+			args = append(args, prefix)
+		}
+
+		if localPath != "" && label != "" {
+			args = append(args, localPath, "→", label)
+		} else if label != "" {
+			args = append(args, "+", "→", label)
+		} else if localPath != "" {
+			args = append(args, localPath)
+		}
+		fmt.Fprintln(&buf, args...)
+		return nil
+	})
+
+	rlog.Debug(buf.String())
 
 	router.NotFound(NewHandler(this.UserPagesHandler, &RouteConfig{
 		GlobalPermissionCheckDisabled: true,

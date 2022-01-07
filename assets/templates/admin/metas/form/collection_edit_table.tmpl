@@ -1,0 +1,172 @@
+{{- $current_values := .MetaValue.Raw -}}
+{{- $readOnly := .ReadOnly -}}
+{{if and $readOnly (not $current_values) -}}
+    {{- exit -}}
+{{- end -}}
+{{- $metaConfig := .Meta.Config -}}
+{{- $meta := .Meta -}}
+{{- $ctx := .Context -}}
+{{- $rec := .Record -}}
+{{- $this := . -}}
+{{- $metas := make_slice -}}
+{{- $typ := "form" -}}
+{{- $child := $ctx.CreateReadOnlerTypedChild $readOnly "meta_index" $meta.Resource (null) }}
+{{- admin_ctx_set_type $child $child.Type "inline" -}}
+{{- $readable := has_read_permission $child $meta.Resource -}}
+{{- if $readOnly -}}
+    {{- $typ = "index" -}}
+    {{- $child.Type.SetBasicS "show" -}}
+    {{- $metas = show_meta_sections_ctx $child $meta -}}
+{{- else if or ($child.Type.HasS "new") (eq (admin_context).Action "new") -}}
+    {{- $metas = new_meta_sections_ctx $child $meta -}}
+{{- else -}}
+    {{- $metas = edit_meta_sections_ctx $child $meta -}}
+{{- end -}}
+{{- $mt := convert_sections_to_metas_table $child $metas -}}
+{{- $createable := and (has_create_permission .Meta) (.Meta.CanCreateItem .Context .Record) -}}
+{{- $alertColspan := (len $mt.Metas) + 1}}
+{{- $helpEnabled := not ($ctx.Type.HasS "print") }}
+{{- if $meta.UITags.Flag "ENUMERATE"}}{{$alertColspan += 1}}{{end -}}
+{{- $deletedMap := slice_value_get_deleted_map $current_values -}}
+<div class="qor-field collection-edit collection-edit-tabled {{if $this.NotReadOnly}}qor-replicator-container{{end}}"
+     data-base-class="replicator"
+     data-item-selector="tbody > tr"
+     data-alert-tag="td colspan='{{$alertColspan}}'"
+     data-root-selector="> div"
+     {{if $metaConfig.Max}}data-max-item="{{$metaConfig.Max}}" data-max-item-hint="Up to {{$metaConfig.Max}} {{meta_record_label .Meta .Record}}"{{end}}
+    >
+    {{if $createable}}
+        <template type="qor-collection-edit-new/html" data-next-index="{{len $current_values}}" data-prefix="{{$this.InputName}}">
+            {{$value := (new_resource_struct $meta.Resource)}}
+            {{$itemContext := $ctx.CreateChild $meta.Resource $value}}
+            <tr>
+                {{if $meta.UITags.Flag "ENUMERATE"}}
+                    <td></td>
+                {{end}}
+                {{range $meta := $mt.Metas}}
+                    <td class="mdl-data-table__cell--non-numeric" data-heading="{{$meta.Name}}">
+                        {{render_meta_with_path_ctx $itemContext "{{index}}" $meta $typ "mode-single"}}
+                    </td>
+                {{end}}
+                <td class="mdl-data-table__cell--non-numeric"><button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
+                        <i class="material-icons md-18">delete</i>
+                    </button></td>
+            </tr>
+        </template>
+    {{end}}
+    <div class="qor-field__block">
+        <label class="qor-field__label">
+            {{- meta_record_label .Meta .Record -}}{{if and $this.NotReadOnly $meta.Required}} <i class="required-asterisk">*</i>{{end -}}
+            {{- if $helpEnabled -}}
+                {{- $help := meta_record_help .Meta .Record -}}
+                {{- if $help -}}
+                    <div class="qor-field__help">{{$help}}</div>
+                {{- end}}
+            {{- end}}
+        </label>
+        <div class="collection-edit-table">
+            <table class="mdl-data-table mdl-js-data-table qor-table qor-js-table">
+                {{if not ($meta.UITags.Flag "NO_TITLE")}}
+                    <colgroup>
+                        {{if $meta.UITags.Flag "ENUMERATE"}}
+                            <col />
+                        {{end}}
+                        {{range $index, $meta := $mt.Metas}}
+                            {{$style := $meta.UITags.GetString "STYLE"}}
+                            <col {{if $style}}style="{{$style}}" {{end}}/>
+                        {{end}}
+                    </colgroup>
+                    <thead>
+                        {{range $index, $row := $mt.Headers}}
+                            <tr>
+                            {{if and (eq $index 0) ($meta.UITags.Flag "ENUMERATE")}}
+                                <th class="" rowspan="{{$mt.NumRows}}"></th>
+                            {{end}}
+                            {{range $h := $row }}
+                                {{$title := table_header_title .}}
+                                {{if .Meta}}
+                                    {{$m := .Meta}}
+                                    {{if $m.Icon}}
+                                        <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}} class="mdl-data-table__cell--non-numeric qor-table__icon-header"></th>
+                                    {{else}}
+                                        {{$style := $m.UITags.GetString "STYLE"}}
+                                        <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}} {{if $style}}style="{{$style}}" {{end}} class="mdl-data-table__cell--non-numeric" data-heading="{{$m.Name}}">{{$title}}{{if and $this.NotReadOnly $m.Required}} <i class="required-asterisk">*</i>{{end}}
+                                            {{- if $helpEnabled -}}
+                                                {{$help := meta_help_ctx $child $m}}
+                                                {{if $help}}
+                                                    <span data-dialog="#{{$this.InputId}}-{{$m.Name}}-tooltip" class="material-icons md-14 qor-meta-help__icon">help</span>
+                                                {{end}}
+                                            {{end}}
+                                        </th>
+                                    {{end}}
+                                {{else}}
+                                    <th{{if $h.RowSpan}} rowspan="{{$h.RowSpan}}"{{end}}{{if $h.ColSpan}} colspan="{{.ColSpan}}"{{end}}>{{$title}}</th>
+                                {{end}}
+                            {{end}}
+                            {{if and (eq $index 0) (not $readOnly)}}
+                                <th class="mdl-data-table__cell--non-numeric"> </th>
+                            {{end}}
+                            </tr>
+                        {{end}}
+                    </thead>
+                {{end}}
+                <tbody class="replicator__target">
+                {{range $index, $item := $current_values}}
+                    {{$itemContext := $ctx.CreateChild $meta.Resource $item}}
+                    {{- admin_ctx_set_type $itemContext $itemContext.Type "inline" -}}
+                    {{if and (not $readOnly) (not ($meta.CanUpdateItem $this.Context $this.Record $item))}}{{- admin_ctx_set_type $itemContext $itemContext.Type "show" -}}{{end}}
+                    {{$primaryKey := primary_key_of $item}}
+                    {{$url := $this.Meta.GetItemUrlC $itemContext}}
+                    {{$tags := $meta.Resource.GetViewTags $ctx $item}}
+                    <tr {{if $primaryKey}}{{if index $deletedMap ($primaryKey.String)}} data-deleted="true"{{end}} data-primary-key="{{$primaryKey}}"{{end}} data-mark="{{$this.InputName}}"
+                        {{if and $readOnly $tags}}class="tag-{{join $tags "sep: tag-"}}"{{end}} {{if and $readOnly $readable}}data-url="{{$url}}{{if $ctx.Type.HasS "deleted"}}?:deleted=true{{end}}"{{end}}>
+                        {{if $meta.UITags.Flag "ENUMERATE"}}
+                            <td class="mdl-data-table__cell" ondblclick="javascript:alert('[{{$index + 1}}] ID: {{$primaryKey}}')">{{$index + 1}}</td>
+                        {{end}}
+                        {{range $meta := $mt.Metas}}
+                            <td class="mdl-data-table__cell--non-numeric{{if $meta.Icon}} qor-table__icon{{end}}"
+                                data-heading="{{$meta.Name}}">
+                                {{if or (not $readOnly) $meta.Icon}}
+                                    {{render_meta_with_path_ctx $itemContext (to_s $index) $meta $typ "mode-single"}}
+                                {{else}}
+                                    <div class="qor-table__content">{{render_meta_with_path_ctx $itemContext (to_s $index) $meta $typ "mode-single"}}</div>
+                                {{end}}
+                            </td>
+                        {{end}}
+                        {{if not $readOnly}}
+                            <td class="mdl-data-table__cell--non-numeric">
+                                {{if and (has_delete_permission $meta) ($meta.CanDeleteItem $this.Context $this.Record $item)}}
+                                    <button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
+                                            <i class="material-icons md-18">delete</i>
+                                    </button>
+                                {{end}}
+                            </td>
+                        {{end}}
+                        {{if and (not $readOnly) ($this.Context.Type.HasS "edit") $primaryKey}}<input type="hidden" name="{{$this.InputName}}.{{$index}}.id" value="{{$primaryKey}}" />{{end}}
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+            {{if and $this.NotReadOnly $createable }}
+                <a class="mdl-button mdl-button--primary qor-fieldset__add" type="button"><i class="material-icons">add_box</i></a>
+            {{end}}
+
+            {{if $helpEnabled}}
+                {{range $index, $meta := $mt.Metas}}
+                    {{$help := meta_help_ctx $child $meta}}
+                    {{if $help}}
+                        <dialog id="{{$this.InputId}}-{{$meta.Name}}-tooltip" class="qo-modal mdl-dialog" >
+                            <h4 class="mdl-dialog__title">{{meta_label $meta}}</h4>
+                            <div class="mdl-dialog__content">
+                                {{$help}}
+                            </div>
+                            <div class="mdl-dialog__actions">
+                                <button type="button" class="close mdl-button mdl-js-button mdl-button--fab mdl-button--mini-fab mdl-button--colored"><i class="material-icons">close</i></button>
+                            </div>
+                        </dialog>
+                    {{end}}
+                {{end}}
+            {{end}}
+        </div>
+    </div>
+</div>

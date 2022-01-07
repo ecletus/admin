@@ -107,6 +107,27 @@
         });
     };
 
+
+    $('.qor-page > .qor-page__header').each(function (){
+        const $thead = $(this).siblings('.qor-page__body').find('> .qor-table-container > table > thead');
+        if (!$thead.length) return;
+
+        const resize_ob = new ResizeObserver(function(entries) {
+            // since we are observing only a single element, so we access the first element in entries array
+            let rect = entries[0].contentRect;
+
+            // current width & height
+            let width = rect.width;
+            let height = rect.height;
+            $thead.css({top:rect.height})
+        });
+        resize_ob.observe(this);
+    })
+
+// start observing for resize
+
+    return;
+
     $(function() {
         if (/[?&]prin(t&|t$)/.test(location.search)) {
             return

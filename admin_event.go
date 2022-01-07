@@ -125,7 +125,11 @@ func (this *Admin) OnResourcesAdded(cb func(e *ResourceEvent) error, id_ string,
 	}
 	go func() {
 		msg := "wait " + reflect.TypeOf(cb).PkgPath()
-		var count int
+
+		var (
+			count  int
+			waited bool
+		)
 		for {
 			select {
 			case <-done:
@@ -144,7 +148,11 @@ func (this *Admin) OnResourcesAdded(cb func(e *ResourceEvent) error, id_ string,
 					} else {
 						log.Debug(msg, "for", waits)
 					}
-					<-time.After(time.Second / 2)
+					if waited {
+						return
+					}
+					waited = true
+					time.Sleep(time.Second / 2)
 				}
 			}
 		}

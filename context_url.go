@@ -28,7 +28,7 @@ func (this *Context) URLFor(value interface{}, resources ...*Resource) string {
 	}); ok {
 		return urler.URL(this)
 	} else if res, ok := value.(*Resource); ok {
-		return res.GetContextIndexURI(this.Context)
+		return res.GetContextIndexURI(this)
 	} else {
 		if len(resources) == 0 {
 			return ""
@@ -36,10 +36,25 @@ func (this *Context) URLFor(value interface{}, resources ...*Resource) string {
 
 		res := resources[0]
 		if res.Config.Singleton {
-			return res.GetIndexLink(this.Context, this.ParentResourceID)
+			return res.GetIndexLink(this, this.ParentResourceID)
 		}
 
-		uri := res.GetLink(value, this.Context, this.ParentResourceID)
+		/*
+			var (
+				ids []aorm.ID
+				self = this
+				i = len(res.Parents)
+			)
+
+			for ;i > 0;i++ {
+				if pres := self.Resource; pres == res.Parents[i] {
+					ids = append(ids, self.ResourceID)
+					self = self.Parent
+				}
+			}
+		*/
+
+		uri := res.GetLink(this, value, this.Context, this.ParentResourceID)
 		return uri
 	}
 	return this.Path("")
@@ -59,22 +74,22 @@ func (this *Context) TopURLFor(value interface{}, resources ...*Resource) string
 	res = res.Top()
 
 	if value == nil {
-		return this.Path(res.GetIndexURI())
+		return this.Path(res.GetIndexURI(this))
 	}
 	if vs, ok := value.(string); ok {
 		if vs == "" {
-			return this.Path(res.GetIndexURI())
+			return this.Path(res.GetIndexURI(this))
 		}
 		if id, err := res.ParseID(vs); err != nil {
 			return "[[parse id failed: " + err.Error() + "]]"
 		} else {
-			return this.Path(res.GetURI(id))
+			return this.Path(res.GetURI(this, id))
 		}
 	} else if vs, ok := value.(aorm.ID); ok {
 		if vs == nil {
-			return this.Path(res.GetIndexURI())
+			return this.Path(res.GetIndexURI(this))
 		}
-		return this.Path(res.GetURI(vs))
+		return this.Path(res.GetURI(this, vs))
 	}
-	return this.Path(res.URLFor(value))
+	return this.Path(res.URLFor(this, value))
 }

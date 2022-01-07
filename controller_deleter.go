@@ -6,20 +6,27 @@ import (
 	"strings"
 
 	"github.com/ecletus/responder"
+	"github.com/ecletus/roles"
 )
 
 // Delete delete data
-func (this *Controller) Delete(context *Context) {
+func (this *Controller) Delete(ctx *Context) {
 	if _, ok := this.controller.(ControllerDeleter); !ok {
-		context.NotFound = true
-		http.NotFound(context.Writer, context.Request)
+		ctx.NotFound = true
+		http.NotFound(ctx.Writer, ctx.Request)
 		return
 	}
-	res := context.Resource
+
+	if ctx = ctx.ParentPreload(ParentPreloadDelete); ctx.HasError() {
+		ctx.LogErrors()
+		return
+	}
+
+	res := ctx.Resource
 	status := http.StatusOK
 
 	if setuper, ok := this.controller.(ControllerSetuper); ok {
-		context.AddError(setuper.SetupContext(context))
+		ctx.AddError(setuper.SetupContext(ctx))
 	}
 
 	var (
@@ -27,75 +34,86 @@ func (this *Controller) Delete(context *Context) {
 		msg     string
 	)
 
-	if !context.HasError() {
-		context.AddError(context.CloneErr(func(ctx *Context) {
+	if !ctx.HasError() {
+		ctx.AddError(ctx.CloneErr(func(ctx *Context) {
 			recorde = this.controller.(ControllerReader).Read(ctx)
 		}))
 	}
 
-	if recorde == nil && !context.HasError() {
+	if recorde == nil && !ctx.HasError() {
 		status = http.StatusNotFound
 	} else {
-		if context.HasError() {
-			msg = string(context.tt(I18NGROUP+".form.failed_to_delete",
-				NewResourceRecorde(context, res, recorde),
+		if ctx.HasError() {
+			msg = string(ctx.tt(I18NGROUP+".form.failed_to_delete",
+				NewResourceRecorde(ctx, res, recorde),
 				"Failed to delete {{.}}"))
 			status = http.StatusBadRequest
 		} else {
-			this.controller.(ControllerDeleter).Delete(context, recorde)
-			if context.HasError() {
+			ctx.Result = recorde
+			if !ctx.HasRecordPermission(ctx.Resource, recorde, roles.Delete) {
+				msg = string(ctx.tt(I18NGROUP+".form.failed_to_delete",
+					NewResourceRecorde(ctx, res, recorde),
+					"Failed to delete {{.}}"))
 				status = http.StatusBadRequest
-				msg = string(context.tt(I18NGROUP+".form.failed_to_delete_error",
-					map[string]interface{}{
-						"Value": NewResourceRecorde(context, res, recorde),
-						"error": context.Errors,
-					},
-					"Failed to delete {{.Value}}: {{.error}}"))
 			} else {
-				msg = string(context.tt(I18NGROUP+".form.successfully_deleted", NewResourceRecorde(context, res, recorde),
-					"{{.}} was successfully deleted"))
+				this.controller.(ControllerDeleter).Delete(ctx, recorde)
+				if ctx.HasError() {
+					status = http.StatusBadRequest
+					msg = string(ctx.tt(I18NGROUP+".form.failed_to_delete_error",
+						map[string]interface{}{
+							"Value": NewResourceRecorde(ctx, res, recorde),
+							"Error": ctx.Errors,
+						},
+						"Failed to delete {{.Value}}: {{.Error}}"))
+				} else {
+					msg = string(ctx.tt(I18NGROUP+".form.successfully_deleted", NewResourceRecorde(ctx, res, recorde),
+						"{{.}} was successfully deleted"))
+				}
 			}
 		}
 	}
 
 	responder.With("html", func() {
 		if status == http.StatusOK {
-			context.Flash(msg, "success")
-			uri := context.Request.Header.Get("Referer")
+			ctx.Flash(msg, "success")
+			uri := ctx.Request.Header.Get("Referer")
 			if uri == "" {
-				uri = res.GetContextIndexURI(context.Context)
+				uri = res.GetContextIndexURI(ctx)
 			}
-			if context.Request.Header.Get("X-Requested-With") != "" {
-				context.Writer.Header().Set("X-Location", uri)
-				context.Writer.WriteHeader(http.StatusOK)
+			if ctx.Request.Header.Get("X-Requested-With") != "" {
+				ctx.Writer.Header().Set("X-Location", uri)
+				ctx.Writer.WriteHeader(http.StatusOK)
 			} else {
-				http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
+				http.Redirect(ctx.Writer, ctx.Request, uri, http.StatusFound)
 			}
 			return
 		} else {
-			context.Writer.WriteHeader(status)
-			context.Writer.Write([]byte(msg))
+			ctx.Writer.WriteHeader(status)
+			ctx.Writer.Write([]byte(msg))
 		}
 	}).With([]string{"json", "xml"}, func() {
-		context.Writer.WriteHeader(status)
+		ctx.Writer.WriteHeader(status)
 		messageStatus := "ok"
 		if status != http.StatusOK {
 			messageStatus = "error"
 		} else {
-			context.Flash(msg, "success")
+			ctx.Flash(msg, "success")
 		}
-		context.Layout = "OK"
-		context.Encode(map[string]string{"message": msg, "status": messageStatus})
-		uri := context.Request.Header.Get("Referer")
+		ctx.Layout = "OK"
+		ctx.Encode(map[string]string{"message": msg, "status": messageStatus})
+		uri := ctx.Request.Header.Get("Referer")
 		if uri == "" {
-			uri = res.GetContextIndexURI(context.Context)
+			uri = res.GetContextIndexURI(ctx)
 		}
-		http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
-	}).Respond(context.Request)
+		http.Redirect(ctx.Writer, ctx.Request, uri, http.StatusFound)
+	}).Respond(ctx.Request)
 }
 
 // BulkDelete delete many recordes
 func (this *Controller) BulkDelete(context *Context) {
+	context.Type = DELETE
+	context.PermissionMode = roles.Delete
+
 	if _, ok := this.controller.(ControllerBulkDeleter); !ok {
 		context.NotFound = true
 		http.NotFound(context.Writer, context.Request)
@@ -118,7 +136,7 @@ func (this *Controller) BulkDelete(context *Context) {
 				context.AddError(err)
 			}
 		} else {
-			keys = context.Request.Form["primary_values[]"]
+			keys = GetPrimaryValues(context.Request.Form)
 		}
 	} else {
 		if keySep == "" {
@@ -133,6 +151,10 @@ func (this *Controller) BulkDelete(context *Context) {
 		}
 
 		if !context.HasError() {
+			if res.Config.DeleteableDB != nil {
+				context.SetRawDB(res.Config.DeleteableDB(context, context.DB()))
+			}
+
 			for _, key := range keys {
 				if key == "" {
 					continue
@@ -141,10 +163,10 @@ func (this *Controller) BulkDelete(context *Context) {
 				var err error
 				if context.ResourceID, err = res.ParseID(key); err == nil {
 					clone := context.Clone()
-					recorde := this.controller.(ControllerReader).Read(clone)
+					record := this.controller.(ControllerReader).Read(clone)
 					context.AddError(clone.Err())
-					if !clone.HasError() {
-						recordes = append(recordes, recorde)
+					if !clone.HasError() && record != nil {
+						recordes = append(recordes, record)
 					}
 				} else {
 					context.AddError(err)
@@ -156,7 +178,9 @@ func (this *Controller) BulkDelete(context *Context) {
 	context.ResourceID = nil
 
 	if len(recordes) == 0 && !context.HasError() {
-		status = http.StatusNotFound
+		status = http.StatusUnprocessableEntity
+		msg = string(context.t(I18NGROUP+".records.deletion_empty",
+			"No records to deletion"))
 	} else {
 		if context.HasError() {
 			msg = string(context.tt(I18NGROUP+".form.failed_to_delete",
@@ -175,7 +199,7 @@ func (this *Controller) BulkDelete(context *Context) {
 
 	responder.With("html", func() {
 		if status == http.StatusOK {
-			uri := res.GetContextIndexURI(context.Context, context.Context.ParentResourceID...)
+			uri := res.GetContextIndexURI(context, context.Context.ParentResourceID...)
 			http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
 		} else {
 			context.Writer.WriteHeader(status)
@@ -192,7 +216,7 @@ func (this *Controller) BulkDelete(context *Context) {
 		}
 		context.Layout = "OK"
 		context.Encode(map[string]string{"message": msg, "status": messageStatus})
-		uri := res.GetContextIndexURI(context.Context, context.Context.ParentResourceID...)
+		uri := res.GetContextIndexURI(context, context.Context.ParentResourceID...)
 		http.Redirect(context.Writer, context.Request, uri, http.StatusFound)
 	}).Respond(context.Request)
 }

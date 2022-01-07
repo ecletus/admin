@@ -8,12 +8,11 @@
   }
 }
 
-.qor-field {
+form {
   .required-asterisk {
     color: darkred;
   }
 }
-
 
 .qor-field__left-1-icon {
   position: relative;
@@ -27,4 +26,8 @@
   .qor-input__icon-as-rigth {
     width: calc(100% - 35px);
   }
+}
+
+TD > .qor-field > .mdl-textfield {
+  width: auto;
 }

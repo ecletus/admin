@@ -15,7 +15,7 @@ import (
 type UintConfig struct {
 	Step     uint8
 	Max, Min uint64
-	Setter func(recorde interface{}, value uint64)
+	Setter   func(recorde interface{}, value uint64)
 }
 
 func (this *UintConfig) HtmlAttributtes() template.HTML {
@@ -30,9 +30,7 @@ func (this *UintConfig) HtmlAttributtes() template.HTML {
 	if this.Max > 0 {
 		attrs = append(attrs, `max="`+fmt.Sprint(this.Max)+` "`)
 	}
-	if this.Min > 0 {
-		attrs = append(attrs, `min="`+fmt.Sprint(this.Min)+` "`)
-	}
+	attrs = append(attrs, `min="`+fmt.Sprint(this.Min)+` "`)
 	return template.HTML(strings.Join(attrs, " "))
 }
 
@@ -42,7 +40,7 @@ func (this *UintConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	meta.Type = "uint"
 
 	if meta.Setter == nil {
-		meta.Meta.Setter = resource.SingleFieldSetter(meta.Meta, meta.FieldName, func(ptr bool, field reflect.Value, metaValue *resource.MetaValue, ctx *core.Context, record interface{}) (err error) {
+		meta.Meta.Setter = resource.SingleFieldSetter(meta.FieldName, func(ptr bool, field reflect.Value, metaValue *resource.MetaValue, ctx *core.Context, record interface{}) (err error) {
 			var (
 				v = metaValue.FirstStringValue()
 				i uint64

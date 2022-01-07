@@ -1,0 +1,28 @@
+<div class="qor-field" data-meta-type="{{.MetaType}}">
+    {{if .ReadOnly}}
+        {{if not .ModeSingle}}
+            {{- $label := meta_record_label .Meta .Record -}}
+            <span class="mdl-chip mdl-chip--contact">
+                <span class="mdl-chip__contact">{{if eq $label "ID"}}#{{else}}{{$label}}{{end}}</span>
+                <span class="mdl-chip__text">{{.Value}}</span>
+            </span>
+        {{else}}
+        <div class="qor-field__value">{{.Value}}</div>
+        {{end}}
+    {{else}}
+        <div class="qor-field__edit mdl-textfield mdl-textfield--full-width mdl-js-textfield mdl-textfield--floating-label">
+            {{$value := raw_value_of .Record .Meta}}
+            <input class="mdl-textfield__input" type="text" id="{{.InputId}}" name="{{.InputName}}" {{if .Meta.Config.MaxLen}}maxlength="{{.Meta.Config.MaxLen}}" {{end}} value="{{if $value}}{{$value}}{{end}}">
+
+            {{if not .ModeSingle}}
+                <label class="mdl-textfield__label" for="{{.InputId}}">
+                    {{meta_record_label .Meta .Record}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+                </label>
+                {{$help := meta_record_help .Meta .Record .ReadOnly}}
+                {{if $help}}
+                    <div class="qor-field__help">{{$help}}</div>
+                {{end}}
+            {{end}}
+        </div>
+    {{end}}
+</div>

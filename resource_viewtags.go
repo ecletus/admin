@@ -5,12 +5,11 @@ func (this *Scheme) SetViewTagger(tagger ResourceViewTager) {
 }
 
 func (this *Resource) GetViewTags(ctx *Context, record interface{}) []string {
-	if ctx.Scheme != nil {
-		if data, ok := ctx.Scheme.SchemeData.Get("view_tagger"); ok {
-			return data.(ResourceViewTager).Tags(ctx, record)
-		}
+	scheme := ctx.Scheme
+	if scheme == nil || scheme.Resource != this {
+		scheme = this.Scheme
 	}
-	if data, ok := this.Scheme.SchemeData.Get("view_tagger"); ok {
+	if data, ok := scheme.SchemeData.Get("view_tagger"); ok {
 		return data.(ResourceViewTager).Tags(ctx, record)
 	}
 	return []string{}

@@ -21,6 +21,18 @@ func (is *ImmutableScopes) Has(names ...interface{}) bool {
 	return is.set != nil && is.set.Has(names...)
 }
 
+func (is *ImmutableScopes) HasAny(names ...interface{}) bool {
+	if is.set == nil {
+		return false
+	}
+	for _, name := range names {
+		if is.set.Has(name) {
+			return true
+		}
+	}
+	return false
+}
+
 func (is *ImmutableScopes) List() (items []string) {
 	if is.set != nil {
 		for _, v := range is.set.List() {
@@ -38,19 +50,48 @@ func (this *Searcher) Scope(names ...string) {
 	}
 
 	for _, name := range names {
-		for _, scope := range this.Scheme.scopes {
+		for _, scope := range this.Scheme.MustGetScopes() {
 			if scope.Name == name && !scope.Default && !scopesSet.Has(scope.Name) {
 				this.scopes = append(this.scopes, scope)
 				scopesSet.Add(name)
 			}
 		}
 	}
+	this.CurrentScopes.set = scopesSet
 }
 
-func (this *Searcher) callScopes(db *aorm.DB, context *core.Context) (_ *aorm.DB, err error) {
+func (this *Searcher) GetScopes(advanced bool) (res []string) {
+	for _, s := range this.scopes {
+		if s.Advanced(this.Context) == advanced {
+			res = append(res, s.Name)
+		}
+	}
+	return
+}
+
+func (this *Searcher) HasScopes(advanced bool) bool {
+	for _, s := range this.scopes {
+		if s.Advanced(this.Context) == advanced {
+			return true
+		}
+	}
+	return false
+}
+
+func (this *Searcher) CountScopes(advanced bool) (i int) {
+	for _, s := range this.scopes {
+		if s.Advanced(this.Context) == advanced {
+			i++
+		}
+	}
+	return
+}
+
+func (this *Searcher) callFilters(db *aorm.DB, context *core.Context) (_ *aorm.DB, err error) {
 	// call default scopes
+	scopes := this.Scheme.MustGetScopes()
 defaults:
-	for _, scope := range this.Scheme.scopes {
+	for _, scope := range scopes {
 		if scope.Default {
 			if scope.Group != "" {
 				for _, s := range this.scopes {
@@ -68,7 +109,9 @@ defaults:
 		db = scope.Handler(db, this, context)
 	}
 
-	// call filtersByName
+	this.Filters = map[uintptr]*FilterArgument{}
+
+	// call filter
 	if this.filters != nil {
 		for filter, filterArgument := range this.filters {
 			if filter.Handler != nil {
@@ -80,6 +123,7 @@ defaults:
 				} else if v := filterArgument.Value.Get("Value"); v != nil {
 					filterArgument.GoValue = v.FirstStringValue()
 				}
+				this.Filters[filter.ID] = filterArgument
 				db = filter.Handler(db, filterArgument)
 			}
 		}

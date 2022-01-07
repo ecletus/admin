@@ -1,0 +1,53 @@
+{{$allowed_actions := allowed_actions .Resource.Actions "menu_item" .Result}}
+{{$children := read_permission_filter (.Resource.GetItemMenusOf . .Result)}}
+{{$resource := .Resource}}
+{{$result := .Result}}
+{{$ctx := .}}
+
+{{if or $allowed_actions $children}}
+    {{$url := url_for $result $resource}}
+    {{$primaryKey := primary_key_of $result}}
+    {{$uniqueKey := unique_key_of $result}}
+    <button id="actions-for-{{$uniqueKey}}" class="mdl-button mdl-js-button mdl-button--icon qor-button--actions">
+        <i class="material-icons">more_vert</i>
+    </button>
+
+    <ul class="qor-menu mdl-menu mdl-menu--bottom-left mdl-js-menu" for="actions-for-{{$uniqueKey}}">
+        {{if $children}}
+            {{range $child := $children}}
+                <li class="mdl-menu__item">
+                    {{link_to (T $child) (.ItemUrl (admin_context) $result (resource_parent_keys) $primaryKey)}}
+                </li>
+            {{end}}
+        {{end}}
+        {{if (and $children $allowed_actions)}}
+            <li><hr /></li>
+        {{end}}
+        {{range $action := $allowed_actions}}
+            <li class="mdl-menu__item">
+                {{if (eq $action.URLOpenType "_blank")}}
+                    <a href="{{if $action.URL}}{{call $action.URL $result $ctx}}{{else}}{{join_url $url $action.ToParam}}{{end}}" target="_blank">
+                        {{if $action.MdlIcon}}<span class="material-icons">{{$action.MdlIcon}}</span> {{end}}{{T $action}}</a>
+                {{else}}
+                    <a class="qor-action--button"
+                       href="javascript:void(0);"
+                       data-url="{{if $action.URL}}{{call $action.URL $result $ctx}}{{else}}{{join_url $url $action.ToParam}}{{end}}"
+                            {{if $action.URLOpenType -}}
+                        data-open-type="{{$action.URLOpenType}}"
+                        data-window-reload="true"
+                    {{- else if not $action.Resource -}}
+                        data-ajax-form="true"
+                        data-from-menu="true"
+                        data-confirm="{{t "github_com:ecletus:admin.form.are_you_sure"}}"
+                        data-method="{{$action.Method}}"
+                        {{if $action.ReturnURL}}data-return-url="{{call $action.ReturnURL $result $ctx}}"{{end}}
+                        {{if $action.RefreshURL}}data-refresh-url="{{call $action.RefreshURL $result $ctx}}"{{end}}
+                    {{- end}}>
+                        {{- if $action.MdlIcon}}<i class="material-icons">{{$action.MdlIcon}}</i>{{end -}}
+                    {{- T $action -}}
+                    </a>
+                {{end}}
+            </li>
+        {{end}}
+    </ul>
+{{end}}

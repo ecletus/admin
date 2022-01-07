@@ -116,7 +116,10 @@ type ProxyPathGetter struct {
 }
 
 func NewMetaFieldProxy(name string, parts []interface{}, src interface{}, to *Meta) *Meta {
-	var path []ProxyPath
+	var (
+		path []ProxyPath
+		ro   bool
+	)
 
 	r := reflect.TypeOf(src)
 	for _, p := range parts {
@@ -133,6 +136,9 @@ func NewMetaFieldProxy(name string, parts []interface{}, src interface{}, to *Me
 			path = append(path, proxyPathVirtualField{pt.FieldName, reflect.TypeOf(pt.Value)})
 		case ProxyMetaPath:
 			path = append(path, proxyPathMeta{pt.Meta})
+			if !ro && pt.Meta.ReadOnly {
+				ro = true
+			}
 		case ProxyPathGetter:
 			path = append(path, proxyPathGetter{pt.Get, reflect.TypeOf(pt.Value)})
 		default:
@@ -142,6 +148,7 @@ func NewMetaFieldProxy(name string, parts []interface{}, src interface{}, to *Me
 
 	meta := NewMetaProxy(name, to, nil)
 	meta.proxyPath = path
+	meta.ReadOnly = ro
 	return meta
 }
 
@@ -149,15 +156,27 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 	meta := &Meta{}
 	copier.Copy(meta, to)
 	meta.ProxyTo = to
+	to.Proxies = append(to.Proxies, meta)
 	meta.Meta = &resource.Meta{}
 	copier.Copy(meta.Meta, to.Meta)
-	record := func(ctx *core.Context, r interface{}) interface{} {
-		if recorde == nil && meta.proxyPath != nil {
+	to.AfterUpdate(func() {
+		meta.Config = to.Config
+	})
+	meta.GetRecordHandler = func(ctx *core.Context, r interface{}) (rec interface{}) {
+		if r == nil {
+			return
+		}
+		if meta.proxyPath != nil {
 			value := indirectValuePtr(reflect.ValueOf(r))
 			for _, pth := range meta.proxyPath {
 				if value = pth.Get(ctx, value); value == nil {
 					return nil
-				} else {
+				} else if !value.IsValid() {
+					return nil
+				} else if value.Kind() == reflect.Ptr {
+					if value.IsNil() {
+						return nil
+					}
 					value = indirectValuePtr(*value)
 				}
 			}
@@ -175,24 +194,6 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 	}
 
 	meta.Name = name
-	meta.SetValuer(func(i interface{}, context *core.Context) interface{} {
-		return to.Value(context, record(context, i))
-	})
-
-	meta.SetFormattedValuer(func(i interface{}, context *core.Context) interface{} {
-		return to.FormattedValue(context, record(context, i))
-	})
-
-	if to.TypeHandler != nil {
-		meta.TypeHandler = func(meta *Meta, i interface{}, context *Context) string {
-			return to.TypeHandler(meta, record(context.Context, i), context)
-		}
-	}
-	if to.Enabled != nil {
-		meta.Enabled = func(i interface{}, context *Context, meta *Meta) bool {
-			return to.Enabled(record(context.Context, i), context, meta)
-		}
-	}
 	if to.Setter != nil {
 		meta.Setter = func(resource interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 			return to.Setter(resource, metaValue, context)
@@ -207,10 +208,6 @@ func NewMetaProxy(name string, to *Meta, recorde func(meta *Meta, recorde interf
 		meta.GetMetasFunc = func() []resource.Metaor {
 			return to.GetMetasFunc()
 		}
-	}
-
-	meta.IsZeroFunc = func(meta *Meta, recorde, value interface{}) bool {
-		return to.IsZero(record(nil, recorde), value)
 	}
 	meta.ForceShowZero = to.ForceShowZero
 	return meta

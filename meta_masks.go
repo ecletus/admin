@@ -32,18 +32,11 @@ func RegisterMask(name string, config *MaskConfig) {
 func init() {
 	Masks = map[string]*MaskConfig{
 		MASK_CAR_TAG_BR: {
-			JsCode: `this.mask('AAA 0U00', {
-    translation: {
-        'A': {
-            pattern: /[A-Za-z]/
-        },
-        'U': {
-            pattern: /[A-Za-z0-9]/
-        },
-    },
-    onKeyPress: function (value, e, field, options) {
+			JsCode: `
+let mask = function (value, e, $field, options) {
         // Convert to uppercase
-        e.currentTarget.value = value.toUpperCase();
+        value = value.toUpperCase();
+		if (value && e) e.currentTarget.value = value;
 
         // Get only valid characters
         let val = value.replace(/[^\w]/g, '');
@@ -54,9 +47,25 @@ func init() {
         if(val.length > 4 && isNumeric) {
             mask = 'AAA-0000';
         }
-        this.mask(mask, options);
-    }.bind(this)
-})`,
+        $field.mask(mask, options);
+    }.bind(this),
+	options = {
+		translation: {
+			'A': {
+				pattern: /[A-Za-z]/
+			},
+			'U': {
+				pattern: /[A-Za-z0-9]/
+			},
+		},
+		onKeyPress: mask
+	},
+	val = this.val();
+
+this.mask('AAA 0U00', options);
+
+if (val) mask(val, null, this, options);
+`,
 		},
 		MASK_CPF: {
 			JsCode: `this.mask("000.000.000-00", {reverse: true})`,

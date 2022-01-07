@@ -18,7 +18,9 @@
                 {{- T $action -}}
                 </a>
             {{- else -}}
-                <a class="{{index $class $type}}" data-url="{{if $action.URL}}{{call $action.URL $result $context}}{{else}}{{join_url (url_for $result $resource) $action.ToParam}}{{end}}"
+                <a class="{{index $class $type}}"
+                   href="javascript:void(0);"
+                   data-url="{{if $action.URL}}{{call $action.URL $result $context}}{{else}}{{join_url (url_for $result $resource) $action.ToParam}}{{end}}"
                    {{if $action.URLOpenType -}}
                    data-open-type="{{$action.URLOpenType}}"
                    {{else if not $action.Resource -}}

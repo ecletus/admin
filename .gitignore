@@ -27,3 +27,5 @@ __*
 .sass-cache
 npm-debug.log
 .*
+
+# _git_submodules/*

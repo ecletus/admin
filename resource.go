@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"reflect"
 	// "github.com/ecletus/responder"
 	"strconv"
@@ -13,9 +14,10 @@ import (
 
 	"github.com/moisespsena-go/edis"
 
-	"github.com/ecletus/roles"
 	"github.com/jinzhu/inflection"
 	"github.com/moisespsena-go/xroute"
+
+	"github.com/ecletus/roles"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
@@ -28,7 +30,8 @@ import (
 )
 
 const (
-	DEFAULT_LAYOUT = resource.DEFAULT_LAYOUT
+	SectionLayoutDefault = "default"
+	SectionLayoutInline  = "inline"
 
 	// paths
 	P_NEW_FORM              = "/new"
@@ -64,6 +67,8 @@ const (
 
 	ActionDelete     = "Delete"
 	ActionBulkDelete = "BulkDelete"
+
+	PrintMenu = "PrintMenu"
 )
 
 // Resource is the most important thing for qor admin, every model is defined as a resource, qor admin will genetate management interface based on its definition
@@ -75,13 +80,33 @@ type Resource struct {
 
 	ObjectPages Paged
 
-	ParentResource   *Resource
-	Config           *Config
-	Metas            []*Meta
-	MetasByName      map[string]*Meta
-	MetasByFieldName map[string]*Meta
-	SingleEditMetas  map[string]*Meta
-	Actions          []*Action
+	ParentResource *Resource
+
+	// BaseResource resource with contains field as CHILD for this Resource
+	// see model:
+	//
+	// type User struct {
+	//      ID bid.BID
+	//		Name string
+	//		Address Address `aorm:"child"`
+	// }
+	//
+	// type Address struct {
+	//		ID bid.BID
+	//		Country string
+	// }
+	// UserRes := Admin.AddResource(&User{})
+	// UserAddressRes := UserRes.Meta(&Meta{Name:"Address"}).Resource
+	// fmt.Println(UserAddressRes.BaseResource == UserRes)
+	BaseResource         *Resource
+	Config               *Config
+	Metas                []*Meta
+	MetasByName          map[string]*Meta
+	MetaLinks            map[string]string
+	MetasByFieldName     map[string]*Meta
+	SingleEditMetas      map[string]*Meta
+	Actions              []*Action
+	ActionAddedCallbacks []func(action *Action)
 
 	Admin       *Admin
 	mounted     bool
@@ -97,19 +122,20 @@ type Resource struct {
 	ParamName   string
 	paramIDName string
 
-	Resources          map[string]*Resource
-	ResourcesByParam   map[string]*Resource
-	MetaAliases        map[string]*resource.MetaName
-	defaultDisplayName string
-	Children           *Inheritances
-	Inherits           map[string]*Child
-	Fragments          *Fragments
-	Fragment           *Fragment
-	registered         bool
-	afterRegister      []func()
-	afterMount         []func()
-	RouteHandlers      map[string]*RouteHandler
-	ForeignMetas       []*Meta
+	Resources               map[string]*Resource
+	ResourcesByParam        map[string]*Resource
+	MetaAliases             map[string]*resource.MetaName
+	defaultDisplayName      string
+	Children                *Inheritances
+	Inherits                map[string]*Child
+	Fragments               *Fragments
+	Fragment                *Fragment
+	initialized             bool
+	postInitializeCallbacks []func()
+	postMountCallbacks      []func()
+	postMetasSetupCallbacks []func()
+	RouteHandlers           map[string]*RouteHandler
+	ForeignMetas            []*Meta
 
 	labelKey string
 	softDelete,
@@ -120,67 +146,165 @@ type Resource struct {
 	PluralHelp, PluralHelpKey string
 
 	NewCrudFunc           func(res *Resource, ctx *core.Context) *resource.CRUD
-	MetaContextGetterFunc func(ctx *Context) func(name string) *Meta
+	MetaContextGetterFunc func(ctx *Context, name string) *Meta
 	ContextSetuper        ContextSetuper
-	GetContextAttrsFunc   func(ctx *Context)[]string
+	GetContextAttrsFunc   func(ctx *Context) []string
 
 	TemplatePath string
 
-	RecordPermissionFunc func(mode roles.PermissionMode, ctx *core.Context, record interface{}) (perm roles.Perm)
+	RecordPermissionFunc func(mode roles.PermissionMode, ctx *Context, record interface{}) (perm roles.Perm)
 
 	DescriptionValuer func(ctx *core.Context, r interface{}) string
 
-	Tags *ResourceTags
+	Tags   *ResourceTags
+	UITags Tags
 
 	setupMetasCalled bool
 
 	metaUpdateCallbacks MetaUpdateCallbacks
 
-	createWizard *Wizard
+	createWizards      []*Wizard
+	CreateWizardByName map[string]*Wizard
+
+	metaEmbedded bool
+
+	ContextPermissioners,
+	Permissioners []Permissioner
+
+	ItemRoutes RouteNode
+	Routes     RouteNode
+
+	AllSectionsProvider *SchemeSectionsProvider
+
+	UcStates
+}
+
+func (this *Resource) GetTemplatePaths() []string {
+	if this.TemplatePath != "" {
+		return []string{this.TemplatePath}
+	}
+	return nil
+}
+
+func (this *Resource) PostMetasSetup(f ...func()) {
+	this.postMetasSetupCallbacks = append(this.postMetasSetupCallbacks, f...)
+}
+
+func (this *Resource) HasPermission(mode roles.PermissionMode, context *core.Context) (perm roles.Perm) {
+	return this.AdminHasPermission(mode, ContextFromCoreContext(context))
+}
+
+func (res *Resource) Permissioner(p Permissioner, pN ...Permissioner) {
+	res.Permissioners = append(append(res.Permissioners, p), pN...)
+}
+
+func (res *Resource) AdminHasContextPermission(mode roles.PermissionMode, context *Context) (perm roles.Perm) {
+	if perm = res.adminHasContextPermission(mode, context); perm != roles.UNDEF {
+		return
+	}
+	return res.Resource.HasPermission(mode, context.Context)
+}
+
+func (res *Resource) adminHasContextPermission(mode roles.PermissionMode, context *Context) (perm roles.Perm) {
+	for _, permissioner := range res.ContextPermissioners {
+		if perm = permissioner.AdminHasPermission(mode, context); perm != roles.UNDEF {
+			return
+		}
+	}
+	return
+}
+
+func (this *Resource) autoAddIdMeta(metas []*Meta) (res []resource.Metaor) {
+	var (
+		metaId *Meta
+	)
+	if metaId = this.MetasByName["id"]; metaId != nil {
+		res = append(res, metaId)
+	}
+	for _, m := range metas {
+		res = append(res, m)
+	}
+	return
 }
 
 func (this *Resource) GetContextMetas(context *core.Context) (metas []resource.Metaor) {
 	ctx := ContextFromCoreContext(context)
 
 	if this.GetContextAttrsFunc != nil {
-		for _, m := range this.ConvertSectionToMetas(this.SectionsList(this.GetContextAttrsFunc(ctx))) {
-			metas = append(metas, m)
+		if ctx.Type.Has(EDIT) {
+			metas = this.autoAddIdMeta(this.SectionsList(this.GetContextAttrsFunc(ctx)).ToMetas())
+		} else {
+			metas = this.SectionsList(this.GetContextAttrsFunc(ctx)).ToMetaors()
 		}
 		return
 	}
 
 	if ctx.Type.Has(EDIT) {
-		for _, m := range this.ConvertSectionToMetas(this.EditAttrs()) {
-			metas = append(metas, m)
-		}
+		metas = this.autoAddIdMeta(this.EditAttrs().ToMetas())
 	} else if ctx.Type.Has(NEW) {
-		for _, m := range this.ConvertSectionToMetas(this.NewAttrs()) {
-			metas = append(metas, m)
-		}
+		metas = this.NewAttrs().ToMetaors()
 	} else if ctx.Type.Has(SHOW) {
-		for _, m := range this.ConvertSectionToMetas(this.ShowAttrs()) {
-			metas = append(metas, m)
-		}
+		metas = this.ShowAttrs().ToMetaors()
 	} else if ctx.Type.Has(INDEX) {
-		for _, m := range this.ConvertSectionToMetas(this.IndexAttrs()) {
-			metas = append(metas, m)
-		}
+		metas = this.IndexAttrs().ToMetaors()
 	}
 	return metas
 }
 
-func (this *Resource) HasRecordPermission(mode roles.PermissionMode, ctx *core.Context, record interface{}) (perm roles.Perm) {
+func (this *Resource) AdminHasRecordPermission(mode roles.PermissionMode, ctx *Context, record interface{}) (perm roles.Perm) {
+	if mode == roles.Delete && this.Config.Deletable != nil {
+		if !this.Config.Deletable(ctx, record) {
+			return roles.DENY
+		}
+	}
 	if this.RecordPermissionFunc != nil {
-		return this.RecordPermissionFunc(mode, ctx, record)
+		perm = this.RecordPermissionFunc(mode, ctx, record)
 	}
 	return
 }
 
-func (this *Resource) HasPermission(mode roles.PermissionMode, ctx *core.Context) (perm roles.Perm) {
-	if ctx.Roles.Has(roles.Anyone) {
+func (this *Resource) HasRecordPermission(mode roles.PermissionMode, ctx *core.Context, record interface{}) (perm roles.Perm) {
+	return this.AdminHasRecordPermission(mode, ContextFromCoreContext(ctx), record)
+}
+
+func (this *Resource) AdminHasPermission(mode roles.PermissionMode, ctx *Context) (perm roles.Perm) {
+	if perm = this.HasLocalPermission(mode, ctx); perm != roles.UNDEF {
+		return
+	}
+	if this.DefaultDenyMode() {
+		return roles.DENY
+	}
+	return
+}
+
+func (this *Resource) HasLocalPermission(mode roles.PermissionMode, ctx *Context) (perm roles.Perm) {
+	if perm = this.adminHasPermission(mode, ctx); perm != roles.UNDEF {
+		return
+	}
+	if perm = this.Resource.HasPermission(mode, ctx.Context); perm != roles.UNDEF {
+		return
+	}
+	return
+}
+
+func (this *Resource) adminHasPermission(mode roles.PermissionMode, ctx *Context) (perm roles.Perm) {
+	if ctx.Roles.Has(roles.Anyone) || (mode == roles.Read && ctx.Roles.Has(roles.Viewer)) {
 		return roles.ALLOW
 	}
-	return this.Resource.HasPermission(mode, ctx)
+
+	for _, permissioner := range this.Permissioners {
+		if perm = permissioner.AdminHasPermission(mode, ctx); perm != roles.UNDEF {
+			if _, ok := permissioner.(*Resource); ok {
+				if perm.Allow() && this.Permission != nil {
+					perm = roles.UNDEF
+				}
+			}
+			if perm != roles.UNDEF {
+				return
+			}
+		}
+	}
+	return
 }
 
 func (this *Resource) TableName(ctx context.Context) string {
@@ -290,17 +414,27 @@ func (this *Resource) FullPkgPathName() []string {
 
 // GetURL
 func (this *Resource) GetParentFaultURI(fault func(res *Resource) aorm.ID, parentkeys ...aorm.ID) string {
+	child := this
 	var p []string
 	l := len(parentkeys)
 	for i, key := range parentkeys {
-		pres := this.Parents[l-i-1]
+		var ix = l - i - 1
+		if ix >= len(this.Parents) {
+			return ""
+		}
+		pres := this.Parents[ix]
 		p = append(p, pres.ToParam())
 		if !pres.Config.Singleton {
-			if key == nil {
-				key = fault(pres)
+			if child.Config.Sub != nil && !child.Config.Sub.MountAsItemDisabled {
+				if key == nil {
+					key = fault(pres)
+				}
+				p = append(p, url.PathEscape(key.String()))
+			} else if child.Config.Wizard == nil {
+				p = append(p, url.PathEscape(key.String()))
 			}
-			p = append(p, key.String())
 		}
+		child = pres
 	}
 	if len(p) > 0 {
 		return "/" + strings.Join(p, "/")
@@ -334,25 +468,34 @@ func (this *Resource) GetParentURI(parentkeys ...aorm.ID) string {
 }
 
 // GetURL
-func (this *Resource) GetIndexURI(parentkeys ...aorm.ID) string {
-	return this.GetParentURI(parentkeys...) + "/" + this.ToParam()
+func (this *Resource) GetIndexURI(ctx *Context, parentkeys ...aorm.ID) string {
+	if this.Config.IndexUriHandler != nil {
+		return this.Config.IndexUriHandler(ctx, parentkeys...)
+	}
+	if uri := this.GetParentURI(parentkeys...); len(this.Parents) == 0 || uri != "" {
+		return uri + "/" + this.ToParam()
+	}
+	return ""
 }
 
 // GetURL
-func (this *Resource) GetURI(key aorm.ID, parentkeys ...aorm.ID) string {
+func (this *Resource) GetURI(ctx *Context, key aorm.ID, parentkeys ...aorm.ID) string {
 	if key == nil {
 		return ""
 	}
-	return this.GetIndexURI(parentkeys...) + "/" + key.String()
+	if uri := this.GetIndexURI(ctx, parentkeys...); uri != "" {
+		return uri + "/" + url.PathEscape(key.String())
+	}
+	return ""
 }
 
 // GetURL
-func (this *Resource) URLFor(recorde interface{}, parentkeys ...aorm.ID) string {
-	return this.GetIndexURI(parentkeys...) + "/" + this.GetKey(recorde).String()
+func (this *Resource) URLFor(ctx *Context, recorde interface{}, parentkeys ...aorm.ID) string {
+	return this.GetIndexURI(ctx, parentkeys...) + "/" + url.PathEscape(this.GetKey(recorde).String())
 }
 
 // GetURL
-func (this *Resource) GetContextIndexURI(context *core.Context, parentkeys ...aorm.ID) string {
+func (this *Resource) GetContextIndexURI(context *Context, parentkeys ...aorm.ID) string {
 	if parentkeys == nil && this.ParentResource != nil {
 		parentkeys = context.ParentResourceID
 		if len(parentkeys) == 0 {
@@ -360,12 +503,12 @@ func (this *Resource) GetContextIndexURI(context *core.Context, parentkeys ...ao
 		}
 	}
 	return context.Path(this.GetParentFaultURI(func(res *Resource) aorm.ID {
-		return resource.MustParseID(res, context.URLParam(res.ParamIDPattern()))
+		return resource.MustParseID(res, context.URLParam(res.paramIDName))
 	}, parentkeys...), this.ToParam())
 }
 
 // GetURL
-func (this *Resource) GetContextURI(context *core.Context, key aorm.ID, parentkeys ...aorm.ID) string {
+func (this *Resource) GetContextURI(context *Context, key aorm.ID, parentkeys ...aorm.ID) string {
 	base := this.GetContextIndexURI(context, parentkeys...)
 	if this.Fragment != nil {
 		return base
@@ -375,21 +518,27 @@ func (this *Resource) GetContextURI(context *core.Context, key aorm.ID, parentke
 		}
 	}
 	if key != nil {
-		base += "/" + key.String()
+		base += "/" + url.PathEscape(key.String())
 	}
 	return base
 }
 
-func (this *Resource) GetRecordURI(record interface{}, parentKeys ...aorm.ID) string {
+func (this *Resource) GetRecordURI(ctx *Context, record interface{}, parentKeys ...aorm.ID) string {
 	if ref, ok := record.(inheritance.ParentModelInterface); ok {
 		if child := ref.GetQorChild(); child != nil {
 			this = this.Children.Items[child.Index].Resource
 			// TODO Fix support for subresources
-			return this.GetURI(child.ID)
+			return this.GetURI(ctx, child.ID)
 		}
 	}
-	uri := this.GetURI(this.GetKey(record), parentKeys...)
-	return uri
+	if this.Config.RecordUriHandler != nil {
+		return this.Config.RecordUriHandler(ctx, record, parentKeys...)
+	}
+	return this.GetURI(ctx, this.GetKey(record), parentKeys...)
+}
+
+func (this *Resource) GetContextRecordURI(ctx *Context, record interface{}, parentKeys ...aorm.ID) string {
+	return this.GetRecordURI(ctx, record, parentKeys...)
 }
 
 // GetPrimaryValue get priamry value from request
@@ -422,7 +571,7 @@ func (this *Resource) DBName(DB *aorm.DB, quote bool) (name string, alias string
 		name = this.TableName(DB)
 	}
 
-	alias = "parent_" + strconv.Itoa(this.PathLevel)
+	alias = "_p" + strconv.Itoa(this.PathLevel)
 	for _, f := range this.PrimaryFields {
 		pkfields = append(pkfields, f.DBName)
 	}
@@ -436,7 +585,6 @@ func (this *Resource) FilterByParent(ctx *core.Context, db *aorm.DB, parentKey a
 	}
 	var (
 		r                         = this.ParentResource
-		res_parent_alias          = this.QuotedTableName(db)
 		res_pkfield               = this.ParentRelation.ForeignDBNames[0]
 		parent_name, parent_alias string
 		pkfield, fields, wheres   []string
@@ -444,9 +592,8 @@ func (this *Resource) FilterByParent(ctx *core.Context, db *aorm.DB, parentKey a
 	)
 
 	parent_name, parent_alias, pkfield = r.DBName(db, true)
-	parent_alias += "_"
-	fields = append(fields, fmt.Sprintf("%[1]v.%[2]v = %[3]v.%[4]v", parent_alias,
-		pkfield[0], res_parent_alias, res_pkfield))
+	fields = append(fields, fmt.Sprintf("%[1]v.%[2]v = _.%[3]v", parent_alias,
+		pkfield[0], res_pkfield))
 	wheres = append(wheres, parent_alias+"."+pkfield[0]+" = ?")
 	join := fmt.Sprintf("JOIN %v as %v ON %v", parent_name, parent_alias,
 		strings.Join(fields, " AND "))
@@ -461,8 +608,8 @@ func (this *Resource) GetPathLevel() int {
 }
 
 // Decode decode context into a value
-func (this *Resource) Decode(context *core.Context, value interface{}, notLoad ...bool) error {
-	return resource.Decode(context, value, this, notLoad...)
+func (this *Resource) Decode(context *core.Context, value interface{}, f ...resource.ProcessorFlag) error {
+	return resource.Decode(context, value, this, f...)
 }
 
 // NewDecoder return new decoder
@@ -485,8 +632,8 @@ func DefaultPermission(action string, defaul ...roles.PermissionMode) roles.Perm
 func (this *Resource) BasicValue(ctx *core.Context, recorde interface{}) resource.BasicValuer {
 	metaLabel, metaIcon := this.MetasByName[BASIC_META_LABEL], this.MetasByName[BASIC_META_ICON]
 	id, label, icon := this.GetKey(recorde),
-		metaLabel.FormattedValue(ctx, recorde).(string),
-		metaIcon.FormattedValue(ctx, recorde).(string)
+		metaLabel.FormattedValue(ctx, recorde).Value,
+		metaIcon.FormattedValue(ctx, recorde).Value
 	return &resource.Basic{id, label, icon}
 }
 
@@ -496,7 +643,7 @@ func (this *Resource) BasicDescriptableValue(ctx *core.Context, recorde interfac
 		return &resource.BasicDescriptableValue{*basic, this.DescriptionValuer(ctx, recorde)}
 	}
 	metaHelp := this.MetasByName[META_DESCRIPTIFY]
-	help := metaHelp.FormattedValue(ctx, recorde).(string)
+	help := metaHelp.FormattedValue(ctx, recorde).Value
 	return &resource.BasicDescriptableValue{*basic, help}
 }
 
@@ -507,44 +654,30 @@ func (this *Resource) DeleteAction() *Action {
 	return this.Action(&Action{Name: ActionDelete})
 }
 
-func (this *Resource) Restore(ctx *Context, key ...aorm.ID) {
-	DB := ctx.DB().Model(this.Value)
-	var where []string
-	var args []interface{}
+func (this *Resource) Restore(ctx *Context, key ...aorm.ID) error {
+	DB := ctx.DB().
+		Table(this.TableName(ctx)).
+		ModelStruct(this.ModelStruct).
+		Opt(aorm.OptSingleUpdateDisabled()).
+		Where(aorm.InID(key...))
 
-	for _, key := range key {
-		pwhere, pargs, err := resource.IdToPrimaryQuery(ctx.Context, this, false, key)
-		if err != nil {
-			ctx.AddError(err)
-			return
-		}
-		where = append(where, pwhere)
-		args = append(args, pargs...)
-	}
+	return DB.Restore(this.NewSlicePtr()).Error
+}
 
-	data := map[string]interface{}{"deleted_at": nil}
-	if f, ok := reflect.TypeOf(this.Value).Elem().FieldByName("DeletedByID"); ok {
-		switch f.Type.Kind() {
-		case reflect.Ptr:
-			data["deleted_by_id"] = nil
-		case reflect.String:
-			data["deleted_by_id"] = ""
-		default:
-			data["deleted_by_id"] = 0
-		}
-	}
+func (this *Resource) RestoreRecord(ctx *Context, record interface{}, key ...aorm.ID) error {
+	DB := ctx.DB().
+		Table(this.TableName(ctx)).
+		ModelStruct(this.ModelStruct, record)
 
-	DB = DB.Table(this.TableName(ctx)).
-		Unscoped().
-		Where(strings.Join(where, " OR "), args...).
-		Set("validations:skip_validations", true)
-
-	err := DB.Updates(data).Error
-	ctx.AddError(err)
+	return DB.Restore(record).ExpectRowAffected().Error
 }
 
 func (this *Resource) IsSoftDeleted(recorde interface{}) bool {
 	if this.softDelete {
+		if del, ok := recorde.(SoftDeleter); ok {
+			return del.IsSoftDeleted()
+		}
+
 		typ := reflect.ValueOf(recorde)
 
 		for typ.Kind() == reflect.Ptr {
@@ -641,10 +774,8 @@ func (this *Resource) CrudScheme(ctx *core.Context, scheme interface{}) *resourc
 	switch st := scheme.(type) {
 	case string:
 		s, _ = this.GetSchemeOk(st)
-	default:
-		if scheme != nil {
-			s = scheme.(*Scheme)
-		}
+	case *Scheme:
+		s = st
 	}
 	return this.Crud(ctx).Dispatcher(s.EventDispatcher)
 }
@@ -654,10 +785,8 @@ func (this *Resource) CrudSchemeDB(db *aorm.DB, scheme interface{}) *resource.CR
 	switch st := scheme.(type) {
 	case string:
 		s, _ = this.GetSchemeOk(st)
-	default:
-		if scheme != nil {
-			s = scheme.(*Scheme)
-		}
+	case *Scheme:
+		s = st
 	}
 	return this.CrudDB(db).Dispatcher(s.EventDispatcher)
 }
@@ -673,7 +802,7 @@ func (this *Resource) CrudDB(db *aorm.DB) *resource.CRUD {
 	return this.Crud((&core.Context{}).SetDB(db))
 }
 
-func (this *Resource) SetParentResource(parent *Resource, relationship *aorm.Relationship) {
+func (this *Resource) SetParentResource(parent *Resource, relationship *resource.ParentRelationship) {
 	this.Resource.SetParent(parent, relationship)
 	this.ParentResource = parent
 }
@@ -682,26 +811,32 @@ func (this *Resource) RegisterScheme(name string, cfg ...*SchemeConfig) *Scheme 
 	f := func() *Scheme {
 		return this.Scheme.AddChild(name, cfg...)
 	}
-	if this.registered {
+	if this.initialized {
 		return f()
 	}
-	this.AfterRegister(func() {
+	this.PostInitialize(func() {
 		f()
 	})
 	return nil
 }
 
-func (this *Resource) AfterRegister(f ...func()) {
-	this.afterRegister = append(this.afterRegister, f...)
+func (this *Resource) PostInitialize(f ...func()) {
+	if this.initialized {
+		for _, f := range f {
+			f()
+		}
+		return
+	}
+	this.postInitializeCallbacks = append(this.postInitializeCallbacks, f...)
 }
 
-func (this *Resource) AfterMount(f ...func()) {
+func (this *Resource) PostMount(f ...func()) {
 	if this.mounted {
 		for _, f := range f {
 			f()
 		}
 	} else {
-		this.afterMount = append(this.afterMount, f...)
+		this.postMountCallbacks = append(this.postMountCallbacks, f...)
 	}
 }
 
@@ -736,6 +871,19 @@ func (this *Resource) AddForeignMeta(meta *Meta) {
 	}
 	this.ForeignMetas = append(this.ForeignMetas, meta)
 	this.triggerForeignMetaAdded(meta)
+}
+
+func (this *Resource) GetLayout(name string, defaul ...string) resource.LayoutInterface {
+	l := this.Resource.GetLayout(name, defaul...)
+	if l == nil {
+		var typ = ParseContextType(name)
+		if typ.String() == name {
+			if typ.Has(INDEX, NEW, SHOW, EDIT) {
+				return this.Resource.GetLayout(resource.DEFAULT_LAYOUT)
+			}
+		}
+	}
+	return l
 }
 
 type ForeignMetaEvent struct {

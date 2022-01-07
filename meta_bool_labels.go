@@ -16,27 +16,29 @@ type BoolLabelsConfig struct {
 func (s *BoolLabelsConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	meta := metaor.(*Meta)
 	meta.Type = "bool_labels"
-	meta.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) interface{} {
+	meta.SetFormattedValuer(func(record interface{}, ctx *core.Context) *FormattedValue {
 		adminContext := ContextFromCoreContext(ctx)
 		var labels []string
 		for _, name := range s.Metas {
 			m := meta.BaseResource.GetMeta(name)
-			v := m.Value(ctx, recorde)
+			v := m.Value(ctx, record)
 			if v == nil {
 				continue
 			}
 			switch t := v.(type) {
 			case *bool:
 				if t != nil && *t {
-					labels = append(labels, m.GetRecordLabel(adminContext, recorde))
+					labels = append(labels, m.GetRecordLabel(adminContext, record))
 				}
 			case bool:
 				if t {
-					labels = append(labels, m.GetRecordLabel(adminContext, recorde))
+					labels = append(labels, m.GetRecordLabel(adminContext, record))
 				}
 			}
 		}
-		return strings.Join(labels, ", ")
+		return &FormattedValue{Record: record, Slice: true, Raw: labels, Value: strings.Join(labels, ", "), IsZeroF: func(record, value interface{}) bool {
+			return len(value.([]string)) == 0
+		}}
 	})
 
 	if len(s.Metas) == 0 {

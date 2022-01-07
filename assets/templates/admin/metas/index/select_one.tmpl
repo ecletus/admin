@@ -1,8 +1,12 @@
-{{$value := (raw_value_of .Record .Meta)}}
+{{- $value := .MetaValue.Raw -}}
 {{if (defined_resource_show_page .Meta.Resource)}}
-  {{$url := (.Meta.URLFor (admin_context) $value)}}
-  {{if $url}}
-    {{if not (is_new_record $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
+  {{if $value}}
+    {{$url := (.Meta.URLFor (admin_context) $value)}}
+    {{if $url}}
+      {{if not (is_new_record $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
+    {{else}}
+      {{.Value}}
+    {{end}}
   {{else}}
     {{.Value}}
   {{end}}

@@ -1,17 +1,16 @@
 package admin
 
 import (
-	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/ecletus/helpers"
+	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena-go/maps"
 	"github.com/pkg/errors"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
-	"github.com/moisespsena-go/aorm"
 )
 
 const (
@@ -67,8 +66,9 @@ func SelectOneBS(r *Resource, names ...NameCallback) {
 }
 
 type NameCallback struct {
-	Name     string
-	Callback func(meta *Meta)
+	Name             string
+	Callback         func(meta *Meta)
+	PrepareOneConfig func(cfg *SelectOneConfig)
 }
 
 func SelectOneOption(baseOpt SelectConfigOption, r *Resource, names ...NameCallback) {
@@ -81,14 +81,6 @@ func SelectManyOption(baseOpt SelectConfigOption, r *Resource, names ...NameCall
 
 func DoSelectOption(many bool, baseOpt SelectConfigOption, r *Resource, names ...NameCallback) {
 	onResource := func(index int, name, scheme string, opt SelectConfigOption, rs *Resource) {
-		res := NewDataResource(rs)
-		if opt.Has(SelectConfigOptionNotIcon) {
-			res.Layout = BASIC_LAYOUT_HTML
-		}
-		var mode string
-		if opt.Has(SelectConfigOptionBottonSheet) {
-			mode = "bottom_sheet"
-		}
 		var (
 			cfg    = r.Meta(&Meta{Name: name}).Config
 			oneCfg *SelectOneConfig
@@ -106,6 +98,21 @@ func DoSelectOption(many bool, baseOpt SelectConfigOption, r *Resource, names ..
 
 		oneCfg.Basic = true
 		oneCfg.AllowBlank = opt.Has(SelectConfigOptionAllowBlank)
+
+		var res = oneCfg.RemoteDataResource
+		if res == nil {
+			res = NewDataResource(rs)
+			oneCfg.RemoteDataResource = res
+		} else {
+			oneCfg.RemoteDataResource.Resource = rs
+		}
+		if opt.Has(SelectConfigOptionNotIcon) {
+			res.Layout = BASIC_LAYOUT_HTML
+		}
+		var mode string
+		if opt.Has(SelectConfigOptionBottonSheet) {
+			mode = "bottom_sheet"
+		}
 		oneCfg.RemoteDataResource = res
 		oneCfg.SelectMode = mode
 		oneCfg.Scheme = scheme
@@ -124,69 +131,83 @@ func DoSelectOption(many bool, baseOpt SelectConfigOption, r *Resource, names ..
 		meta = r.Meta(&Meta{
 			Resource: rs,
 			Name:     name,
-			FormattedValuer: func(record interface{}, context *core.Context) (result interface{}) {
-				if record != nil {
-					value := meta.Value(context, record)
-					if !helpers.IsNilInterface(value) {
-						if s, ok := value.(fmt.Stringer); ok {
-							return s.String()
-						}
-						return value
-					}
-				}
-				return ""
-			},
+			Config:   cfg,
+		})
 
-			Config: cfg,
+		meta.NewFormattedValuer(func(meta *Meta, old MetaFValuer, record interface{}, ctx *core.Context) *FormattedValue {
+			if old != nil {
+				return old(record, ctx)
+			}
+			if record == nil {
+				return nil
+			}
+			value := meta.Value(ctx, record)
+			if helpers.IsNilInterface(value) {
+				return nil
+			}
+			fv := &FormattedValue{Record: record, Raw: value}
+			switch t := value.(type) {
+			case Stringer:
+				fv.Value = t.AdminString(ContextFromCoreContext(ctx), maps.Map{})
+			case core.ContextStringer:
+				fv.Value = t.ContextString(ctx)
+			}
+			return fv
 		})
 
 		if field, ok := r.ModelStruct.FieldsByName[name]; ok && field.Relationship != nil {
-			if rel := field.Relationship; rel.Kind == "belongs_to" || rel.Kind == "has_one" {
-				meta.SetSetter(func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-					var (
-						rev               = reflect.ValueOf(recorde).Elem()
-						valuesS           = metaValue.Value.([]string)
-						foreignFieldNames = rel.ForeignFieldNames
-					)
-					if lv, lf := len(valuesS), len(foreignFieldNames); lv > lf {
-						valuesS = valuesS[0:len(foreignFieldNames)]
-					} else if lf > lv {
-						foreignFieldNames = foreignFieldNames[0:lv]
+			rel := field.Relationship
+			switch rel.Kind {
+			case aorm.BELONGS_TO, aorm.HAS_ONE:
+				meta.SetSetter(func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) (err error) {
+					if metaValue.Value == nil {
+						return nil
 					}
-					values := reflect.ValueOf(valuesS)
-					for i, name := range foreignFieldNames {
-						value := rev.FieldByName(name)
-						switch value.Kind() {
-						case reflect.String:
-							value.Set(values.Index(i))
-						case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-							var uiv, err = strconv.ParseUint(values.Index(i).String(), 10, 64)
-							if err != nil {
-								return errors.Wrap(err, PKG+".SelectOneOption meta auto setter: parse id failed")
+
+					defer func() {
+						if err != nil {
+							err = errors.Wrap(err, PKG+".SelectOneOption auto setter")
+						}
+					}()
+
+					var (
+						v  = metaValue.FirstStringValue()
+						ID aorm.ID
+					)
+
+					if v == "" {
+						if rel.GetRelatedID(recorde).IsZero() {
+							return
+						}
+						ID = rel.AssociationModel.DefaultID()
+					} else if ID, err = rel.AssociationModel.ParseIDString(v); err != nil {
+						return
+					} else if ID.Eq(rel.GetRelatedID(recorde)) {
+						return
+					}
+					rel.SetRelatedID(recorde, ID)
+					if rel.Field != nil {
+						if field := reflect.Indirect(reflect.ValueOf(recorde)).FieldByIndex(rel.Field.StructIndex); field.IsValid() {
+							for field.IsValid() {
+								switch field.Kind() {
+								case reflect.Ptr, reflect.Interface:
+									field.Set(reflect.Zero(field.Type()))
+									return nil
+								default:
+									if field.IsValid() {
+										aorm.SetZero(field)
+									}
+									return
+								}
 							}
-							value.SetUint(uiv)
-						case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-							var uiv, err = strconv.ParseInt(values.Index(i).String(), 10, 64)
-							if err != nil {
-								return errors.Wrap(err, PKG+".SelectOneOption meta auto setter: parse id failed")
-							}
-							value.SetInt(uiv)
-						default:
-							vi := value.Addr().Interface()
-							if parse, ok := vi.(aorm.StringParser); ok {
-								return parse.ParseString(valuesS[i])
-							}
-							return errors.New(PKG + ".SelectOneOption meta auto setter: invalid type")
 						}
 					}
+
 					return nil
 				})
+			default:
+				panic("not implemented")
 			}
-		} else {
-			meta.SetSetter(func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-				// fake
-				return nil
-			})
 		}
 
 		if names[index].Callback != nil {
@@ -206,7 +227,7 @@ func DoSelectOption(many bool, baseOpt SelectConfigOption, r *Resource, names ..
 			if e.Resource.Config.NotMount {
 				onResource(index, name, scheme, opt, e.Resource)
 			} else {
-				e.Resource.AfterMount(func() {
+				e.Resource.PostMount(func() {
 					onResource(index, name, scheme, opt, e.Resource)
 				})
 			}

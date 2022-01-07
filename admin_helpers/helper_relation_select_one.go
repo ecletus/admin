@@ -1,7 +1,6 @@
 package admin_helpers
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -91,17 +90,14 @@ func SelectOneOption(baseOpt SelectConfigOption, r *admin.Resource, names ...Nam
 		meta = r.Meta(&admin.Meta{
 			Resource: rs,
 			Name:     name,
-			FormattedValuer: func(record interface{}, context *core.Context) (result interface{}) {
+			FormattedValuer: func(record interface{}, context *core.Context) (result *admin.FormattedValue) {
 				if record != nil {
 					value := meta.Value(context, record)
 					if !helpers.IsNilInterface(value) {
-						if s, ok := value.(fmt.Stringer); ok {
-							return s.String()
-						}
-						return value
+						return &admin.FormattedValue{Record: record, Raw: value}
 					}
 				}
-				return ""
+				return nil
 			},
 
 			Config: &admin.SelectOneConfig{
@@ -114,7 +110,7 @@ func SelectOneOption(baseOpt SelectConfigOption, r *admin.Resource, names ...Nam
 		})
 
 		if field, ok := r.ModelStruct.FieldsByName[name]; ok && field.Relationship != nil {
-			if rel := field.Relationship; rel.Kind == "belongs_to" || rel.Kind == "has_one" {
+			if rel := field.Relationship; rel.Kind.Is(aorm.BELONGS_TO, aorm.HAS_ONE) {
 				meta.SetSetter(func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 					var (
 						rev               = reflect.ValueOf(recorde).Elem()
@@ -135,13 +131,13 @@ func SelectOneOption(baseOpt SelectConfigOption, r *admin.Resource, names ...Nam
 						case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 							var uiv, err = strconv.ParseUint(values.Index(i).String(), 10, 64)
 							if err != nil {
-								return errors.Wrap(err, pkg + ".SelectOneOption meta auto setter: parse id failed")
+								return errors.Wrap(err, pkg+".SelectOneOption meta auto setter: parse id failed")
 							}
 							value.SetUint(uiv)
 						case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 							var uiv, err = strconv.ParseInt(values.Index(i).String(), 10, 64)
 							if err != nil {
-								return errors.Wrap(err, pkg + ".SelectOneOption meta auto setter: parse id failed")
+								return errors.Wrap(err, pkg+".SelectOneOption meta auto setter: parse id failed")
 							}
 							value.SetInt(uiv)
 						default:
@@ -179,7 +175,7 @@ func SelectOneOption(baseOpt SelectConfigOption, r *admin.Resource, names ...Nam
 			if e.Resource.Config.NotMount {
 				onResource(index, name, scheme, opt, e.Resource)
 			} else {
-				e.Resource.AfterMount(func() {
+				e.Resource.PostMount(func() {
 					onResource(index, name, scheme, opt, e.Resource)
 				})
 			}

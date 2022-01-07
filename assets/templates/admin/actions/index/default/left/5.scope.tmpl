@@ -1,17 +1,17 @@
-{{$scopes := get_scopes}}
+{{$scopes := get_scopes false}}
 {{$resource := .Resource}}
 {{if $scopes}}
   <div class="qor-bottomsheet__filter" data-toggle="qor.filter">
     {{range $scope := $scopes}}
       {{if $scope.Group}}
-        <select class="qor-action--select" data-toggle="qor.selector" data-clearable="true" name="scopes[]" placeholder="{{t (printf "%v.scopes.%v.label" $resource.I18nPrefix $scope.Group) $scope.Group}}">
+        <select class="qor-action--select" data-toggle="qor.selector" data-clearable="true" name="scope[]" placeholder="{{$scope.Label}}">
           {{range $s := $scope.Scopes}}
-            <option value="{{$s.Name}}" {{if $s.Active}}selected{{end}}>{{t (printf "%v.scopes.%v.%v" $resource.I18nPrefix $scope.Group $s.Label) $s.Label}}</option>
+            <option value="{{$s.Name}}" {{if $s.Active}}selected{{end}}>{{$s.Label}}</option>
           {{end}}
         </select>
       {{else}}
         {{range $s := $scope.Scopes}}
-          <a class="qor-action--label {{if $s.Active}}is-active{{end}}" href="{{patch_current_url "~scopes[]" $s.Name}}">{{t (printf "%v.scopes.%v" $resource.I18nPrefix $s.Label) $s.Label}} {{if $s.Active}}<i class="material-icons">clear</i>{{end}}</a>
+          <a class="qor-action--label {{if $s.Active}}is-active{{end}}" href="{{patch_current_url "~scope[]" $s.Name}}">{{$s.Label}} {{if $s.Active}}<i class="material-icons">clear</i>{{end}}</a>
         {{end}}
       {{end}}
     {{end}}

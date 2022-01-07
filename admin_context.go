@@ -3,10 +3,11 @@ package admin
 import (
 	"net/http"
 
-	"github.com/ecletus/core"
 	"github.com/ecletus/render"
 	"github.com/moisespsena-go/assetfs"
 	"github.com/moisespsena-go/logging"
+
+	"github.com/ecletus/core"
 )
 
 // NewContext new admin context
@@ -33,8 +34,7 @@ func (this *Admin) NewContext(args ...interface{}) (c *Context) {
 	}
 
 	if c != nil {
-		var metaPath []string
-		c.metaPath = &metaPath
+		c = NewContext(c)
 		if c.Context == nil {
 			_, c.Context = this.ContextFactory.NewContextFromRequestPair(c.Writer, c.Request, this.Config.MountPath)
 			c.Request = c.Context.Request
@@ -48,14 +48,13 @@ func (this *Admin) NewContext(args ...interface{}) (c *Context) {
 			}
 
 			c.RequestLayout = c.Request.Header.Get("X-Layout")
+			if _, ok := c.Request.URL.Query()["print"]; ok {
+				c.Type |= PRINT
+			}
 		}
-		c.Context.Init()
-
 		for _, cb := range this.NewContextCallbacks {
 			cb(c)
 		}
-
-		c.Yield = c.defaultYield
 		var (
 			err         error
 			siteAssetFS assetfs.Interface

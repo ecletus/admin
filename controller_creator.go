@@ -5,6 +5,7 @@ import (
 
 	"github.com/ecletus/responder"
 	"github.com/moisespsena-go/httpu"
+	"github.com/pkg/errors"
 
 	"github.com/moisespsena/template/html/template"
 
@@ -28,7 +29,7 @@ func ParseCreateConfig(context *Context) (cfg *CreateConfig) {
 		}
 
 		if cfg.FormAction == "" {
-			cfg.FormAction = context.Resource.GetContextIndexURI(context.Context, context.ParentResourceID...)
+			cfg.FormAction = context.Resource.GetContextIndexURI(context, context.ParentResourceID...)
 		}
 	}
 
@@ -42,106 +43,146 @@ func ParseCreateConfig(context *Context) (cfg *CreateConfig) {
 }
 
 // New render new page
-func (this *Controller) New(context *Context) {
-	context.Type = NEW
-	ParseCreateConfig(context)
-	context.Execute("", this.controller.(ControllerCreator).New(context))
+func (this *Controller) New(ctx *Context) {
+	if ctx = ctx.ParentPreload(ParentPreloadNew); ctx.HasError() {
+		ctx.LogErrors()
+		return
+	}
+
+	ctx.SetBasicType(NEW)
+	ParseCreateConfig(ctx)
+
+	ctx.Result = this.controller.(ControllerCreator).New(ctx)
+	ctx.ResourceRecord = ctx.Result
+
+	ctx.Execute("", this.controller.(ControllerCreator).New(ctx))
 }
 
 // Create create data
-func (this *Controller) Create(context *Context) {
+func (this *Controller) Create(ctx *Context) {
 	if _, ok := this.controller.(ControllerCreator); !ok {
-		context.NotFound = true
-		http.NotFound(context.Writer, context.Request)
+		ctx.NotFound = true
+		http.NotFound(ctx.Writer, ctx.Request)
 	}
-	context.Type = NEW
-	res := context.Resource
+	if ctx = ctx.ParentPreload(ParentPreloadCreate); ctx.HasError() {
+		ctx.LogErrors()
+		return
+	}
+	ctx.SetBasicType(NEW)
+	res := ctx.Resource
 
 	if setuper, ok := this.controller.(ControllerSetuper); ok {
-		context.AddError(setuper.SetupContext(context))
+		ctx.AddError(setuper.SetupContext(ctx))
 	}
 
-	var recorde interface{}
+	var record interface{}
 
-	if !context.HasError() {
-		recorde = this.controller.(ControllerCreator).New(context)
+	if !ctx.HasError() {
+		record = this.controller.(ControllerCreator).New(ctx)
 
-		if !context.HasError() {
-			if context.AddError(res.Decode(context.Context, recorde)); !context.HasError() {
-				this.controller.(ControllerCreator).Create(context, recorde)
+		if !ctx.HasError() {
+			if ctx.AddError(res.Decode(ctx.Context, record)); !ctx.HasError() {
+				this.controller.(ControllerCreator).Create(ctx, record)
 			}
 		}
 	}
 
-	context.Result = recorde
-	cfg := ParseCreateConfig(context)
-	if context.HasError() {
+	ctx.Result = record
+	ctx.ResourceRecord = record
+
+	var (
+		cfg             = ParseCreateConfig(ctx)
+		messages        []string
+		messageDisabled bool
+	)
+
+	if ctx.HasError() {
 		if cfg.ErrorCallback != nil {
-			cfg.ErrorCallback(context, context.Errors)
+			cfg.ErrorCallback(ctx, ctx.Errors)
 		}
-		if context.Writer.WroteHeader() {
+		if ctx.Writer.WroteHeader() {
 			return
 		}
 		responder.With("html", func() {
-			context.Writer.WriteHeader(HTTPUnprocessableEntity)
-			context.Execute("shared/errors", recorde)
+			ctx.Writer.WriteHeader(HTTPUnprocessableEntity)
+			ctx.Execute("shared/errors", record)
 		}).With([]string{"json", "xml"}, func() {
-			context.Api = true
-			context.Writer.WriteHeader(HTTPUnprocessableEntity)
-			context.Encode(map[string]interface{}{"errors": context.GetErrors()})
-		}).Respond(context.Request)
+			ctx.Api = true
+			ctx.Writer.WriteHeader(HTTPUnprocessableEntity)
+			ctx.Encode(map[string]interface{}{"errors": ctx.GetErrors()})
+		}).Respond(ctx.Request)
 	} else {
-		context.ResourceID = context.Resource.GetKey(context.Result)
-		if context.Resource.Config.Wizard == nil {
-			if context.Request.Header.Get("X-Flash-Messages-Disabled") != "true" {
-				message := string(context.tt(I18NGROUP+".form.successfully_created",
-					NewResourceRecorde(context, res, recorde),
+		ctx.ResourceID = ctx.Resource.GetKey(ctx.Result)
+		if ctx.Resource.Config.Wizard == nil {
+			if ctx.Request.Header.Get("X-Flash-Messages-Disabled") != "true" {
+				message := string(ctx.tt(I18NGROUP+".form.successfully_created",
+					NewResourceRecorde(ctx, res, record),
 					"{{.}} was successfully created"))
 
 				if cfg.SuccessCallback != nil {
-					cfg.SuccessCallback(context, message)
-					if context.Writer.WroteHeader() {
+					cfg.SuccessCallback(ctx, message)
+					if ctx.Writer.WroteHeader() {
 						return
 					}
 				}
 
-				context.Flash(message, "success")
+				messages = append(messages, message)
 			}
 
 			if cfg.RedirectTo == "" {
-				cfg.RedirectTo = context.RedirectTo
+				cfg.RedirectTo = ctx.RedirectTo
 			}
 		}
 
-		defer context.LogErrors()
-		context.Type = SHOW
-		context.DefaulLayout()
+		var respond = func(messages []string) {
+			defer ctx.LogErrors()
+			ctx.SetBasicType(SHOW)
+			ctx.DefaulLayout()
 
-		if context.Resource.Config.Wizard != nil {
-			wz := recorde.(WizardModelInterface)
-			context.Writer.Header().Set("X-Next-Step", wz.CurrentStepName())
-			url := res.GetContextURI(context.Context, res.GetKey(recorde))
-			httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
-		} else {
-			responder.With("html", func() {
-				url := cfg.RedirectTo
-				if url == "" {
-					if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
-						url = res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
-					} else {
-						url = res.GetContextIndexURI(context.Context)
+			if ctx.Resource.Config.Wizard != nil {
+				wz := record.(WizardModelInterface)
+				ctx.Writer.Header().Set("X-Next-Step", wz.CurrentStepName())
+				url := res.GetContextURI(ctx, res.GetKey(record))
+				httpu.Redirect(ctx.Writer, ctx.Request, url, http.StatusSeeOther)
+			} else {
+				responder.With("html", func() {
+					if !messageDisabled {
+						ctx.FlashS("success", messages...)
 					}
-				}
-				httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
-			}).With([]string{"json", "xml"}, func() {
-				context.Api = true
-				if context.Request.URL.Query().Get("continue_editing") != "" || context.Request.URL.Query().Get("continue_editing_url") != "" {
-					url := res.GetContextURI(context.Context, res.GetKey(recorde)) + P_OBJ_UPDATE_FORM
-					httpu.Redirect(context.Writer, context.Request, url, http.StatusSeeOther)
+					url := cfg.RedirectTo
+					if url == "" {
+						if ctx.Request.URL.Query().Get("continue_editing") != "" || ctx.Request.URL.Query().Get("continue_editing_url") != "" {
+							url = res.GetContextURI(ctx, res.GetKey(record)) + P_OBJ_UPDATE_FORM
+						} else {
+							url = res.GetContextIndexURI(ctx)
+						}
+					}
+					httpu.Redirect(ctx.Writer, ctx.Request, url, http.StatusSeeOther)
+				}).With([]string{"json", "xml"}, func() {
+					ctx.Api = true
+					if ctx.Request.URL.Query().Get("continue_editing") != "" || ctx.Request.URL.Query().Get("continue_editing_url") != "" {
+						url := res.GetContextURI(ctx, res.GetKey(record)) + P_OBJ_UPDATE_FORM
+						httpu.Redirect(ctx.Writer, ctx.Request, url, http.StatusSeeOther)
+						return
+					}
+					ctx.Encode(record)
+				}).XAccept().Respond(ctx.Request)
+			}
+		}
+
+		if stateName := ctx.Request.PostForm.Get("QorCreateState"); stateName != "" {
+			for _, state := range ctx.Resource.UpdateStates {
+				if state.Name == stateName {
+					err := state.Handler(ctx, &messages, func() {
+						respond(messages)
+					})
+					if err != nil {
+						panic(errors.Wrapf(err, "State %q handler", stateName))
+					}
 					return
 				}
-				context.Encode(recorde)
-			}).XAccept().Respond(context.Request)
+			}
 		}
+		respond(messages)
 	}
 }

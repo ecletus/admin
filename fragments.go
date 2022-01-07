@@ -156,8 +156,8 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 		fr.isURI = "/" + strings.Join(param, "/")
 		if !res.Config.Virtual {
 			res.DefaultFilter(&DBFilter{
-				Name: "admin:fragment:"+fr.ID+":auto_inline_preload",
-				Handler: func(context *core.Context, db *aorm.DB) (DB *aorm.DB, err error) {
+				Name: "admin:fragment:" + fr.ID + ":auto_inline_preload",
+				Handler: func(_ *Context, db *aorm.DB) (DB *aorm.DB, err error) {
 					return db.AutoInlinePreload(res.Value), nil
 				},
 			})
@@ -170,8 +170,8 @@ func (f *Fragments) add(res *Resource, isForm bool, cfg *FragmentConfig) *Fragme
 				s.SchemeParam = utils.ToParamString(res.PluralName)
 				if !res.Config.Virtual {
 					s.DefaultFilter(&DBFilter{
-						Name: "admin:fragment:"+fr.ID+":inline_preload_join_inner",
-						Handler: func(context *core.Context, db *aorm.DB) (DB *aorm.DB, err error) {
+						Name: "admin:fragment:" + fr.ID + ":inline_preload_join_inner",
+						Handler: func(_ *Context, db *aorm.DB) (DB *aorm.DB, err error) {
 							db = db.InlinePreload(fr.ID, &aorm.InlinePreloadOptions{Join: aorm.JoinInner})
 							return fr.Filter(db), nil
 						},

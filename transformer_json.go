@@ -14,20 +14,29 @@ import (
 // JSONTransformer json transformer
 type JSONTransformer struct{}
 
+var JSONTransformerType = reflect.TypeOf(JSONTransformer{})
+
 // CouldEncode check if encodable
-func (JSONTransformer) CouldEncode(encoder Encoder) bool {
+func (JSONTransformer) CouldEncode(*Encoder) bool {
 	return true
 }
 
+func (JSONTransformer) IsType(t reflect.Type) bool {
+	return JSONTransformerType == t
+}
+
 // Encode encode encoder to writer as JSON
-func (JSONTransformer) Encode(writer io.Writer, encoder Encoder) error {
+func (JSONTransformer) Encode(writer io.Writer, encoder *Encoder) (err error) {
 	var (
 		context = encoder.Context
 		res     = encoder.Resource
 	)
 
-	js, err := json.MarshalIndent(convertObjectToJSONMap(res, context, encoder.Result, encoder.Layout), "", "\t")
-	if err != nil {
+	var js []byte
+
+	if encoder.Result == nil {
+		js = []byte("null")
+	} else if js, err = json.MarshalIndent(convertObjectToJSONMap(res, context, encoder.Result, encoder.Layout), "", "\t"); err != nil {
 		result := make(map[string]string)
 		result["error"] = err.Error()
 		js, _ = json.Marshal(result)
@@ -41,7 +50,7 @@ func (JSONTransformer) Encode(writer io.Writer, encoder Encoder) error {
 	return err
 }
 
-func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, layout string) interface{} {
+func convertObjectToJSONMap(res *Resource, ctx *Context, value interface{}, layout string) interface{} {
 	reflectValue := reflect.ValueOf(value)
 	for reflectValue.Kind() == reflect.Ptr {
 		reflectValue = reflectValue.Elem()
@@ -57,7 +66,7 @@ func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, 
 					indexValue = reflect.Indirect(indexValue.Elem())
 				}
 				indexValue = indexValue.Addr()
-				values = append(values, convertObjectToJSONMap(res, context, indexValue.Interface(), layout))
+				values = append(values, convertObjectToJSONMap(res, ctx.CreateChild(res, indexValue.Interface()), indexValue.Interface(), layout))
 			} else {
 				values = append(values, fmt.Sprint(indexValue.Interface()))
 			}
@@ -65,22 +74,38 @@ func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, 
 		return values
 	case reflect.Struct:
 		if getter, ok := value.(valuesmap.Getter); ok {
-			return convertObjectToJSONMap(res, context, getter.Get(), layout)
+			return convertObjectToJSONMap(res, ctx, getter.Get(), layout)
 		}
-		metas, metaNames := res.MetasFromLayoutNameContext(layout, context, value, roles.Read)
-		values := map[string]interface{}{}
+		metas, metaNames := res.MetasFromLayoutNameContext(layout, ctx, value, roles.Read)
+		var (
+			values = map[string]interface{}{}
+			val    interface{}
+		)
 		for i, meta := range metas {
-			// has_one, has_many checker to avoid dead loop
-			if meta.Resource != nil && (meta.FieldStruct != nil && meta.FieldStruct.Relationship != nil && (meta.FieldStruct.Relationship.Kind == "has_one" || meta.FieldStruct.Relationship.Kind == "has_many" || meta.Type == "single_edit" || meta.Type == "collection_edit")) {
-				if m := convertObjectToJSONMap(meta.Resource, context, context.RawValueOf(value, meta), layout); m != nil {
-					values[metaNames[i].GetEncodedNameOrDefault()] = m
-				}
-			} else {
-				formattedValue := context.FormattedValueOf(value, meta)
-				if meta.ForceShowZero || !meta.IsZero(value, formattedValue) {
-					values[metaNames[i].GetEncodedNameOrDefault()] = formattedValue
-				}
+			pop := ctx.MetaStack.Push(meta)
+			fv := meta.FormattedValue(ctx.Context, value)
+			if fv == nil {
+				continue
 			}
+
+			// has_one, has_many checker to avoid dead loop
+			if meta.Resource != nil && (meta.FieldStruct != nil && meta.FieldStruct.Relationship != nil && (meta.FieldStruct.Relationship.Kind.IsHasN() || meta.Type == "single_edit" || meta.Type == "collection_edit")) {
+				if val := convertObjectToJSONMap(meta.Resource, ctx, fv.Raw, layout); val == nil {
+					fv = res.GetDefinedMeta(META_STRINGIFY).FormattedValue(ctx.Context, val)
+					if fv == nil {
+						continue
+					}
+				}
+				val = fv.Raw
+			} else if fv.Value == "" && fv.SafeValue != "" {
+				val = fv.SafeValue
+			} else {
+				val = fv.Value
+			}
+			if meta.ForceShowZero || !meta.IsZero(value, val) {
+				values[metaNames[i].GetEncodedNameOrDefault()] = val
+			}
+			pop()
 		}
 		if len(values) == 0 {
 			return nil
@@ -88,7 +113,7 @@ func convertObjectToJSONMap(res *Resource, context *Context, value interface{}, 
 		return values
 	case reflect.Map:
 		for _, key := range reflectValue.MapKeys() {
-			reflectValue.SetMapIndex(key, reflect.ValueOf(convertObjectToJSONMap(res, context, reflectValue.MapIndex(key).Interface(), layout)))
+			reflectValue.SetMapIndex(key, reflect.ValueOf(convertObjectToJSONMap(res, ctx, reflectValue.MapIndex(key).Interface(), layout)))
 		}
 		return reflectValue.Interface()
 	default:

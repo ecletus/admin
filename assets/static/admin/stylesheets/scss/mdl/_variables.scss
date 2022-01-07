@@ -92,8 +92,8 @@ $trim-color-classes: false !default;
 
 // Use color primarily for emphasis. Choose colors that fit with
 // your brand and provide good contrast between visual components.
-$color-primary: $palette-indigo-500 !default;
-$color-primary-dark: $palette-indigo-700 !default;
+$color-primary: $palette-blue-500 !default;
+$color-primary-dark: $palette-blue-700 !default;
 $color-accent: $palette-pink-A200 !default;
 
 // Our primary is dark, so use $color-dark-contrast for overlaid text.
@@ -239,7 +239,7 @@ $spinner-single-color: unquote("rgb(#{$color-primary})") !default;
 
 /* ==========  Text fields  ========== */
 
-$input-text-background-color: transparent !default;
+$input-text-background-color: #F7E7CE !default;
 $input-text-label-color: unquote("rgba(#{$color-black}, 0.26)") !default;
 $input-text-bottom-border-color: unquote("rgba(#{$color-black}, 0.12)") !default;
 $input-text-highlight-color: unquote("rgb(#{$color-primary})") !default;
@@ -311,8 +311,8 @@ $footer-underline-color: $footer-color !default;
 
 $input-text-font-size: 16px !default;
 $input-text-width: 100% !default;
-$input-text-padding: 4px !default;
-$input-text-vertical-spacing: 20px !default;
+$input-text-padding: 6px !default;
+$input-text-vertical-spacing: 10px !default;
 
 $input-text-button-size: 32px !default;
 $input-text-floating-label-fontsize: 12px !default;
@@ -542,7 +542,7 @@ $grid-max-columns: $grid-desktop-columns !default;
 
 /* DATA TABLE */
 
-$data-table-font-size: 13px !default;
+$data-table-font-size: 12px !default;
 $data-table-header-font-size: 12px !default;
 $data-table-header-sort-icon-size: 16px !default;
 
@@ -555,18 +555,17 @@ $data-table-selection-color: #e0e0e0 !default;
 
 $data-table-dividers: 1px solid $data-table-divider-color !default;
 
-$data-table-row-height: 48px !default;
-$data-table-last-row-height: 56px !default;
-$data-table-header-height: 56px !default;
+$data-table-row-height: auto !default;
+$data-table-last-row-height: auto !default;
+$data-table-header-height: auto !default;
 
-$data-table-column-spacing: 36px !default;
+$data-table-column-spacing: 8px !default;
 $data-table-column-padding: $data-table-column-spacing / 2;
 
 $data-table-card-header-height: 64px !default;
 $data-table-card-title-top: 20px !default;
-$data-table-card-padding: 24px !default;
+$data-table-card-padding: 12px !default;
 $data-table-button-padding-right: 16px !default;
-$data-table-cell-top: $data-table-card-padding / 2;
 
 /* DIALOG */
 $dialog-content-color: $card-supporting-text-text-color;
@@ -579,5 +578,9 @@ $snackbar-tablet-breakpoint: $grid-tablet-breakpoint;
 $snackbar-action-color: unquote("rgb(#{$color-accent})") !default;
 
 /* TOOLTIP */
-$tooltip-font-size: 10px !default;
+$tooltip-font-size: 12px !default;
 $tooltip-font-size-large: 14px !default;
+
+$data-table-cell-top: 4px;
+$data-table-column-padding-bottom: 4px;
+$data-table-cell-valign: top;

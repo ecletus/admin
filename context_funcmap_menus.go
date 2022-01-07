@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/ecletus/roles"
+
 	"github.com/moisespsena/template/html/template"
 )
 
@@ -54,14 +55,14 @@ func (this *Context) getMenus() (menus []*menu) {
 		globalMenu        = &menu{}
 		mostMatchedMenu   *menu
 		mostMatchedLength int
-		addMenu           func(*menu, []*Menu)
+		addMenu           func(*menu, []*Menu) int
 		path              = this.RequestPath()
 	)
 
-	addMenu = func(parent *menu, menus []*Menu) {
+	addMenu = func(parent *menu, menus []*Menu) (i int) {
 		for _, m := range menus {
-			if m.Enabled != nil {
-				if !m.Enabled(m, this) {
+			if m.EnabledFunc != nil {
+				if !m.EnabledFunc(m, this) {
 					continue
 				}
 			}
@@ -76,12 +77,16 @@ func (this *Context) getMenus() (menus []*menu) {
 				menu.URL = m.URL(this)
 				menu.Label = this.Tt(m)
 
-				addMenu(menu, menu.GetSubMenus())
+				if addMenu(menu, menu.GetSubMenus()) == 0 && menu.Dir {
+					continue
+				}
+				i++
 				parent.SubMenus = append(parent.SubMenus, menu)
 			}
 		}
 
 		parent.sortChildren()
+		return i
 	}
 
 	addMenu(globalMenu, this.Admin.GetMenus())
@@ -93,7 +98,7 @@ func (this *Context) getMenus() (menus []*menu) {
 	return globalMenu.SubMenus
 }
 
-func (this *Context) getResourceItemMenus() (menus []*menu) {
+func (this *Context) getResourceItemMenus(item interface{}) (menus []*menu) {
 	var (
 		globalMenu = &menu{}
 		addMenu    func(*menu, []*Menu)
@@ -110,16 +115,11 @@ func (this *Context) getResourceItemMenus() (menus []*menu) {
 
 	addMenu = func(parent *menu, menus []*Menu) {
 		for _, m := range menus {
-			if m.Enabled != nil {
-				if !m.Enabled(m, this) {
-					continue
-				}
-			}
 			if this.HasPermission(m, roles.Read) {
 				var menu = &menu{Menu: m}
-				menu.URL = m.URL(this, parents...)
+				menu.URL = m.ItemUrl(this, item, parents...)
 				menu.Label = this.Tt(m)
-				addMenu(menu, menu.GetSubMenus())
+				addMenu(menu, menu.GetSubMenusForItem(this, item))
 				parent.SubMenus = append(parent.SubMenus, menu)
 			}
 		}
@@ -128,7 +128,7 @@ func (this *Context) getResourceItemMenus() (menus []*menu) {
 	}
 
 	if this.Resource != nil && (this.Resource.Config.Singleton || this.ResourceID != nil) {
-		addMenu(globalMenu, this.Resource.GetItemMenus())
+		addMenu(globalMenu, this.Resource.GetItemMenusOf(this, item))
 	}
 
 	return globalMenu.SubMenus
@@ -151,8 +151,11 @@ func (this *Context) getResourceMenus() (menus []*menu) {
 
 	addMenu = func(parent *menu, menus []*Menu) {
 		for _, m := range menus {
-			if m.Enabled != nil {
-				if !m.Enabled(m, this) {
+			if m.Disablers.Disabled(MenuMain, m, this) {
+				continue
+			}
+			if m.EnabledFunc != nil {
+				if !m.EnabledFunc(m, this) {
 					continue
 				}
 			}
@@ -191,29 +194,33 @@ func (this *Context) getResourceMenuActions() interface{} {
 
 type scope struct {
 	*Scope
+	Label  string
 	Active bool
 }
 
 type scopeMenu struct {
-	Group  string
-	Scopes []scope
+	Group, Label string
+	Scopes       []scope
 }
 
 // GetScopes get scopes from current context
-func (this *Context) GetScopes() (menus []*scopeMenu) {
+func (this *Context) GetScopes(advanced bool) (menus []*scopeMenu) {
 	if this.Resource == nil {
 		return
 	}
 
-	scopes := this.Request.URL.Query()["scopes[]"]
+	scopes := this.Request.URL.Query()["scope[]"]
 
 OUT:
-	for _, s := range this.Scheme.scopes {
+	for _, s := range this.Scheme.MustGetScopes() {
+		if advanced != s.Advanced(this) {
+			continue
+		}
 		if s.Visible != nil && !s.Visible(this) {
 			continue
 		}
 
-		menu := scope{Scope: s}
+		menu := scope{Scope: s, Label: s.GetLabel(this)}
 
 		for _, s := range scopes {
 			if s == menu.Name {
@@ -229,9 +236,9 @@ OUT:
 						continue OUT
 					}
 				}
-				menus = append(menus, &scopeMenu{Group: menu.Group, Scopes: []scope{menu}})
+				menus = append(menus, &scopeMenu{Group: menu.Group, Label: menu.GetGroupLabel(this), Scopes: []scope{menu}})
 			} else {
-				menus = append(menus, &scopeMenu{Group: menu.Group, Scopes: []scope{menu}})
+				menus = append(menus, &scopeMenu{Scopes: []scope{menu}})
 			}
 		}
 	}

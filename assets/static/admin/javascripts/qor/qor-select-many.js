@@ -120,11 +120,13 @@
         },
 
         renderSelectMany: function(data) {
-            return Mustache.render(this.SELECT_MANY_TEMPLATE, data);
+            const res = Mustache.render(this.SELECT_MANY_TEMPLATE, data)
+            return res;
         },
 
         renderHint: function(data) {
-            return Mustache.render(this.SELECT_MANY_HINT, data);
+            const res = Mustache.render(this.SELECT_MANY_HINT, data);
+            return res
         },
 
         initItems: function() {
@@ -193,7 +195,8 @@
                         primaryKey: primaryKey,
                         displayName: ''
                     };
-                    $option = $(Mustache.render(QorSelectMany.SELECT_MANY_OPTION_TEMPLATE, data));
+                    const res = Mustache.render(QorSelectMany.SELECT_MANY_OPTION_TEMPLATE, data)
+                    $option = $(res);
                     $selector.append($option);
                 }
 
@@ -232,7 +235,8 @@
             this.$selectFeild.append(template);
 
             if (isNewData) {
-                $option = $(Mustache.render(QorSelectMany.SELECT_MANY_OPTION_TEMPLATE, data));
+                const res = Mustache.render(QorSelectMany.SELECT_MANY_OPTION_TEMPLATE, data);
+                $option = $(res);
                 $option.appendTo(this.$selector);
                 $option.prop('selected', true);
                 this.$bottomsheets.remove();

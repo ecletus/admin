@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"reflect"
 	"strings"
 )
 
@@ -61,8 +62,9 @@ func (transformer *Transformer) RegisterTransformer(format string, transformers 
 
 // EncoderInterface encoder interface
 type EncoderInterface interface {
-	CouldEncode(Encoder) bool
-	Encode(writer io.Writer, encoder Encoder) error
+	CouldEncode(*Encoder) bool
+	Encode(writer io.Writer, encoder *Encoder) error
+	IsType(t reflect.Type) bool
 }
 
 // Encoder encoder struct used for encode
@@ -74,14 +76,25 @@ type Encoder struct {
 }
 
 // Encode encode data based on request accept type
-func (transformer *Transformer) Encode(writer io.Writer, encoder Encoder) error {
+func (transformer *Transformer) Encode(wrap func(e EncoderInterface) (done func()), writer io.Writer, encoder *Encoder) (err error) {
 	for _, format := range getFormats(encoder.Context.Request) {
 		if encoders, ok := transformer.Encoders[format]; ok {
 			for _, e := range encoders {
 				if e.CouldEncode(encoder) {
-					if err := e.Encode(writer, encoder); err != ErrUnsupportedEncoder {
-						return err
+					if wrap != nil {
+						func() {
+							defer wrap(e)()
+							if err = e.Encode(writer, encoder); err == ErrUnsupportedEncoder {
+								err = nil
+							}
+						}()
+					} else {
+						if err = e.Encode(writer, encoder); err == ErrUnsupportedEncoder {
+							err = nil
+						}
 					}
+
+					return
 				}
 			}
 		}

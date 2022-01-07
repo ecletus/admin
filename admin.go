@@ -25,7 +25,11 @@ import (
 
 const ROLE = "Admin"
 
-var log = logging.GetOrCreateLogger(path_helpers.GetCalledDir())
+var (
+	dir  = path_helpers.GetCalledDir()
+	log  = logging.GetOrCreateLogger(dir)
+	rlog = logging.GetOrCreateLogger(dir + "@route")
+)
 
 type AdminConfig struct {
 	*sites.Config
@@ -87,8 +91,14 @@ type Admin struct {
 	onPreInitializeResourceMeta []func(meta *Meta)
 	onResourceTypeAdded         map[reflect.Type][]func(res *Resource)
 	onMenuAdded                 []func(menu *Menu)
-	ContextPermissioners        []core.Permissioner
+	ContextPermissioners        []Permissioner
 	DefaultDenyMode             bool
+
+	BeforeAddResourceCallbacks []func(value interface{}, cfg *Config, afterCallback func(func(res *Resource)))
+	BeforeResourceInitializeCallbacks,
+	AfterResourceInitializeCallbacks []func(res *Resource)
+
+	RouteTree RouteTree
 }
 
 // ResourceNamer is an interface for models that defined method `ResourceName`
@@ -145,18 +155,30 @@ func New(config *AdminConfig) *Admin {
 	return admin
 }
 
-func (this *Admin) ContextPermissioner(permissioner ...core.Permissioner) {
+func (this *Admin) BeforeAddResource(f func(value interface{}, cfg *Config, afterCallback func(func(res *Resource)))) {
+	this.BeforeAddResourceCallbacks = append(this.BeforeAddResourceCallbacks, f)
+}
+
+func (this *Admin) BeforeResourceInitialize(f ...func(res *Resource)) {
+	this.BeforeResourceInitializeCallbacks = append(this.BeforeResourceInitializeCallbacks, f...)
+}
+
+func (this *Admin) AfterResourceInitialize(f ...func(res *Resource)) {
+	this.AfterResourceInitializeCallbacks = append(this.AfterResourceInitializeCallbacks, f...)
+}
+
+func (this *Admin) ContextPermissioner(permissioner ...Permissioner) {
 	this.ContextPermissioners = append(this.ContextPermissioners, permissioner...)
 }
 
-func (this *Admin) HasContextPermission(mode roles.PermissionMode, context *Context) (perm roles.Perm) {
+func (this *Admin) AdminHasContextPermission(mode roles.PermissionMode, context *Context) (perm roles.Perm) {
 	for _, permissioner := range this.ContextPermissioners {
-		if perm = permissioner.HasPermission(mode, context.Context); perm != roles.UNDEF {
+		if perm = permissioner.AdminHasPermission(mode, context); perm != roles.UNDEF {
 			return
 		}
 	}
 	if context.Resource != nil {
-		if perm = context.Resource.HasContextPermission(mode, context.Context); perm != roles.UNDEF {
+		if perm = context.Resource.AdminHasContextPermission(mode, context); perm != roles.UNDEF {
 			return
 		}
 	}

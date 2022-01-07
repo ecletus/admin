@@ -1,0 +1,19 @@
+{{- $current_value := (raw_value_of .Record .Meta) -}}
+{{- $primaryKey := .Meta.Resource.GetKey $current_value -}}
+{{if $primaryKey -}}
+    {{- if (defined_resource_show_page .Meta.Resource) -}}
+        {{- $url := (.Meta.URLFor (admin_context) $current_value) -}}
+        {{- if $url -}}
+            {{- if not (.Meta.IsNewRecord $current_value) -}}
+                <a data-url="{{$url}}" href="{{$url}}">{{$primaryKey}}</a>
+            {{- end -}}
+        {{- else -}}
+            {{$primaryKey}}
+        {{- end -}}
+    {{- else -}}
+        {{$primaryKey}}
+    {{- end -}}
+    {{- if .Value }}
+        | <span style="color: #0243bd;background-color: #dcecff;font-size: 95%">{{.Value}}</span>
+    {{- end -}}
+{{end}}

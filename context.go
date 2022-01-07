@@ -8,12 +8,15 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ecletus/validations"
-	"github.com/moisespsena-go/i18n-modular/i18nmod"
+	"github.com/moisespsena-go/getters"
+	"github.com/moisespsena-go/maps"
 	"unapu.com/lib"
 
-	"github.com/ecletus/core/utils"
+	"github.com/ecletus/validations"
 
+	"github.com/moisespsena-go/i18n-modular/i18nmod"
+
+	"github.com/ecletus/core/utils"
 	"github.com/moisespsena-go/aorm"
 
 	"github.com/ecletus/render"
@@ -31,7 +34,7 @@ import (
 	"github.com/ecletus/core"
 )
 
-type ContextType uint8
+type ContextType uint16
 
 func (b ContextType) Set(flag ContextType) ContextType    { return b | flag }
 func (b ContextType) Clear(flag ContextType) ContextType  { return b &^ flag }
@@ -44,6 +47,27 @@ func (b ContextType) Has(flag ...ContextType) bool {
 	}
 	return false
 }
+
+func (b ContextType) ClearBasic() ContextType {
+	return b &^ INDEX &^ SHOW &^ EDIT &^ NEW &^ ACTION
+}
+
+func (b ContextType) ClearCrud() ContextType {
+	return b &^ INDEX &^ SHOW &^ EDIT &^ NEW
+}
+
+func (b *ContextType) SetBasic(typ ContextType) {
+	*b = b.ClearBasic()
+	*b |= typ
+}
+
+func (b *ContextType) SetBasicS(typ string) {
+	var basic ContextType
+	basic.Parse(typ)
+	*b = b.ClearBasic()
+	*b |= basic
+}
+
 func (b ContextType) HasAll(flag ...ContextType) bool {
 	if len(flag) == 0 {
 		return false
@@ -77,46 +101,104 @@ func (b ContextType) String() string {
 	if b.Has(ACTION) {
 		s = append(s, "action")
 	}
-	return strings.Join(s, "_")
+	if b.Has(META_INDEX) {
+		s = append(s, "metaindex")
+	}
+	if b.Has(PRINT) {
+		s = append(s, "print")
+	}
+	if b.Has(INLINE) {
+		s = append(s, "row")
+	}
+	if b.Has(RE_RENDER) {
+		s = append(s, "re_render")
+	}
+	return strings.Join(s, "|")
 }
 
-func (b ContextType) HasS(s string) bool {
-	switch s {
-	case "index":
-		return b.Has(INDEX)
-	case "new":
-		return b.Has(NEW)
-	case "show":
-		return b.Has(SHOW)
-	case "edit":
-		return b.Has(EDIT)
-	case "deleted":
-		return b.Has(DELETED)
-	case "action":
-		return b.Has(ACTION)
-	default:
-		return false
+func (b ContextType) HasS(s ...string) bool {
+	for _, s := range s {
+		switch s {
+		case "index":
+			if b.Has(INDEX) {
+				return true
+			}
+		case "new":
+			if b.Has(NEW) {
+				return true
+			}
+		case "show":
+			if b.Has(SHOW) {
+				return true
+			}
+		case "edit":
+			if b.Has(EDIT) {
+				return true
+			}
+		case "deleted":
+			if b.Has(DELETED) {
+				return true
+			}
+		case "action":
+			if b.Has(ACTION) {
+				return true
+			}
+		case "meta_index":
+			if b.Has(META_INDEX) {
+				return true
+			}
+		case "print":
+			if b.Has(PRINT) {
+				return true
+			}
+		case "inline":
+			if b.Has(INLINE) {
+				return true
+			}
+		case "re_render":
+			if b.Has(RE_RENDER) {
+				return true
+			}
+		}
 	}
+	return false
 }
 
 func ParseContextType(s string) (b ContextType) {
-	for _, s := range strings.Split(strings.ToLower(s), "_") {
+	b.ParseMerge(s)
+	return
+}
+
+func (b *ContextType) ParseMerge(s string) {
+	for _, s := range strings.Split(strings.ToLower(s), "|") {
 		switch s {
 		case "index":
-			b |= INDEX
+			*b = b.ClearCrud() | INDEX
 		case "new":
-			b |= NEW
+			*b = b.ClearCrud() | NEW
 		case "show":
-			b |= SHOW
+			*b = b.ClearCrud() | SHOW
 		case "edit":
-			b |= EDIT
+			*b = b.ClearCrud() | EDIT
 		case "deleted":
-			b |= DELETED
+			*b |= DELETED
 		case "action":
-			b |= ACTION
+			*b |= ACTION
+		case "meta_index":
+			*b |= META_INDEX
+		case "print":
+			*b |= PRINT
+		case "inline":
+			*b |= INLINE
+		case "re_render":
+			*b |= RE_RENDER
 		}
 	}
-	return
+}
+
+func (b *ContextType) Parse(s string) {
+	*b = 0
+	b.ParseMerge(s)
 }
 
 func (ct ContextType) S() string {
@@ -124,13 +206,18 @@ func (ct ContextType) S() string {
 }
 
 const (
-	NONE ContextType = 1 << iota
+	_ ContextType = 1 << iota
 	INDEX
 	NEW
 	SHOW
 	EDIT
+	DELETE
 	DELETED
 	ACTION
+	META_INDEX
+	PRINT
+	INLINE
+	RE_RENDER // re-render posted form
 )
 
 // Context admin context, which is used for admin controller
@@ -138,6 +225,8 @@ type Context struct {
 	*core.Context
 	*Searcher
 	Scheme         *Scheme
+	SectionLayout  string
+	ParentRecord   []interface{}
 	ParentResource []*Resource
 	Resource       *Resource
 	ResourceType   string
@@ -146,8 +235,13 @@ type Context struct {
 	TemplateName   string
 	Action         string
 	Settings       map[string]interface{}
-	Result         interface{}
-	PageTitle      string
+	// Result is a generic result
+	Result,
+	// ResourceRecord is a resource record
+	ResourceRecord interface{}
+	ResourceItems interface{}
+
+	PageTitle string
 
 	usedThemes     []string
 	funcMaps       []template.FuncMap
@@ -157,14 +251,14 @@ type Context struct {
 	Type           ContextType
 	NotFound       bool
 	RouteHandler   *RouteHandler
+	ReadOnly       bool
 
 	Alerts []template.HTML
 
 	ParentResults                             []interface{}
 	nestedForm                                int
-	encodes                                   int
+	encodes                                   []EncoderInterface
 	RequestLayout                             string
-	metaPath                                  *[]string
 	Yield                                     func(w io.Writer, results ...interface{})
 	SiteAssetFS, SiteTemplateFS, SiteStaticFS assetfsapi.Interface
 
@@ -178,6 +272,81 @@ type Context struct {
 	config       map[interface{}]interface{}
 	PageHandlers *render.PageHandlers
 	Parent       *Context
+
+	WizardCompleteConfig *WizardContextCompleteConfig
+
+	MetaStack      *MetaStack
+	RenderFlags    ContextRenderFlag
+	ResourceAction *Action
+
+	Warnings core.Errors
+}
+
+func NewContext(arg ...*Context) (ctx *Context) {
+	for _, arg := range arg {
+		ctx = arg
+	}
+	if ctx == nil {
+		ctx = &Context{}
+	}
+	if ctx.MetaStack == nil {
+		ctx.MetaStack = &MetaStack{}
+	}
+	return
+}
+
+func (this *Context) WithType(typ ContextType, do func()) {
+	oldType := this.Type
+	this.Type = typ
+	defer func() {
+		this.Type = oldType
+	}()
+	do()
+}
+
+func (this *Context) WithTypeE(typ ContextType, do func() error) error {
+	oldType := this.Type
+	this.Type = typ
+	defer func() {
+		this.Type = oldType
+	}()
+	return do()
+}
+
+func (this *Context) SetBasicType(t ContextType) *Context {
+	this.Type = this.Type.ClearBasic() | t
+	return this
+}
+
+func (this *Context) GetParentRecordContext() *Context {
+	if this.Parent != nil {
+		if this.Parent.ResourceRecord != nil {
+			return this.Parent
+		} else if this.Parent.ResourceItems != nil {
+			return this.Parent.Parent
+		}
+	}
+	return nil
+}
+
+func (this *Context) GetParentRecord() interface{} {
+	if len(this.ParentRecord) > 0 {
+		return this.ParentRecord[len(this.ParentRecord)-1]
+	}
+	if ctx := this.GetParentRecordContext(); ctx != nil {
+		return ctx.ResourceRecord
+	}
+	return nil
+}
+
+func (this *Context) LoadResourceRecord(record interface{}, id ...aorm.ID) (err error) {
+	var id_ aorm.ID
+	for _, id_ = range id {
+	}
+	if id_ == nil {
+		id_ = this.ResourceID
+	}
+	return this.DB().ModelStruct(this.Resource.ModelStruct).First(record, id_).Error
 }
 
 func (this *Context) ConfigSet(key, value interface{}) {
@@ -221,8 +390,9 @@ func (this *Context) IsResultSlice() bool {
 }
 
 func (this *Context) WithResource(res *Resource, value interface{}) func() {
-	id, parentResource, parentResourceID, resource, searcher, DB, result, scheme := this.ResourceID,
-		this.ParentResource, this.ParentResourceID, this.Resource, this.Searcher, this.DB(), this.Result, this.Scheme
+	id, parentResource, parentResourceID, parentRecord, resource, searcher, DB, result, record, scheme := this.ResourceID,
+		this.ParentResource, this.ParentResourceID, this.ParentRecord, this.Resource, this.Searcher, this.DB(), this.Result,
+		this.ResourceRecord, this.Scheme
 
 	newDB := DB
 	if this.Context.Parent != nil {
@@ -230,8 +400,9 @@ func (this *Context) WithResource(res *Resource, value interface{}) func() {
 	}
 
 	this.ResourceID,
-		this.ParentResource, this.ParentResourceID, this.Resource, this.Searcher, this.Result = nil,
-		[]*Resource{}, []aorm.ID{}, res, this.NewSearcher(), value
+		this.ParentResource, this.ParentResourceID, this.ParentRecord, this.Resource, this.Searcher, this.Result,
+		this.ResourceRecord = nil, []*Resource{}, []aorm.ID{}, []interface{}{}, res, this.NewSearcher(), value, value
+
 	this.SetRawDB(newDB)
 
 	if scheme == nil {
@@ -245,22 +416,33 @@ func (this *Context) WithResource(res *Resource, value interface{}) func() {
 	}
 	return func() {
 		this.ResourceID,
-			this.ParentResource, this.ParentResourceID, this.Resource, this.Searcher, this.Result, this.Scheme = id,
-			parentResource, parentResourceID, resource, searcher, result, scheme
+			this.ParentResource, this.ParentResourceID, this.ParentRecord, this.Resource, this.Searcher, this.Result, this.ResourceRecord,
+			this.Scheme = id, parentResource, parentResourceID, parentRecord, resource, searcher, result, record, scheme
 		this.SetRawDB(DB)
 	}
 }
 
-func (this *Context) Stringify(value interface{}) string {
+func (this *Context) Stringify(value interface{}, opt ...getters.Getter) string {
+	var o getters.Getter
+	for _, o = range opt {
+	}
+	if o == nil {
+		var m maps.Map
+		o = m
+	}
 	if value == nil {
 		return ""
 	}
-	if stringer, ok := value.(ContextStringer); ok {
-		return stringer.String(this)
-	} else if traslater, ok := value.(i18nmod.Translater); ok {
-		return traslater.Translate(this.GetI18nContext())
+	switch t := value.(type) {
+	case Stringer:
+		return t.AdminString(this, o)
+	case core.ContextStringer:
+		return t.ContextString(this.Context)
+	case i18nmod.Translater:
+		return t.Translate(this.GetI18nContext())
+	default:
+		return utils.Stringify(value)
 	}
-	return utils.Stringify(value)
 }
 
 func (this *Context) HtmlifyRecordsMeta(res *Resource, metaName string, records ...interface{}) (result []template.HTML) {
@@ -348,6 +530,14 @@ func (this *Context) HtmlifyInterfaces(values ...interface{}) (result []template
 		switch vt := value.(type) {
 		case interface{ Htmlify(*Context) template.HTML }:
 			result[i] = vt.Htmlify(this)
+		case *FormattedValue:
+			if vt.SafeValue != "" {
+				result[i] = template.HTML(vt.SafeValue)
+			} else if vt.Value != "" {
+				result[i] = template.HTML(vt.Value)
+			} else {
+				result[i] = this.Context.Htmlify(vt.Raw)
+			}
 		default:
 			result[i] = this.Context.Htmlify(value)
 		}
@@ -453,26 +643,61 @@ func (this *Context) LoadDisplayOrError(displayType ...string) bool {
 	return true
 }
 
+func (parent *Context) CreateReadOnlerTypedChild(ro bool, typ interface{}, res *Resource, record ...interface{}) *Context {
+	child := parent.CreateTypedChild(typ, res, record...)
+	child.ReadOnly = ro
+	return child
+}
+
+func (parent *Context) CreateTypedChild(typ interface{}, res *Resource, record ...interface{}) *Context {
+	var T ContextType
+	switch t := typ.(type) {
+	case string:
+		T = ParseContextType(t)
+	default:
+		T = t.(ContextType)
+	}
+	child := parent.CreateChild(res, record...)
+	child.Type |= T
+	return child
+}
+
 func (parent *Context) CreateChild(res *Resource, record ...interface{}) *Context {
 	this := parent.Clone()
 	_, this.Context = this.Context.NewChild(nil)
+	this.Context.LocalContext = *this.Context.LocalContext.Copy()
+	this.Context.SetValue(CONTEXT_KEY, this)
 	this.Parent = parent
 	this.Resource = res
-	this.ParentResourceID = []aorm.ID{}
-	this.ParentResource = []*Resource{}
+	this.ParentRecord = nil
+	this.ParentResourceID = nil
+	this.ParentResource = nil
 	if this.ResourceID != nil {
 		this.ParentResourceID = []aorm.ID{this.ResourceID}
 	}
+	if res != parent.Resource && parent.Scheme != nil {
+		this.Scheme = res.Scheme
+	}
 	if len(record) == 1 && record[0] != nil {
 		this.Result = record[0]
-		if res.HasKey() {
+
+		if t := IndirectRealType(reflect.TypeOf(record[0])); t == res.ModelStruct.Type {
 			this.ResourceID = res.GetKey(record[0])
+			this.ResourceRecord = record[0]
 		} else {
+			this.ResourceRecord = nil
 			this.ResourceID = nil
+			switch t.Kind() {
+			case reflect.Slice, reflect.Chan:
+				if IndirectRealType(t.Elem()) == res.ModelStruct.Type {
+					this.ResourceItems = record[0]
+				}
+			}
 		}
 	} else {
 		this.Result = nil
 		this.ResourceID = nil
+		this.ResourceRecord = nil
 	}
 	return this
 }
@@ -491,14 +716,26 @@ func (this *Context) Flash(message string, typ string) {
 	})
 }
 
+// FlashS set flash messages
+func (this *Context) FlashS(typ string, message ...string) {
+	for _, message := range message {
+		this.SessionManager().Flash(session.Message{
+			Message: template.HTML(message),
+			Type:    typ,
+		})
+	}
+}
+
 // NewResourceContext new resource context
 func (this *Context) NewResourceContext(name ...interface{}) *Context {
 	clone := &Context{
-		Context: this.Context.Clone(),
-		Admin:   this.Admin,
-		Result:  this.Result,
-		Action:  this.Action,
-		Type:    this.Type,
+		Context:        this.Context.Clone(),
+		Admin:          this.Admin,
+		Result:         this.Result,
+		ResourceRecord: this.ResourceRecord,
+		Action:         this.Action,
+		Type:           this.Type,
+		MetaStack:      this.MetaStack,
 	}
 
 	if len(name) > 0 {
@@ -595,6 +832,7 @@ func (this *Context) setResourceFromCrumber(crumber *ResourceCrumber) *Context {
 	this.ResourceID = crumber.ID
 	this.ParentResourceID = crumber.ParentID
 	this.ParentResource = crumber.Parent
+	this.ParentRecord = make([]interface{}, len(crumber.Parent))
 	this.Scheme = crumber.Resource.Scheme
 	this.Searcher = this.NewSearcher()
 	return this
@@ -625,27 +863,43 @@ func (this *Context) Encode(result interface{}, layout ...string) error {
 	if len(layout) == 0 {
 		layout = []string{this.Layout}
 	}
-	if layout[0] == "show" && !this.Resource.isSetShowAttrs {
+
+	if layout[0] == "show" && !this.Scheme.Sections.Default.Screen.Show.IsSetI() {
 		layout[0] = "edit"
 	}
 
-	encoder := Encoder{
+	encoder := &Encoder{
 		Layout:   layout[0],
 		Resource: this.Resource,
 		Context:  this,
 		Result:   result,
 	}
 
-	this.encodes++
+	oldRenderFlags := this.RenderFlags
+
+	this.RenderFlags |= CtxRenderEncode
 	defer func() {
-		this.encodes--
+		this.RenderFlags = oldRenderFlags
 	}()
 
-	return this.Admin.Encode(this.Writer, encoder)
+	return this.Admin.Encode(func(e EncoderInterface) (done func()) {
+		i := len(this.encodes)
+		this.encodes = append(this.encodes, e)
+		return func() {
+			this.encodes = this.encodes[0:i]
+		}
+	}, this.Writer, encoder)
 }
 
 func (this *Context) Encodes() bool {
-	return this.encodes > 0
+	return len(this.encodes) > 0
+}
+
+func (this *Context) Encoder() EncoderInterface {
+	if len(this.encodes) == 0 {
+		return nil
+	}
+	return this.encodes[len(this.encodes)-1]
 }
 
 func (this *Context) SendError() bool {
@@ -670,11 +924,6 @@ func (this *Context) GetSearchableResources() (resources []*Resource) {
 		}
 	}
 	return
-}
-
-// GetSearchableResources clone the context object
-func CloneContext(context *Context) *Context {
-	return context.Clone()
 }
 
 func (this *Context) GetActionLabel() string {
@@ -702,50 +951,21 @@ func (this *Context) Crud(ctx ...*core.Context) *resource.CRUD {
 	return this.Resource.CrudScheme(ctx[0], this.Scheme)
 }
 
-func (this *Context) WithTransaction(f func()) {
-	defer this.Transaction()()
-	f()
-}
-
-func (this *Context) WithTransactionE(f func() (err error)) error {
-	defer this.Transaction()()
-	return f()
-}
-
-func (this *Context) Transaction(f ...func(commit func())) func() {
-	return func() {
-	}
+func (this *Context) WithTransaction(f func() (err error)) (err error) {
 	oldDB := this.DB()
-	DB := oldDB.Begin()
-	this.SetRawDB(DB)
-	if len(f) == 0 {
-		return func() {
-			if this.HasError() {
-				DB.Rollback()
-			} else {
-				this.AddError(DB.Commit().Error)
-			}
-			this.SetRawDB(oldDB)
-		}
-	}
-	var commit bool
-	defer func() {
-		if !commit {
-			DB.Rollback()
-		}
-		this.SetDB(oldDB)
-	}()
-	f[0](func() {
-		if err := DB.Commit().Error; err == nil {
-			commit = true
-		}
+	return oldDB.WithTransaction(func(db *aorm.DB) (err error) {
+		this.SetRawDB(db)
+		defer this.SetRawDB(oldDB)
+		return f()
 	})
-	return nil
 }
 
 func (this *Context) LogErrors() {
-	if errors := this.Errors.ExcludeError(func(err error) (exclude bool) {
-		return validations.IsError(err)
+	if errors := this.Errors.Filter(func(err error) error {
+		if validations.IsError(err) {
+			return nil
+		}
+		return err
 	}); errors.HasError() {
 		panic(errors)
 	}

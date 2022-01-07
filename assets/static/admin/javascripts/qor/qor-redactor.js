@@ -451,7 +451,7 @@
                 $this.redactor(config);
             } else {
                 if (/destroy/.test(option)) {
-                    $this.redactor('core.destroy');
+                    $this.redactor('destroy');
                 }
             }
 

@@ -251,6 +251,7 @@
                 this.$formCropInput.val(JSON.stringify(data));
 
                 this.$list.hide();
+                this.$parent.find('label').show();
 
                 $alert = $(QorCropper.ALERT);
                 $alert.find(CLASS_UNDO).one(
@@ -428,10 +429,12 @@
                         }
                     }
                 })
+                .attr('data-cropper', 'data-cropper')
                 .attr('src', url)
                 .data('originalUrl', url);
 
             $list.show();
+            this.$parent.find('label').hide();
         },
 
         start: function() {
@@ -441,7 +444,7 @@
                 sizeData = $target.data(),
                 sizeName = sizeData.sizeName || 'original',
                 sizeResolution = sizeData.sizeResolution,
-                $clone = $(`<img src=${sizeData.originalUrl}>`),
+                $clone = $(`<img data-cropper src=${sizeData.originalUrl}>`),
                 data = this.data || {},
                 _this = this,
                 sizeAspectRatio = NaN,
@@ -715,7 +718,7 @@
         </div>`;
 
     QorCropper.CANVAS = '<div class="qor-cropper__canvas"></div>';
-    QorCropper.LIST = '<ul><li><img></li></ul>';
+    QorCropper.LIST = '<ul><li><img data-cropper></li></ul>';
     QorCropper.FILE_LIST = `<div class="qor-file__list-item">
                                 <span><span>{{filename}}</span></span>
                                 <div class="qor-cropper__toggle">

@@ -18,7 +18,7 @@ function Xurl(url, depGet) {
             return {};
         }
 
-        var data = {},
+        let data = {},
             pairs = params.split('&'),
             current;
 
@@ -81,17 +81,69 @@ function Xurl(url, depGet) {
 
     this.toString = function () {
         return this.build().url
+    };
+
+    this.resolve = function (s, state) {
+        const regex = /{[^}]+}/gm;
+        let dget = this.dget.bind(this),
+            m;
+
+        while ((m = regex.exec(s)) !== null) {
+            // This is necessary to avoid infinite loops with zero-width matches
+            if (m.index === regex.lastIndex) {
+                regex.lastIndex++;
+            }
+
+            m.forEach((match) => {
+                let name = match.substring(1, match.length - 1),
+                    required = name.substr(-1, 1) === "*",
+                    value = null,
+                    defaultValue = "!UNDEFINED!",
+                    parts;
+
+                if (required) {
+                    name = name.substring(0, name.length-1)
+                }
+
+                parts = name.split("|")
+                if (parts.length === 2) {
+                    name = parts[0];
+                    defaultValue = parts[1];
+                }
+
+                value = dget(name)
+
+                if (value && value[1]) {
+                    if (!value[0]) {
+                        state.empties[name] = 1
+                        value[0] = encodeURIComponent(defaultValue);
+                    }
+                    s = s.replace(match, value[0]);
+                    s = s.replace(encodeURIComponent(match), encodeURIComponent(value[0]));
+                } else {
+                    state.notFound[name] = 1
+                    if (!required) {
+                        s = undefined
+                    }
+                }
+            });
+        }
+        return s
     }
 
     this.build = function () {
-        let url = this.url, notFound = {}, empties = {};
+        const state = {
+            notFound: {},
+            empties: {}
+        };
+        let url = this.resolve(this.url, state);
         if (this.query) {
             let query = [];
 
             for (let key in this.query) {
                 for (let i in this.query[key]) {
                     if (this.query[key][i] !== undefined) {
-                        query[query.length] = encodeURIComponent(key) + "=" + encodeURIComponent(this.query[key][i]);
+                        query[query.length] = encodeURIComponent(this.resolve(key, state)) + "=" + encodeURIComponent(this.resolve(this.query[key][i], state));
                     }
                 }
             }
@@ -100,34 +152,7 @@ function Xurl(url, depGet) {
         if (this.fragment) {
             url += "#" + this.fragment
         }
-
-        if (this.originalUrl.indexOf('{') !== -1) {
-            const regex = /\{[^\}]+\}/gm;
-            let dget = this.dget.bind(this),
-                m;
-
-            while ((m = regex.exec(this.originalUrl)) !== null) {
-                // This is necessary to avoid infinite loops with zero-width matches
-                if (m.index === regex.lastIndex) {
-                    regex.lastIndex++;
-                }
-
-                m.forEach((match) => {
-                    let name = match.substring(1, match.length - 1),
-                        value = dget(name);
-                    if (value[1]) {
-                        if (!value[0]) {
-                            empties[name] = 1
-                        }
-                        url = url.replace(match, value[0]);
-                        url = url.replace(encodeURIComponent(match), encodeURIComponent(value[0]));
-                    } else {
-                        notFound[name] = 1
-                    }
-                });
-            }
-        }
-        return {url:url, notFound:Object.keys(notFound), empties:Object.keys(empties)}
+        return {url:url, notFound:Object.keys(state.notFound), empties:Object.keys(state.empties)}
     };
 
     this.init = function () {

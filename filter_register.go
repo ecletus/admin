@@ -3,6 +3,8 @@ package admin
 import (
 	"errors"
 	"sync/atomic"
+
+	hash_key_gen "github.com/unapu-go/hash-key-gen"
 )
 
 var ErrStopIteration = errors.New("stop iteration")
@@ -11,14 +13,15 @@ var filterIndex uint32
 type FilterRegistrator interface {
 	InheritsFrom(registrator ...FilterRegistrator)
 	AddFilter(filter ...*Filter)
-	Get(name string) *Filter
+	Get(id uintptr) *Filter
+	GetByName(name string) *Filter
 	Each(state map[string]*Filter, cb func(f *Filter) (err error)) (err error)
 	EachDefaults(cb func(f *Filter))
 }
 
 type FilterRegister struct {
 	filters      []*Filter
-	byName       map[string]*Filter
+	byID         map[uintptr]*Filter
 	inheritsFrom []FilterRegistrator
 }
 
@@ -28,21 +31,24 @@ func (this *FilterRegister) InheritsFrom(registrator ...FilterRegistrator) {
 
 func (this *FilterRegister) AddFilter(filter ...*Filter) {
 	this.filters = append(this.filters, filter...)
-	if this.byName == nil {
-		this.byName = make(map[string]*Filter, len(filter))
+	if this.byID == nil {
+		this.byID = make(map[uintptr]*Filter, len(filter))
 	}
 	for _, f := range filter {
-		this.byName[f.Name] = f
+		if f.ID == 0 {
+			f.ID = hash_key_gen.OfString(f.Name)
+		}
+		this.byID[f.ID] = f
 		f.index = atomic.AddUint32(&filterIndex, 1)
 	}
 }
 
 func (this *FilterRegister) Each(state map[string]*Filter, cb func(f *Filter) (err error)) (err error) {
-	if this.byName != nil {
+	if this.byID != nil {
 		var ok bool
-		for name, f := range this.byName {
-			if _, ok = state[name]; !ok {
-				state[name] = f
+		for _, f := range this.byID {
+			if _, ok = state[f.Name]; !ok {
+				state[f.Name] = f
 				if err = cb(f); err == ErrStopIteration {
 					return nil
 				} else if err != nil {
@@ -61,14 +67,28 @@ func (this *FilterRegister) Each(state map[string]*Filter, cb func(f *Filter) (e
 	return nil
 }
 
-func (this *FilterRegister) Get(name string) (f *Filter) {
-	if this.byName != nil {
-		if f = this.byName[name]; f != nil {
+func (this *FilterRegister) Get(id uintptr) (f *Filter) {
+	if this.byID != nil {
+		if f = this.byID[id]; f != nil {
 			return
 		}
 	}
 	for _, parent := range this.inheritsFrom {
-		if f = parent.Get(name); f != nil {
+		if f = parent.Get(id); f != nil {
+			return
+		}
+	}
+	return
+}
+
+func (this *FilterRegister) GetByName(name string) (f *Filter) {
+	for _, f := range this.filters {
+		if f.Name == name {
+			return f
+		}
+	}
+	for _, parent := range this.inheritsFrom {
+		if f = parent.GetByName(name); f != nil {
 			return
 		}
 	}

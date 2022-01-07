@@ -14,16 +14,7 @@ func (this *Context) Basic() *Context {
 	return this
 }
 
-func (this *Context) Readonly() *Context {
-	this.Layout = "readonly"
-	return this
-}
-
 func (this *Context) ForUpdate() *Context {
 	this.Layout = ""
 	return this
-}
-
-func (this *Context) IsReadonly() bool {
-	return this.Layout == "readonly"
 }

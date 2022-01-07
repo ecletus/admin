@@ -22,11 +22,11 @@ type ResourceCrumb struct {
 }
 
 type StaticCrumbValuer interface {
-	AdminStaticCrumbValue(ctx *core.Context, record bool) resource.BasicValuer
+	AdminStaticCrumbValue(ctx *core.Context, res *Resource, id aorm.ID) (v resource.BasicValuer, err error)
 }
 
-func (this *ResourceCrumber) NewCrumb(ctx *core.Context, record bool) core.Breadcrumb {
-	uri := this.Resource.GetContextIndexURI(ctx, this.ParentID...)
+func (this *ResourceCrumber) NewCrumb(ctx *core.Context, record bool) (_ core.Breadcrumb, err error) {
+	uri := this.Resource.GetContextIndexURI(ContextFromContext(ctx), this.ParentID...)
 	crumb := &ResourceCrumb{
 		Resource: this.Resource,
 		ParentID: this.ParentID,
@@ -34,39 +34,37 @@ func (this *ResourceCrumber) NewCrumb(ctx *core.Context, record bool) core.Bread
 	if record {
 		crumb.ID = this.ID
 		_ = ctx.WithDB(func(ctx *core.Context) {
-			ctx.SetRawDB(ctx.DB().Unscoped())
-			var (
-				model resource.BasicValuer
-				err   error
-			)
 			if scv, ok := this.Resource.Value.(StaticCrumbValuer); ok {
-				model = scv.AdminStaticCrumbValue(ctx, record)
-			} else if model, err = this.Resource.Crud(ctx).FindOneBasic(this.ID); err != nil {
-				if aorm.IsRecordNotFoundError(err) {
-					ctx.AddError(err)
-					crumb = nil
+				var model resource.BasicValuer
+				if model, err = scv.AdminStaticCrumbValue(ctx, this.Resource, this.ID); err != nil {
 					return
-				} else {
-					panic(err)
 				}
+				crumb.Breadcrumb = core.NewBreadcrumb(uri, model.BasicLabel(), model.BasicIcon())
+			} else {
+				crumb.Breadcrumb = core.NewBreadcrumb(uri, this.ID.String(), "")
 			}
 			if !this.Resource.Config.Singleton {
 				uri += "/" + this.ID.String()
 			}
-			crumb.Breadcrumb = core.NewBreadcrumb(uri, model.BasicLabel(), model.BasicIcon())
 		})
 	} else if this.Resource.Config.Singleton {
 		crumb.Breadcrumb = core.NewBreadcrumb(uri, this.Resource.SingularLabelKey())
 	} else {
 		crumb.Breadcrumb = core.NewBreadcrumb(uri, this.Resource.PluralLabelKey())
 	}
-	return crumb
+	return crumb, nil
 }
 
-func (this *ResourceCrumber) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
-	crumbs = append(crumbs, this.NewCrumb(ctx, false))
+func (this *ResourceCrumber) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb, _ error) {
+	c, err := this.NewCrumb(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	crumbs = append(crumbs, c)
 	if !this.Resource.Config.Singleton && this.ID != nil {
-		if crumb := this.NewCrumb(ctx, true); crumb != nil {
+		if crumb, err := this.NewCrumb(ctx, true); err != nil {
+			return nil, err
+		} else if crumb != nil {
 			crumbs = append(crumbs, crumb)
 		}
 	}

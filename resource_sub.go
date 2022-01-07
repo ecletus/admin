@@ -60,8 +60,8 @@ func (this *Resource) AddSliceField(fieldName string, config ...*SubSliceFieldCo
 		cfg.LabelKey = this.ChildrenLabelKey(fieldName)
 	}
 
-	if !this.registered {
-		this.afterRegister = append(this.afterRegister, func() {
+	if !this.initialized {
+		this.postInitializeCallbacks = append(this.postInitializeCallbacks, func() {
 			this.AddResource(&SubConfig{FieldName: fieldName}, fieldItemValue, cfg)
 		})
 		return nil

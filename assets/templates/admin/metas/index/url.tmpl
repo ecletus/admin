@@ -1,0 +1,13 @@
+{{if .Meta.Config.Copy}}<a data-content-copy title="{{t (admin_i18n ":messages.copy_to_clipboard")}}"><i class="material-icons">file_copy</i></a>{{end}}
+{{if .Meta.Config.Download}}<a href="{{.Context.ParseUrl .Value}}" title="{{t (admin_i18n ":messages.file_download")}}"><i class="material-icons">file_download</i></a>{{end}}
+{{if .Meta.Config.NoLink}}
+    {{arg | .Meta.Config.Wrap .Context .Record -}}
+  <span class="qor-field__value-value" data-content-copy-value>{{.Value}}</span>
+    {{- end}}
+{{else}}
+    {{$label := .Meta.Config.GetLabel .Context .Record}}
+    {{$url := .Context.ParseUrl .Value}}
+    {{arg | .Meta.Config.Wrap .Context .Record -}}
+    <a class="qor-field__value-value" data-copy-value {{if .Meta.Config.Target}}target="{{.Meta.Config.Target}}" {{end}}href="{{$url}}" {{if (.Context.InternalUrl .Value)}}data-url="{{$url}}"{{end}}>{{if $label}}{{$label}}{{else}}{{.Value}}{{end}}</a>
+    {{- end}}
+{{- end}}

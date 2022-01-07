@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/ecletus/core"
-	"github.com/ecletus/core/utils"
 	"github.com/ecletus/db/inheritance"
 	"github.com/moisespsena-go/aorm"
 )
@@ -16,21 +15,30 @@ import (
 type ChildMeta struct {
 	Name            string
 	Valuer          ChildMetaValuer
-	FormattedValuer ChildMetaValuer
+	FormattedValuer ChildMetaFValuer
 }
 
 // GetFormattedValuer get formatted valuer from meta
-func (meta *ChildMeta) GetFormattedValuer() ChildMetaValuer {
+func (meta *ChildMeta) GetFormattedValuer() ChildMetaFValuer {
 	if meta.FormattedValuer != nil {
 		return meta.FormattedValuer
 	}
-	return meta.Valuer
+	return func(record interface{}, context *core.Context, original MetaFValuer) *FormattedValue {
+		return &FormattedValue{Record: record, Raw: meta.Valuer(record, context, func(record interface{}, context *core.Context) interface{} {
+			v := original(record, context)
+			if v == nil {
+				return nil
+			}
+			return v.Raw
+		})}
+	}
 }
 
 type ChildOptions struct {
 	Data map[interface{}]interface{}
 }
 type ChildMetaValuer func(record interface{}, context *core.Context, original MetaValuer) interface{}
+type ChildMetaFValuer func(record interface{}, context *core.Context, original MetaFValuer) *FormattedValue
 
 func (ro *ChildOptions) Meta(meta *ChildMeta) *ChildOptions {
 	if ro.Data == nil {
@@ -137,7 +145,7 @@ func (rs *Inheritances) Columns() []string {
 }
 func (rs *Inheritances) NewSlice() []interface{} {
 	r := make([]interface{}, len(rs.Items))
-	for i, _ := range r {
+	for i := range r {
 		r[i] = sql.NullString{}
 	}
 	return r
@@ -151,7 +159,10 @@ func (rs *Inheritances) Find(pk interface{}, db *aorm.DB) (r *Inheritance, err e
 	if db.Error != nil {
 		return r, db.Error
 	}
-	row := db.Row()
+	var row *sql.Row
+	if row, err = db.Row(); err != nil {
+		return
+	}
 	results := make([]interface{}, len(rs.Items))
 	err = row.Scan(&results)
 	if err != nil {
@@ -188,7 +199,9 @@ func (this *Resource) GetChildMeta(record interface{}, fieldName string) *ChildM
 }
 
 func (this *Resource) SetInheritedMeta(meta *Meta) *Meta {
-	name := meta.Name
+	panic("not implemented")
+	// todo: check formatted values ZeroFunc
+	/* name := meta.Name
 	meta.Name += "_inherited"
 	if meta.DefaultLabel == "" {
 		meta.DefaultLabel = utils.HumanizeString(name)
@@ -197,21 +210,28 @@ func (this *Resource) SetInheritedMeta(meta *Meta) *Meta {
 		originalMeta := this.GetDefinedMeta(name).Valuer
 		if meta := this.GetChildMeta(i, name); meta != nil {
 			valuer := meta.GetFormattedValuer()
-			return valuer(i, context, originalMeta)
+			return valuer(i, context, func(record interface{}, context *core.Context) *FormattedValue {
+				v := originalMeta(record, context)
+				if v == nil {
+					return nil
+				}
+				return &FormattedValue{Raw: v}
+			})
 		}
 		if originalMeta != nil {
 			return originalMeta(i, context)
 		}
 		return nil
 	}
-	meta.FormattedValuer = func(i interface{}, context *core.Context) interface{} {
-		originalMeta := this.GetDefinedMeta(name).GetFormattedValuer()
+	meta.FormattedValuer = func(i interface{}, context *core.Context) *FormattedValue {
+		original := this.GetDefinedMeta(name).GetFormattedValuer()
 		if meta := this.GetChildMeta(i, name); meta != nil {
 			valuer := meta.GetFormattedValuer()
-			return valuer(i, context, originalMeta)
+			return valuer(i, context, original)
 		}
-		return originalMeta(i, context)
+		return original(i, context)
 	}
 	this.Meta(&Meta{Name: name, Label: meta.Label})
 	return this.SetMeta(meta)
+	*/
 }

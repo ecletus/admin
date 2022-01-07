@@ -5,15 +5,16 @@ import (
 
 	"github.com/moisespsena-go/xroute"
 
-	"github.com/ecletus/core/utils"
 	"github.com/moisespsena-go/maps"
+
+	"github.com/ecletus/core/utils"
 
 	"github.com/ecletus/core/resource"
 
-	"github.com/ecletus/core"
-	"github.com/ecletus/roles"
-	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/edis"
+
+	"github.com/ecletus/core"
+	"github.com/moisespsena-go/aorm"
 )
 
 const (
@@ -27,9 +28,14 @@ type SchemeDispatcher struct {
 }
 
 type SchemeConfig struct {
-	Visible bool
+	Visible,
+	ResetScopes,
 	ResetFilters,
-	ResetDefaultFilters bool
+	ResetDefaultFilters,
+	ResetSearchPrepareHandlers,
+	ResetSearchCountHandlers,
+	ResetSearchFindHandlers,
+	ResetCountAggregationsHandlers bool
 	Setup func(scheme *Scheme)
 }
 
@@ -40,34 +46,28 @@ type Scheme struct {
 	SchemeParam     string
 	Resource        *Resource
 
-	indexSections []*Section
-	newSections   []*Section
-	editSections  []*Section
-	showSections  []*Section
+	SectionsAttribute
 
-	IndexSectionsFunc func(ctx *Context) []*Section
-	NewSectionsFunc   func(ctx *Context) []*Section
-	EditSectionsFunc  func(ctx *Context, record interface{}) []*Section
-	ShowSectionsFunc  func(ctx *Context, record interface{}) []*Section
+	sortableAttrs SortableAttrs
 
-	isSetShowAttrs bool
-	customSections *map[string]*[]*Section
-	sortableAttrs  *[]string
+	SearchHandler SearchTermHandler
 
-	SearchHandler SearchHandler
+	SearchFindHandlers,
+	SearchCountHandlers,
+	PrepareSearchHandlers,
+	CountAggregationsHandlers NamedSearcherHandlersRegistrator
 
-	scopes             []*Scope
-	Filters            FilterRegistrator
-	Categories         []string
-	parentScheme       *Scheme
-	Children           map[string]*Scheme
-	Crumbs             core.BreadCrumberFunc
-	DefaultFilters     DBFilterRegistrator
-	i18nKey            string
-	NotMount           bool
-	handler            *RouteHandler
-	PrepareContextFunc func(ctx *core.Context)
-	defaultMenu        *Menu
+	Scopes         ScopeRegistrator
+	Filters        FilterRegistrator
+	Categories     []string
+	parentScheme   *Scheme
+	Children       map[string]*Scheme
+	Crumbs         core.BreadCrumberFunc
+	DefaultFilters DBFilterRegistrator
+	i18nKey        string
+	NotMount       bool
+	handler        *RouteHandler
+	defaultMenu    *Menu
 
 	itemMenus, menus []*Menu
 
@@ -76,16 +76,36 @@ type Scheme struct {
 	hasFragments bool
 
 	SchemeData maps.SyncedMap
+
+	ApiHandlers map[string]func(ctx *Context)
 }
 
 func NewScheme(res *Resource, name string) *Scheme {
 	s := &Scheme{
-		Resource:       res,
-		SchemeName:     name,
-		Filters:        &FilterRegister{},
-		DefaultFilters: &DBFilterRegister{},
-		SchemeParam:    utils.ToParamString(name),
-		itemMenus:      make([]*Menu, 0),
+		Resource:                  res,
+		SchemeName:                name,
+		Scopes:                    &ScopeRegister{},
+		Filters:                   &FilterRegister{},
+		DefaultFilters:            &DBFilterRegister{},
+		SearchCountHandlers:       &NamedSearcherHandlersRegistry{},
+		SearchFindHandlers:        &NamedSearcherHandlersRegistry{},
+		PrepareSearchHandlers:     &NamedSearcherHandlersRegistry{},
+		CountAggregationsHandlers: &NamedSearcherHandlersRegistry{},
+		SchemeParam:               utils.ToParamString(name),
+		itemMenus:                 make([]*Menu, 0),
+		ApiHandlers:               map[string]func(ctx *Context){},
+		NotMount:                  res.Config.NotMount,
+		SectionsAttribute: SectionsAttribute{
+			Resource: res,
+		},
+	}
+
+	if res.Scheme == nil {
+		s.Sections = NewDefaultSchemeSectionsLayout(NewSchemeSectionsLayouts(name, NewSchemeSectionsLayoutsOptions{DefaultProvider: res.AllSectionsProvider}))
+		s.AllSectionsFunc = res.AllSections
+	} else {
+		s.Sections = res.Scheme.Sections.MakeChild(name)
+		s.AllSectionsFunc = res.Scheme.AllSectionsFunc
 	}
 
 	s.Filter(&Filter{
@@ -151,7 +171,7 @@ func (this *Scheme) CurrentOrders() []interface{} {
 	return this.orders
 }
 
-func (this *Scheme) CurrentSearchHandler() SearchHandler {
+func (this *Scheme) CurrentSearchHandler() SearchTermHandler {
 	if this.SearchHandler == nil {
 		return this.Resource.Scheme.SearchHandler
 	}
@@ -198,26 +218,27 @@ func (this *Scheme) DefaultFilter(filter ...*DBFilter) {
 	this.DefaultFilters.AddFilter(filter...)
 }
 
-func (this *Scheme) ApplyDefaultFilters(ctx *core.Context) (_ *core.Context, err error) {
+func (this *Scheme) ApplyDefaultFilters(ctx *Context) (_ *core.Context, err error) {
 	db := ctx.DB()
 	err = this.DefaultFilters.Each(map[string]*DBFilter{}, func(f *DBFilter) (err error) {
 		db, err = f.Handler(ctx, db)
 		return
 	})
 	if err == nil {
-		return ctx.SetRawDB(db), nil
+		ctx.SetRawDB(db)
+		return ctx.Context, nil
 	}
 	return
 }
 
-func (this *Scheme) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb) {
+func (this *Scheme) Breadcrumbs(ctx *core.Context) (crumbs []core.Breadcrumb, _ error) {
 	if this == this.Resource.Scheme {
 		return
 	}
 	if this.Crumbs != nil {
 		return this.Crumbs(ctx)
 	}
-	crumbs = append(crumbs, core.NewBreadcrumb(this.Resource.GetIndexURI(), this.I18nKey()))
+	crumbs = append(crumbs, core.NewBreadcrumb(this.Resource.GetIndexURI(ContextFromContext(ctx)), this.I18nKey()))
 	return
 }
 
@@ -287,152 +308,65 @@ func (this *Scheme) OnDBAction(cb func(e *resource.DBEvent), action ...resource.
 	return resource.OnDBAction(this.EventDispatcher, cb, action...)
 }
 
-// IndexAttrs set attributes will be shown in the index page
-//     // show given attributes in the index page
-//     order.IndexAttrs("User", "PaymentAmount", "ShippedAt", "CancelledAt", "State", "ShippingAddress")
-//     // show all attributes except `State` in the index page
-//     order.IndexAttrs("-State")
-func (this *Scheme) IndexAttrs(values ...interface{}) []*Section {
-	this.Resource.setSections(&this.indexSections, values...)
+func (this *Scheme) GetCustomAttrs(name string) (Sections, bool) {
+	panic("Scheme.GetCustomAttrs: deprecated")
+}
+
+func (this *Scheme) CustomAttrs(name string, values ...interface{}) Sections {
+	return this.CustomAttrsOf(this.Sections.Default.Screen, name, values...)
+}
+
+func (this *Scheme) IndexAttrs(values ...interface{}) Sections {
+	secs := this.IndexAttrsOf(this.Sections.Default.Screen, values...)
 	this.SearchAttrs()
-	return this.indexSections
+	return secs
 }
 
-func (this *Scheme) excludeReadOnlyAttrs(at *[]*Section, values ...interface{}) []*Section {
-	if len(values) == 0 {
-		if len(*at) == 0 {
-			// load defaults
-			this.Resource.setSections(at)
-		}
-		values = append(values, *at)
-		for _, f := range this.Resource.ModelStruct.ReadOnlyFields {
-			values = append(values, "-"+f.Name)
-		}
-		// exclude readonly fields
-		this.Resource.setSections(at, values...)
-	} else {
-		for _, f := range this.Resource.ModelStruct.ReadOnlyFields {
-			values = append(values, "-"+f.Name)
-		}
-
-		this.Resource.setSections(at, values...)
-	}
-	return *at
+func (this *Scheme) NewAttrs(values ...interface{}) Sections {
+	return this.NewAttrsOf(this.Sections.Default.Screen, values...)
 }
 
-// NewAttrs set attributes will be shown in the new page
-//     // show given attributes in the new page
-//     order.NewAttrs("User", "PaymentAmount", "ShippedAt", "CancelledAt", "State", "ShippingAddress")
-//     // show all attributes except `State` in the new page
-//     order.NewAttrs("-State")
-//  You could also use `Section` to structure form to make it tidy and clean
-//     product.NewAttrs(
-//       &admin.Section{
-//       	Title: "Basic Information",
-//       	Rows: [][]string{
-//       		{"Name"},
-//       		{"Code", "Price"},
-//       	}},
-//       &admin.Section{
-//       	Title: "Organization",
-//       	Rows: [][]string{
-//       		{"Category", "Collections", "MadeCountry"},
-//       	}},
-//       "Description",
-//       "ColorVariations",
-//     }
-func (this *Scheme) NewAttrs(values ...interface{}) []*Section {
-	return this.excludeReadOnlyAttrs(&this.newSections, values...)
+func (this *Scheme) EditAttrs(values ...interface{}) Sections {
+	return this.EditAttrsOf(this.Sections.Default.Screen, values...)
 }
 
-// EditAttrs set attributes will be shown in the edit page
-//     // show given attributes in the new page
-//     order.EditAttrs("User", "PaymentAmount", "ShippedAt", "CancelledAt", "State", "ShippingAddress")
-//     // show all attributes except `State` in the edit page
-//     order.EditAttrs("-State")
-//  You could also use `Section` to structure form to make it tidy and clean
-//     product.EditAttrs(
-//       &admin.Section{
-//       	Title: "Basic Information",
-//       	Rows: [][]string{
-//       		{"Name"},
-//       		{"Code", "Price"},
-//       	}},
-//       &admin.Section{
-//       	Title: "Organization",
-//       	Rows: [][]string{
-//       		{"Category", "Collections", "MadeCountry"},
-//       	}},
-//       "Description",
-//       "ColorVariations",
-//     }
-func (this *Scheme) EditAttrs(values ...interface{}) []*Section {
-	return this.excludeReadOnlyAttrs(&this.editSections, values...)
-}
-
-// ShowAttrs set attributes will be shown in the show page
-//     // show given attributes in the show page
-//     order.ShowAttrs("User", "PaymentAmount", "ShippedAt", "CancelledAt", "State", "ShippingAddress")
-//     // show all attributes except `State` in the show page
-//     order.ShowAttrs("-State")
-//  You could also use `Section` to structure form to make it tidy and clean
-//     product.ShowAttrs(
-//       &admin.Section{
-//       	Title: "Basic Information",
-//       	Rows: [][]string{
-//       		{"Name"},
-//       		{"Code", "Price"},
-//       	}},
-//       &admin.Section{
-//       	Title: "Organization",
-//       	Rows: [][]string{
-//       		{"Category", "Collections", "MadeCountry"},
-//       	}},
-//       "Description",
-//       "ColorVariations",
-//     }
-func (this *Scheme) ShowAttrs(values ...interface{}) []*Section {
-	if len(values) > 0 {
-		if values[len(values)-1] == false {
-			values = values[:len(values)-1]
-		} else {
-			this.isSetShowAttrs = true
-		}
-	} else {
-		this.isSetShowAttrs = true
-	}
-	this.Resource.setSections(&this.showSections, values...)
-	return this.showSections
+func (this *Scheme) ShowAttrs(values ...interface{}) Sections {
+	return this.ShowAttrsOf(this.Sections.Default.Screen, values...)
 }
 
 func (this *Scheme) NESAttrs(values ...interface{}) {
-	this.NewAttrs(values...)
-	this.EditAttrs(values...)
-	this.ShowAttrs(values...)
+	this.NESAttrsOf(this.Sections.Default.Screen, values...)
 }
 
 func (this *Scheme) INESAttrs(values ...interface{}) {
-	this.IndexAttrs(values...)
-	this.NewAttrs(values...)
-	this.EditAttrs(values...)
-	this.ShowAttrs(values...)
+	this.INESAttrsOf(this.Sections.Default.Screen, values...)
+}
+
+func (this *Scheme) IsSortableMeta(name string) bool {
+	return this.sortableAttrs.Has(name)
 }
 
 // SortableAttrs set sortable attributes, sortable attributes could be click to order in qor table
-func (this *Scheme) SortableAttrs(columns ...string) []string {
-	if len(columns) != 0 || this.sortableAttrs == nil {
-		if len(columns) == 0 {
-			columns = this.Resource.ConvertSectionToStrings(this.indexSections)
+func (this *Scheme) SortableAttrs(names ...string) []string {
+	if len(names) != 0 || this.sortableAttrs.Names == nil {
+		if len(names) == 0 {
+			names = this.Sections.Default.Screen.Index.MetasNames()
 		}
-		this.sortableAttrs = &[]string{}
-		for _, column := range columns {
-			if field, ok := this.Resource.ModelStruct.FieldsByName[column]; ok && field.DBName != "" {
-				attrs := append(*this.sortableAttrs, column)
-				this.sortableAttrs = &attrs
+		this.sortableAttrs.Names = []string{}
+		for _, name := range names {
+			if field, ok := this.Resource.ModelStruct.FieldsByName[name]; ok && field.DBName != "" {
+				this.sortableAttrs.Add(name)
+			} else if m := this.Resource.GetMeta(name); m != nil && m.SortHandler != nil {
+				this.sortableAttrs.Add(name)
 			}
 		}
 	}
-	return *this.sortableAttrs
+	return this.sortableAttrs.Names
+}
+
+func (this *Scheme) Unsort() {
+	this.sortableAttrs.Names = nil
+	this.sortableAttrs.Parent = nil
 }
 
 // SearchAttrs set search attributes, when search resources, will use those columns to search
@@ -441,15 +375,16 @@ func (this *Scheme) SortableAttrs(columns ...string) []string {
 func (this *Scheme) SearchAttrs(columns ...string) []string {
 	if len(columns) != 0 || this.SearchHandler == nil {
 		if len(columns) == 0 {
-			if len(this.indexSections) == 0 && this != this.Resource.Scheme {
+			provider := this.Sections.Default.Screen.Index
+			if !provider.IsSetI() && this != this.Resource.Scheme {
 				return this.Resource.Scheme.SearchAttrs()
 			} else {
-				columns = this.Resource.ConvertSectionToStrings(this.indexSections)
+				columns = provider.MustSections().MetasNames()
 			}
 		}
 
 		if len(columns) > 0 {
-			var filterFields []filterField
+			var filterFields []*filterField
 			for _, column := range columns {
 				parts := strings.SplitN(column, " ", 2)
 				var op string
@@ -458,7 +393,7 @@ func (this *Scheme) SearchAttrs(columns ...string) []string {
 				}
 				f := NewFieldFilter(this.Resource, column)
 				if f != nil {
-					filterFields = append(filterFields, filterField{Field: f, Operation: op})
+					filterFields = append(filterFields, &filterField{Field: f, Operation: op})
 				}
 			}
 
@@ -490,136 +425,6 @@ func (this *Scheme) getAttrs(attrs []string) []string {
 	return attrs
 }
 
-func (this *Scheme) GetCustomAttrs(name string) ([]*Section, bool) {
-	if this.customSections == nil {
-		return nil, false
-	}
-	sections, ok := (*this.customSections)[name]
-	if ok {
-		return *sections, ok
-	} else {
-		return nil, false
-	}
-}
-
-// CustomAttrs set attributes will be shown in the index page
-//     // show given attributes in the index page
-//     order.IndexAttrs("User", "PaymentAmount", "ShippedAt", "CancelledAt", "State", "ShippingAddress")
-//     // show all attributes except `State` in the index page
-//     order.IndexAttrs("-State")
-func (this *Scheme) CustomAttrs(name string, values ...interface{}) []*Section {
-	if this.customSections == nil {
-		this.customSections = &map[string]*[]*Section{}
-	}
-
-	sections := &[]*Section{}
-	this.Resource.setSections(sections, values...)
-	(*this.customSections)[name] = sections
-
-	return *sections
-}
-
-func (this *Scheme) IndexSections(context *Context) []*Section {
-	if this.IndexSectionsFunc != nil {
-		return this.IndexSectionsFunc(context)
-	}
-
-	if len(this.indexSections) == 0 {
-		if this.parentScheme != nil {
-			return this.parentScheme.IndexSections(context)
-		}
-		if this.Resource.Scheme != this {
-			return this.Resource.Scheme.IndexSections(context)
-		}
-	}
-	sections := this.Resource.allowedSections(nil, this.IndexAttrs(), context, roles.Read)
-	return sections
-}
-
-func (this *Scheme) EditSections(context *Context, record interface{}) (sections []*Section) {
-	if this.EditSectionsFunc != nil {
-		return this.EditSectionsFunc(context, record)
-	}
-
-	if len(this.editSections) == 0 {
-		if this.parentScheme != nil {
-			return this.parentScheme.EditSections(context, record)
-		}
-		if this.Resource.Scheme != this {
-			return this.Resource.Scheme.EditSections(context, record)
-		}
-	}
-	if this == this.Resource.Scheme && this.Resource.Fragment != nil {
-		sections = append(sections, &Section{Resource: this.Resource, Rows: [][]string{{AttrFragmentEnabled}}})
-	}
-	sections = append(sections, this.Resource.allowedSections(record, this.EditAttrs(), context, roles.Update)...)
-	return sections
-}
-
-func (this *Scheme) NewSections(context *Context) []*Section {
-	if this.NewSectionsFunc != nil {
-		sections := this.NewSectionsFunc(context)
-		for _, sec := range sections {
-			if sec.Resource == nil {
-				sec.Resource = this.Resource
-			}
-		}
-		return sections
-	}
-
-	if len(this.newSections) == 0 {
-		if this.parentScheme != nil {
-			return this.parentScheme.NewSections(context)
-		}
-		if this.Resource.Scheme != this {
-			return this.Resource.Scheme.NewSections(context)
-		}
-	}
-	return this.Resource.allowedSections(nil, this.NewAttrs(), context, roles.Create)
-}
-
-func (this *Scheme) ShowSections(context *Context, record interface{}) []*Section {
-	if this.ShowSectionsFunc != nil {
-		return this.ShowSectionsFunc(context, record)
-	}
-	return this.ShowSectionsOriginal(context, record)
-}
-
-func (this *Scheme) ShowSectionsOriginal(context *Context, record interface{}) []*Section {
-	if len(this.showSections) == 0 {
-		if this.parentScheme != nil {
-			return this.parentScheme.ShowSections(context, record)
-		}
-		if this.Resource.Scheme != this {
-			return this.Resource.Scheme.ShowSections(context, record)
-		}
-	}
-	return this.Resource.allowedSections(record, this.ShowAttrs(), context, roles.Read)
-}
-
-func (this *Scheme) ContextSections(context *Context, recorde interface{}, action ...string) []*Section {
-	var b ContextType
-	if len(action) > 0 && action[0] != "" {
-		b = ParseContextType(action[0])
-	} else {
-		b = context.Type
-	}
-
-	if b.Has(NEW) {
-		return this.NewSections(context)
-	}
-	if b.Has(SHOW) {
-		return this.ShowSections(context, recorde)
-	}
-	if b.Has(EDIT) {
-		return this.EditSections(context, recorde)
-	}
-	if b.Has(INDEX) {
-		return this.IndexSections(context)
-	}
-	return nil
-}
-
 func (this *Scheme) Parents() (parents []*Scheme) {
 	p := this.parentScheme
 	for p != nil {
@@ -634,18 +439,6 @@ func (this *Scheme) Parents() (parents []*Scheme) {
 	return
 }
 
-func (this *Scheme) PrepareContext(ctx *core.Context) {
-	for _, p := range this.Parents() {
-		if p.PrepareContextFunc != nil {
-			p.PrepareContextFunc(ctx)
-		}
-	}
-
-	if this.PrepareContextFunc != nil {
-		this.PrepareContextFunc(ctx)
-	}
-}
-
 func (this *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
 	child := NewScheme(this.Resource, name)
 	child.parentScheme = this
@@ -657,6 +450,10 @@ func (this *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
 		this.Children = map[string]*Scheme{}
 	}
 
+	if !c.ResetScopes {
+		child.Scopes.InheritsFrom(this.Scopes)
+	}
+
 	if !c.ResetDefaultFilters {
 		child.DefaultFilters.InheritsFrom(this.DefaultFilters)
 	}
@@ -664,6 +461,24 @@ func (this *Scheme) AddChild(name string, cfg ...*SchemeConfig) *Scheme {
 	if !c.ResetFilters {
 		child.Filters.InheritsFrom(this.Filters)
 	}
+
+	if !c.ResetSearchCountHandlers {
+		child.SearchCountHandlers.InheritsFrom(this.SearchCountHandlers)
+	}
+
+	if !c.ResetSearchFindHandlers {
+		child.SearchFindHandlers.InheritsFrom(this.SearchFindHandlers)
+	}
+
+	if !c.ResetSearchPrepareHandlers {
+		child.PrepareSearchHandlers.InheritsFrom(this.PrepareSearchHandlers)
+	}
+
+	if !c.ResetCountAggregationsHandlers {
+		child.CountAggregationsHandlers.InheritsFrom(this.CountAggregationsHandlers)
+	}
+
+	child.sortableAttrs.Parent = &this.sortableAttrs
 
 	if c.Setup != nil {
 		c.Setup(child)
@@ -701,6 +516,24 @@ func (this *Scheme) GetItemMenus() (menus []*Menu) {
 		return
 	}
 	return this.itemMenus
+}
+
+func (this *Scheme) GetItemMenusOf(ctx *Context, item interface{}) (menus []*Menu) {
+	var all []*Menu
+	if this.itemMenus == nil {
+		if this.Resource.itemMenus != nil {
+			all = this.Resource.itemMenus
+		}
+	}
+	if all == nil {
+		all = this.itemMenus
+	}
+	for _, m := range all {
+		if m.ItemEnabled(ctx, item) {
+			menus = append(menus, m)
+		}
+	}
+	return
 }
 
 // AddItemMenu add a menu to admin sidebar
@@ -765,4 +598,8 @@ func (this *Scheme) GetMenu(name string) *Menu {
 type SchemeEvent struct {
 	edis.EventInterface
 	Scheme *Scheme
+}
+
+func (this *Scheme) ApiHandler(ext string, f func(ctx *Context)) {
+	this.ApiHandlers[ext] = f
 }

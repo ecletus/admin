@@ -10,7 +10,7 @@ import (
 // Execute execute template with layout
 func (this *Context) Execute(name string, result interface{}) {
 	if name == "" {
-		name = this.Type.S()
+		name = this.Type.Clear(PRINT).S()
 	}
 
 	if this.Action == "" {
@@ -32,6 +32,7 @@ func (this *Context) Execute(name string, result interface{}) {
 	}
 
 	this.Result = result
+
 	this.TemplateName = name
 
 	var buf bytes.Buffer
@@ -53,10 +54,6 @@ func (this *Context) RawValueOf(value interface{}, meta *Meta) interface{} {
 }
 
 // FormattedValueOf return formatted value of a meta for current resource
-func (this *Context) FormattedValueOf(value interface{}, meta *Meta) interface{} {
-	result := this.valueOf(meta.GetFormattedValuer(), value, meta)
-	if result == nil {
-		return ""
-	}
-	return result
+func (this *Context) FormattedValueOf(record interface{}, meta *Meta) interface{} {
+	return meta.FormattedValue(this.Context, record)
 }

@@ -2,6 +2,7 @@ package admin
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
@@ -21,20 +22,25 @@ func (this *SelectOneBoolConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	}
 	m.Type = "select_one_bool"
 	this.meta = m
+
+	var label = func(v bool, ctx *core.Context, record interface{}) string {
+		if v {
+			return this.TruthLabel(ContextFromContext(ctx), record)
+		}
+		return this.FalsyLabel(ContextFromContext(ctx), record)
+	}
+
 	if m.Typ.Kind() == reflect.Ptr {
-		m.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) interface{} {
+		m.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) *FormattedValue {
 			value := m.Value(ctx, recorde)
 			if value == nil {
-				return ""
+				return (&FormattedValue{Record: recorde}).SetZero()
 			}
 			b := value.(*bool)
 			if b == nil {
 				return nil
 			}
-			if *b {
-				return this.TruthLabel(ContextFromContext(ctx), recorde)
-			}
-			return this.FalsyLabel(ContextFromContext(ctx), recorde)
+			return (&FormattedValue{Record: recorde, Raw: value, Value: label(*b, ctx, recorde)}).SetNonZero()
 		})
 	} else {
 		m.NewValuer(func(meta *Meta, old MetaValuer, recorde interface{}, ctx *core.Context) interface{} {
@@ -54,15 +60,12 @@ func (this *SelectOneBoolConfig) ConfigureQorMeta(metaor resource.Metaor) {
 			metaValue.NoBlank = true
 			return nil
 		})
-		m.SetFormattedValuer(func(recorde interface{}, ctx *core.Context) interface{} {
-			value := m.Value(ctx, recorde)
-			if m.IsZero(recorde, value) {
+		m.SetFormattedValuer(func(record interface{}, ctx *core.Context) *FormattedValue {
+			value := m.Value(ctx, record)
+			if !value.(bool) {
 				return nil
 			}
-			if value.(bool) {
-				return this.TruthLabel(ContextFromContext(ctx), recorde)
-			}
-			return this.FalsyLabel(ContextFromContext(ctx), recorde)
+			return (&FormattedValue{Record: record, Raw: value, Value: label(value.(bool), ctx, record)}).SetNonZero()
 		})
 	}
 }
@@ -74,7 +77,10 @@ func (this *SelectOneBoolConfig) TruthLabel(ctx *Context, record interface{}) st
 	if this.Truth == "" {
 		return ctx.Ts(I18NGROUP+".form.bool.true", "Yes")
 	}
-	return ctx.Ts(this.Truth, "Yes")
+	if strings.ContainsRune(this.Truth, ':') {
+		return ctx.Ts(this.Truth, "Yes")
+	}
+	return this.Truth
 }
 
 func (this *SelectOneBoolConfig) FalsyLabel(ctx *Context, record interface{}) string {
@@ -84,7 +90,10 @@ func (this *SelectOneBoolConfig) FalsyLabel(ctx *Context, record interface{}) st
 	if this.Falsy == "" {
 		return ctx.Ts(I18NGROUP+".form.bool.false", "No")
 	}
-	return ctx.Ts(this.Falsy, "Yes")
+	if strings.ContainsRune(this.Falsy, ':') {
+		return ctx.Ts(this.Falsy, "No")
+	}
+	return this.Falsy
 }
 
 func init() {
@@ -93,6 +102,11 @@ func init() {
 			if meta.IsRequired() || meta.Typ.Kind() == reflect.Ptr {
 				cfg := &SelectOneBoolConfig{}
 				meta.Config = cfg
+
+				if values := meta.Tags.GetTags("BOOL"); values != nil {
+					cfg.Truth, cfg.Falsy = values.Get("T"), values.Get("F")
+				}
+
 				cfg.ConfigureQorMeta(meta)
 			} else {
 				meta.Type = "switch"

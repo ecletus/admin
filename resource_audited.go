@@ -5,15 +5,21 @@ import (
 )
 
 func (this *Resource) configureAudited() {
-	if _, ok := this.Value.(aorm.Auditor); ok {
-		for _, fname := range aorm.AuditedFields {
-			this.Meta(&Meta{Name: fname, Label: "aorm.audited.fields." + fname, DefaultInvisible: true})
+	for _, name := range append(aorm.AuditedFields, "CreatedBy", "UpdatedBy") {
+		if _, ok := this.ModelStruct.FieldsByName[name]; ok {
+			this.Meta(&Meta{Name: name, Label: "aorm.audited.fields." + name, DefaultInvisible: true})
 		}
 	}
 
-	if this.softDelete {
-		for _, fname := range aorm.SoftDeleteFields {
-			this.Meta(&Meta{Name: fname, Label: "aorm.soft_delete.fields." + fname, DefaultInvisible: true})
+	for _, name := range append(aorm.SoftDeleteFields, "DeletedBy") {
+		if _, ok := this.ModelStruct.FieldsByName[name]; ok {
+			this.Meta(&Meta{Name: name, Label: "aorm.audited.fields." + name, DefaultInvisible: true})
+		}
+	}
+
+	for _, name := range append(aorm.SoftDeletionDisableFields, "DeletionDisabledBy") {
+		if _, ok := this.ModelStruct.FieldsByName[name]; ok {
+			this.Meta(&Meta{Name: name, Label: "aorm.audited.fields." + name, DefaultInvisible: true})
 		}
 	}
 }

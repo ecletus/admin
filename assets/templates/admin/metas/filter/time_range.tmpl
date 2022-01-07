@@ -1,0 +1,19 @@
+<div class="qor-field qor-field__range qor-field__time_range clearfix" type="filter-date">
+  {{if .Label}}<label class="qor-field__label">{{.Label}}</label>{{end}}
+
+  {{ $start := .Context.Request.URL.Query.Get (print .InputNamePrefix ".Start") }}
+  {{ $end := .Context.Request.URL.Query.Get (print .InputNamePrefix ".End") }}
+  {{ $format := .Filter.Config.FormatC .Context.Context }}
+  <div class="qor-field__range-content">
+    <div class="qor-field__edit qor-field__range-from">
+      <div class="mdl-textfield mdl-js-textfield">
+        <input class="mdl-textfield__input" type="time-local" name="{{.InputNamePrefix}}.Start" value="{{$start}}" style="width: 80px">
+      </div>
+    </div>
+    <div class="qor-field__edit qor-field__range-to">
+      <div class="mdl-textfield mdl-js-textfield">
+        <input class="mdl-textfield__input" type="time-local" {{if $start}}min="{{$start}}"{{end}} name="{{.InputNamePrefix}}.End" value="{{$end}}" style="width: 80px">
+      </div>
+    </div>
+  </div>
+</div>

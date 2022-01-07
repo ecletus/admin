@@ -4,21 +4,25 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ecletus/core/resource"
 	"github.com/moisespsena-go/aorm"
 )
 
-type SearchHandler = func(searcher *Searcher, db *aorm.DB, keyword string) (_ *aorm.DB, err error)
+type SearchTermHandler = func(searcher *Searcher, db *aorm.DB, keyword string) (_ *aorm.DB, err error)
 
 // Searcher is used to search results
 type Searcher struct {
 	*Context
 	scopes        []*Scope
 	filters       map[*Filter]*FilterArgument
+	Filters       map[uintptr]*FilterArgument
 	Pagination    Pagination
+	Aggregations  CountAggregationScopes
 	CurrentScopes ImmutableScopes
 	Finder        *Finder
 	Orders        []interface{}
 	one           bool
+	Keyword       string
 }
 
 func (this Searcher) clone() *Searcher {
@@ -42,6 +46,13 @@ func (this *Searcher) ParseContext(finder ...*Finder) (err error) {
 	this.Context.Context = this.Context.Context.Clone()
 	ctx := this.Context.Context
 
+	var callNamedSearcherHandlers = func(registrators NamedSearcherHandlersRegistrator) {
+		oldContext := this.Context.Context
+		this.Context.Context = ctx
+		CallNamedSearcherHandlers(this, registrators)
+		this.Context.Context = oldContext
+	}
+
 	for _, this.Finder = range finder {
 	}
 	if this.Finder == nil {
@@ -56,14 +67,16 @@ func (this *Searcher) ParseContext(finder ...*Finder) (err error) {
 		this.Orders = this.Scheme.CurrentOrders()
 	}
 
-	if ctx, err = this.Scheme.ApplyDefaultFilters(ctx); err != nil {
+	callNamedSearcherHandlers(this.Scheme.PrepareSearchHandlers)
+
+	if ctx, err = this.Scheme.ApplyDefaultFilters(this.Context); err != nil {
 		return
 	}
 
-	if ctx != nil && ctx.ResourceID == nil && ctx.Request != nil {
+	if !this.Finder.RequestParserDisabled && ctx != nil && ctx.ResourceID == nil && ctx.Request != nil {
 		var query = ctx.Request.URL.Query()
 		// parse scopes
-		if scopes, ok := query["scopes[]"]; ok {
+		if scopes, ok := query["scope[]"]; ok {
 			this.Scope(scopes...)
 		}
 		this.FilterFromParams(query, ctx.Request.MultipartForm)
@@ -110,15 +123,34 @@ func (this *Searcher) ParseContext(finder ...*Finder) (err error) {
 	if this.Resource.IsSingleton() || ctx.ResourceID != nil || this.one {
 		db = db.Limit(1)
 	} else {
-		if db, err = this.callScopes(db, ctx); err != nil {
+		if db, err = this.callFilters(db, ctx); err != nil {
 			return
 		}
 
 		// call search
-		if keyword := ctx.GetFormOrQuery("keyword"); keyword != "" {
-			if sh := this.Scheme.CurrentSearchHandler(); sh != nil {
-				if db, err = sh(this, db, keyword); err != nil {
+		if !this.Finder.RequestParserDisabled {
+			if keyword := ctx.GetFormOrQuery("id"); keyword != "" {
+				var ID aorm.ID
+				if ID, err = this.Resource.ParseID(keyword); err != nil {
 					return
+				}
+				db = db.Where(ID)
+			} else if keyword := ctx.GetFormOrQuery("keyword"); keyword != "" {
+				this.Keyword = keyword
+				var ok bool
+				if keyword[0] == '#' {
+					var ID aorm.ID
+					if ID, err = this.Resource.ParseID(keyword[1:]); err == nil {
+						db = db.Where(ID)
+						ok = true
+					}
+				}
+				if !ok {
+					if sh := this.Scheme.CurrentSearchHandler(); sh != nil {
+						if db, err = sh(this, db, keyword); err != nil {
+							return
+						}
+					}
 				}
 			}
 		}
@@ -127,9 +159,29 @@ func (this *Searcher) ParseContext(finder ...*Finder) (err error) {
 			// pagination
 			this.Pagination.UnlimitedEnabled = this.Resource.Config.UnlimitedPageCount
 			ctx.SetRawDB(db.Model(this.Resource.Value))
+			this.Aggregations = CountAggregationScopes{}
+			callNamedSearcherHandlers(this.Scheme.SearchCountHandlers)
+			callNamedSearcherHandlers(this.Scheme.CountAggregationsHandlers)
 
 			if this.Finder.Count == nil {
-				if err = this.Resource.CrudScheme(ctx, this.Scheme).Count(&this.Pagination.Total); err != nil {
+				countAggregations := aorm.NewRecordCountResult(&this.Pagination.Total, aorm.CountAggregations{})
+				for i, agg := range this.Aggregations {
+					for j, aggr := range *agg {
+						if aggr.Record == nil {
+							aggr.Record = aggr.Resource.New()
+						}
+						instance := aorm.InstanceOf(aggr.Record)
+						for k, agg := range aggr.Aggregations {
+							countAggregations.Aggregations[[3]interface{}{i, j, k}] = &aorm.AggregationClause{
+								agg.Query,
+								agg.QueryFunc,
+								aorm.NewFieldScanner(instance.FieldsMap[agg.FieldName]),
+								agg.Embed,
+							}
+						}
+					}
+				}
+				if err = this.Resource.CrudScheme(ctx, this.Scheme).Count(countAggregations); err != nil {
 					return
 				}
 			} else {
@@ -200,15 +252,21 @@ func (this *Searcher) ParseContext(finder ...*Finder) (err error) {
 			}
 		}
 
-		// add order by
-		if orderBy := ctx.GetFormOrQuery("order_by"); orderBy != "" {
-			if match := reOrderBy.FindAllStringSubmatch(orderBy, -1); len(match) > 0 {
-				fieldPath, order := match[0][1], match[0][4]
-				if fpq := this.Context.Resource.ModelStruct.FieldPathQueryOf(fieldPath); fpq != nil {
-					if order == "desc" {
-						fpq.Sufix(" DESC")
+		if !this.Finder.RequestParserDisabled {
+			// add order by
+			if orderBy := ctx.GetFormOrQuery("order_by"); orderBy != "" {
+				if match := reOrderBy.FindAllStringSubmatch(orderBy, -1); len(match) > 0 {
+					fieldPath, order := match[0][1], match[0][4]
+					if fpq := this.Context.Resource.ModelStruct.FieldPathQueryOf(fieldPath); fpq != nil {
+						if order == "desc" {
+							fpq.Sufix(" DESC")
+						}
+						this.Orders = []interface{}{fpq}
+					} else if m := this.Context.Resource.GetDefinedMeta(fieldPath); m != nil {
+						if this.Scheme.IsSortableMeta(m.Name) {
+							this.Orders = []interface{}{m.Sort(this, aorm.ToOrder(order != "desc"))}
+						}
 					}
-					this.Orders = []interface{}{fpq}
 				}
 			}
 		}
@@ -219,23 +277,33 @@ func (this *Searcher) ParseContext(finder ...*Finder) (err error) {
 	}
 
 	ctx.SetRawDB(db)
-	this.Scheme.PrepareContext(ctx)
+	callNamedSearcherHandlers(this.Scheme.SearchFindHandlers)
 
 	if this.Finder.FindMany == nil {
-		this.Finder.FindMany = func(s *Searcher) (interface{}, error) {
-			return s.Resource.CrudScheme(s.Context.Context, s.Scheme).FindManyLayoutOrDefault(s.Layout)
-		}
+		this.Finder.FindMany = DefaultFindMany
 	}
 
 	if this.Finder.FindOne == nil {
-		this.Finder.FindOne = func(s *Searcher) (interface{}, error) {
-			result := s.Resource.NewStruct(s.Site)
-			if err := s.Resource.CrudScheme(s.Context.Context, s.Scheme).SetLayoutOrDefault(s.Layout).FindOne(result); err != nil {
-				return nil, err
-			}
-			return result, nil
-		}
+		this.Finder.FindOne = DefaultFindOne
 	}
 
 	return
 }
+
+var (
+	DefaulSearchCrudFactory = func(s *Searcher) *resource.CRUD {
+		crud := s.Resource.CrudScheme(s.Context.Context, s.Scheme)
+		crud.SetDB(crud.DB().Opt(aorm.OptPreloadTagNames(strings.ToUpper(s.Type.String()))))
+		return crud
+	}
+	DefaultFindMany = func(s *Searcher) (interface{}, error) {
+		return DefaulSearchCrudFactory(s).FindManyLayoutOrDefault(s.Layout)
+	}
+	DefaultFindOne = func(s *Searcher) (interface{}, error) {
+		result := s.Resource.NewStruct(s.Site)
+		if err := DefaulSearchCrudFactory(s).SetLayoutOrDefault(s.Layout).FindOne(result); err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+)

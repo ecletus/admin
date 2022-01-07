@@ -14,7 +14,7 @@ type SearchController struct{}
 
 func (SearchController) Search(context *Context) (result interface{}) {
 	var err error
-	if result, err = context.FindMany(); err != nil {
+	if result, err = context.ParseFindMany(); err != nil {
 		context.AddError(err)
 	}
 	return
@@ -26,7 +26,7 @@ type IndexController struct{}
 func (IndexController) Index(context *Context) (result interface{}) {
 	if context.ValidateLayout() {
 		var err error
-		result, err = context.FindMany()
+		result, err = context.ParseFindMany()
 		context.AddError(err)
 	}
 	return
@@ -46,9 +46,9 @@ func (CreateController) New(context *Context) interface{} {
 }
 
 func (CreateController) Create(context *Context, recorde interface{}) {
-	context.WithTransaction(func() {
-		context.AddError(context.Crud().Create(recorde))
-	})
+	context.AddError(context.WithTransaction(func() error {
+		return context.Crud().Create(recorde)
+	}))
 }
 
 // Read
@@ -60,8 +60,10 @@ func ReadControllerRead(context *Context) (recorde interface{}) {
 	if res.Config.Singleton && !res.HasKey() {
 		recorde = res.NewStruct(context.Site)
 		var ctx *core.Context
-		if ctx, err = res.ApplyDefaultFilters(context.Context); err == nil {
-			err = context.Crud(ctx).FindOne(recorde)
+		if ctx, err = res.ApplyDefaultFilters(context); err == nil {
+			ctx.WithDB(func(ctx *core.Context) {
+				err = context.Crud(ctx).FindOne(recorde)
+			}, ctx.DB().Opt(aorm.OptPreloadTagNames(context.Type.String())))
 		}
 	} else {
 		if context.Type.Has(DELETED) {
@@ -96,16 +98,16 @@ func ReadControllerRead(context *Context) (recorde interface{}) {
 }
 
 type ReadController struct {
-	Recorde     interface{}
-	RecordeFunc func(context *Context) interface{}
+	Record     interface{}
+	RecordFunc func(context *Context) interface{}
 }
 
 func (this ReadController) Read(context *Context) (recorde interface{}) {
-	if this.RecordeFunc != nil {
-		return this.RecordeFunc(context)
+	if this.RecordFunc != nil {
+		return this.RecordFunc(context)
 	}
-	if this.Recorde != nil {
-		return this.Recorde
+	if this.Record != nil {
+		return this.Record
 	}
 	return ReadControllerRead(context)
 }
@@ -114,10 +116,13 @@ func (this ReadController) Read(context *Context) (recorde interface{}) {
 
 type UpdateController struct{}
 
-func (UpdateController) Update(context *Context, recorde interface{}, old ...interface{}) {
-	context.WithTransaction(func() {
-		context.AddError(context.Crud().Update(recorde, old...))
-	})
+func (UpdateController) Update(ctx *Context, recorde interface{}, old ...interface{}) {
+	ctx.AddError(ctx.WithTransaction(func() (err error) {
+		if err = ctx.Crud().Update(recorde, old...); err != nil || ctx.HasError() || ctx.DecoderExcludes == nil {
+			return
+		}
+		return
+	}))
 }
 
 // Delete
@@ -126,13 +131,13 @@ type DeleteController struct {
 }
 
 func (DeleteController) Delete(context *Context, recorde interface{}) {
-	context.WithTransaction(func() {
-		if ctx, err := context.Resource.ApplyDefaultFilters(context.Context); err != nil {
-			context.AddError(err)
+	context.AddError(context.WithTransaction(func() error {
+		if ctx, err := context.Resource.ApplyDefaultFilters(context); err != nil {
+			return err
 		} else {
-			context.AddError(context.Crud(ctx).Delete(recorde))
+			return context.Crud(ctx).Delete(recorde)
 		}
-	})
+	}))
 }
 
 type DeleteBulkController struct {
@@ -140,21 +145,28 @@ type DeleteBulkController struct {
 }
 
 func (DeleteBulkController) DeleteBulk(context *Context, recorde ...interface{}) {
-	context.WithTransaction(func() {
-		ctx, err := context.Resource.ApplyDefaultFilters(context.Context)
+	context.AddError(context.WithTransaction(func() error {
+		ctx, err := context.Resource.ApplyDefaultFilters(context)
 		if err != nil {
-			context.AddError(err)
-			return
+			return err
 		}
+		var qnt uint32
 		for _, recorde := range recorde {
+			if recorde == nil {
+				continue
+			}
 			ctx := ctx.Clone()
 			ctx.ResourceID = context.Resource.GetKey(recorde)
-			context.AddError(context.Crud(ctx).Delete(recorde))
-			if context.HasError() {
+			if err = context.Crud(ctx).Delete(recorde); err != nil {
 				break
 			}
+			qnt++
 		}
-	})
+		if qnt == 0 {
+			return aorm.ErrRecordNotFound
+		}
+		return err
+	}))
 }
 
 type RestoreController struct {
@@ -168,7 +180,7 @@ func (RestoreController) DeletedIndex(context *Context) (result interface{}) {
 	if context.ValidateLayout() {
 		context.WithDB(func(context *Context) {
 			var err error
-			result, err = context.FindMany()
+			result, err = context.ParseFindMany()
 			context.AddError(err)
 		})
 	}
@@ -176,9 +188,9 @@ func (RestoreController) DeletedIndex(context *Context) (result interface{}) {
 }
 
 func (RestoreController) Restore(context *Context, key ...aorm.ID) {
-	context.WithTransaction(func() {
-		context.Resource.Restore(context, key...)
-	})
+	context.AddError(context.WithTransaction(func() error {
+		return context.Resource.Restore(context, key...)
+	}))
 }
 
 type IndexReadController struct {

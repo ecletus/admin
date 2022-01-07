@@ -1,0 +1,21 @@
+{{$aggs := .Aggregations.Get "bottom" }}
+{{ if .Result }}
+  <div class="qor-aggregations qor-table-container" style="margin: 24px">
+      {{$ctx := .}}
+
+      {{range $agg := $aggs}}
+          {{ $ctx := (.Context.CreateChild .Resource .Record) }}
+          {{range (convert_sections_to_metas .Resource (show_sections_ctx $ctx))}}
+              {{wrap -}}
+                {{render_meta_ctx $ctx $agg.Record . -}}
+              {{begin}}
+              <span class="mdl-chip mdl-chip--contact">
+                <span style="width: auto;font-size: 14px; padding-left: 5px; padding-right: 5px;" class="mdl-chip__contact mdl-color--teal mdl-color-text--white">{{meta_label .}}</span>
+                <span class="mdl-chip__text">
+               {{after}}
+                </span></span>
+               {{end}}
+          {{end}}
+      {{end}}
+  </div>
+{{ end }}

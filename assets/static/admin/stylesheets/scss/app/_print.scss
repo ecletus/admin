@@ -1,3 +1,5 @@
+@page { size: auto; }
+
 a {
     font-weight: normal;
     &[href]::after {
@@ -13,14 +15,30 @@ a {
     margin-top: 5px;
 }
 
-header.mdl-layout__header,
+header.mdl-layout__header {
+    min-height: initial;
+    &> *:not(.qor-breadcrumbs) {
+        display: none;
+    }
+}
+
 .qor-layout__sidebar,
 .mdl-layout__drawer,
-.qor-actions,
 .qor-action-bulk-edit,
 a.qor-button--edit{
     display: none;
 }
+
+.qor-actions {
+    &> div > *:not(.qor-chips) {
+        display: none;
+    }
+    .mdl-chip {
+        border: 1px solid #666666;
+    }
+}
+
+
 .qor-page__header + .qor-page__body {
     padding-top: 5px;
 }
@@ -46,14 +64,19 @@ a.qor-button--edit{
 
     a {
         font-size: 13px;
-        color: black  !important;;
+        color: black  !important;
 
         ::before {
+            color: black  !important;
+        }
+
+        &:not(:nth-child(2))::before {
             color: black  !important;
         }
     }
 
 }
+
 .qor-page__header {
     position: initial;
     top: 0;
@@ -66,18 +89,28 @@ a.qor-button--edit{
         margin: 0;
     }
 }
+
+.qor-table.is-sortable > thead > tr > th {
+    &.is-not-sorted[data-order-by]::after,
+    .qor-meta-help__icon {
+        display: none;
+    }
+}
+
+
 .qor-page__body {
     a.qor-button--new,
     a.qor-button--edit {
         display: none
     }
 }
+
 .qor-table-container {
     .qor-table.is-sortable > thead > tr > th[data-order-by] {
         text-decoration: none;
     }
     .mdl-data-table {
-        font-size: 13px !important;
+        font-size: 12px !important;
 
         th {
             padding: 0 5px 5px 5px !important;
@@ -85,14 +118,16 @@ a.qor-button--edit{
             height: auto;
             font-size: 13px;
             text-align: center;
+            position: relative;
+            top: 0;
         }
         td {
             position: relative;
             height: auto;
             border: 1px solid rgba(0, 0, 0, .5);
-            padding: 12px 18px;
+            padding: 0 5px;
             box-sizing: border-box;
-            font-size: 13px;
+            font-size: 12px;
         }
 
         th.qor-table__actions, td.qor-table__actions {
@@ -104,29 +139,13 @@ a.qor-button--edit{
 .qor-form-container {
     margin: 0 5px;
     font-size: 12px;
-    column-count: 2;
 
-    > .qor-form-section {
-        margin-bottom: 5px;
+    a {
+        text-decoration: none !important;
     }
 
     .qor-form-section:last-child {
         margin-bottom: 0;
-    }
-
-    .single-edit,.collection-edit {
-        border: 1px solid rgba(0, 0, 0, .5);
-
-        > label {
-            padding: 0 5px;
-            border-bottom: 1px solid rgba(0, 0, 0, .5);
-        }
-    }
-
-    .collection-edit {
-        > .qor-field__block > fieldset:not(:last-child) {
-            border-bottom: 1px solid rgba(0, 0, 0, .5);
-        }
     }
 
     .qor-field__block {
@@ -142,9 +161,7 @@ a.qor-button--edit{
     }
 
     .qor-fieldset {
-        padding: 5px;
-        margin: 0;
-        border: 0;
+        padding: 8px;
     }
 
     .qor-field__label {
@@ -222,9 +239,18 @@ footer, video, audio, object, embed {
     display:none;
 }
 
-@page {
-    size: A4;
-    margin: 0.5cm;
+.qor-pagination-container {
+    .qor-pagination-item:not(.active) {
+        display: none;
+    }
+}
+
+.qor-page__footer {
+    padding: 0;
+}
+
+.qor-table thead {
+    position: initial !important;
 }
 
 * {

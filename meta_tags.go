@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"html/template"
 	"reflect"
 
 	tag_scanner "github.com/unapu-go/tag-scanner"
@@ -8,7 +9,7 @@ import (
 	"github.com/moisespsena-go/aorm"
 )
 
-type Tags = aorm.TagSetting
+type Tags = tag_scanner.Map
 
 type MetaTags struct {
 	Tags
@@ -21,11 +22,22 @@ func (this MetaTags) DefaultInvisible() bool {
 func (this MetaTags) Hidden() bool {
 	return this.Flag("-")
 }
+func (this MetaTags) Visible() bool {
+	return this.Flag("VISIBLE")
+}
 func (this MetaTags) Readonly() bool {
 	return this.Flag("RO")
 }
-func (this MetaTags) Managed() bool {
-	return this.Flag("MANAGED")
+func (this MetaTags) ReadonlyStringer() bool {
+	return this.Flag("RO_STR")
+}
+func (this MetaTags) Managed() (modes []string) {
+	if this.Flag("MANAGED") {
+		return []string{}
+	} else if m := this.GetTags("MANAGED", tag_scanner.FlagForceTags); m != nil {
+		return m.Flags()
+	}
+	return
 }
 func (this MetaTags) Required() bool {
 	return this.Flag("REQUIRED")
@@ -49,7 +61,7 @@ func (this MetaTags) Type() string {
 func (this MetaTags) TypeOptions() (opt aorm.TagSetting) {
 	if this.typeOptions == nil {
 		if v, ok := this.Tags["TYPE_OPT"]; ok {
-			opt.ParseString(v)
+			opt.ParseStringDefault(v)
 			this.typeOptions = opt
 		}
 	}
@@ -58,7 +70,7 @@ func (this MetaTags) TypeOptions() (opt aorm.TagSetting) {
 func (this MetaTags) Section() (sec *struct{ Title, Help, ReadOnlyHelp string }) {
 	if v, ok := this.Tags["SECTION"]; ok {
 		var opt aorm.TagSetting
-		opt.ParseString(v)
+		opt.ParseStringDefault(v)
 		if len(opt) > 0 {
 			sec = &struct{ Title, Help, ReadOnlyHelp string }{
 				opt["TITLE"],
@@ -84,6 +96,9 @@ func (this MetaTags) Filter() bool {
 func (this MetaTags) LockedField() string {
 	return this.Tags.Get("LOCKED_FIELD")
 }
+func (this MetaTags) Severity() string {
+	return this.Tags.Get("SEVERITY")
+}
 func (this MetaTags) SelectOne() (cfg *SelectOneConfig, resID string, advanced bool, opts SelectConfigOption) {
 	if value := this.Tags["SELECT_ONE"]; value != "" {
 		cfg = &SelectOneConfig{}
@@ -105,8 +120,32 @@ func (this MetaTags) SelectOne() (cfg *SelectOneConfig, resID string, advanced b
 				if tgs.Flag("BS") {
 					opts |= SelectConfigOptionBottonSheet
 				}
+				if scopes := tgs.GetTags("SCOPES", tag_scanner.FlagPreserveKeys); scopes != nil {
+					if cfg.RemoteDataResource == nil {
+						cfg.RemoteDataResource = &DataResource{}
+					}
+					cfg.RemoteDataResource.Scopes = scopes.Flags()
+				}
+				if filters := tgs.GetTags("FILTERS", tag_scanner.FlagPreserveKeys); filters != nil {
+					if cfg.RemoteDataResource == nil {
+						cfg.RemoteDataResource = &DataResource{}
+					}
+					cfg.RemoteDataResource.Filters = filters
+				}
+				if scheme := tgs.GetString("SCHEME"); scheme != "" {
+					if cfg.RemoteDataResource == nil {
+						cfg.RemoteDataResource = &DataResource{}
+					}
+					cfg.RemoteDataResource.Scheme = scheme
+				}
 			}
+			cfg.PrimaryField = tgs["PK_FIELD"]
 			cfg.DisplayField = tgs["DISPLAY"]
+			if blankValue := tgs.GetString("BLANK_VAL"); blankValue != "" {
+				cfg.BlankFormattedValuer = func(ctx *Context, record interface{}) template.HTML {
+					return template.HTML(tgs.GetString("BLANK_VAL"))
+				}
+			}
 		} else {
 			cfg.Collection = tag_scanner.KeyValuePairs(this.Scanner(), value)
 		}
@@ -160,8 +199,23 @@ func (this MetaTags) UI() Tags {
 	return tags
 }
 
+func (this MetaTags) Edit() (tags *MetaTagsEdit) {
+	if t := this.GetTags("EDIT"); t != nil {
+		tags = &MetaTagsEdit{t}
+	}
+	return
+}
+
+type MetaTagsEdit struct {
+	Tags
+}
+
+func (this MetaTagsEdit) ReadOnly() bool {
+	return this.Flag("RO")
+}
+
 func ParseMetaTags(tag reflect.StructTag) (tags MetaTags) {
-	tags.ParseCallback(aorm.StructTag(tag), []string{"admin"}, func(dest map[string]string, n tag_scanner.Node) {
+	tags.ParseCallbackDefault(aorm.StructTag(tag), []string{"admin"}, func(dest Tags, n tag_scanner.Node) {
 		if n.Type() == tag_scanner.KeyValue {
 			kv := n.(tag_scanner.NodeKeyValue)
 			switch kv.Key {

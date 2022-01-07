@@ -1,42 +1,47 @@
 {{$filters := (.Scheme.GetVisibleFilters (admin_context) true)}}
-{{if $filters}}
+{{$scopes := get_scopes true}}
+{{if or $filters $scopes}}
     <div class="qor-advanced-filter" data-toggle="qor.advancedsearch">
-    <button class="mdl-button mdl-button--colored qor-advanced-filter__toggle" type="button">
-        <!-- {{if has_filter}}
-        <span class="qor-notifications__unread"><i class="material-icons" style="font-size: 1.05em">edit</i></span>
-    {{end}} -->
-    <i class="material-icons">filter_list</i>
-    </button>
+        {{$count := (.Searcher.CountFilters true) + (.Searcher.CountScopes true)}}
+    <span class="mdl-button mdl-button--icon mdl-button--colored qor-advanced-filter__toggle" style="overflow: inherit">
+    <i class="material-icons{{if $count}} mdl-badge" data-badge="{{$count}}{{end}}">filter_list</i>
+    </span>
 
     <div class="qor-advanced-filter__dropdown clearfix" style="display: none;" advanced-search-toggle>
         <button class="mdl-button mdl-button--icon qor-advanced-filter__close">
             <i class="material-icons">close</i>
         </button>
         <h3 class="mdl-layout-title">{{t "github_com:ecletus:admin.filter.advanced_filter"}}</h3>
-    <!-- {{if len saved_filters}}
-        <div class="qor-advanced-filter__savedfilter">
-            <button class="mdl-button qor-advanced-filter__toggle">{{t "github_com:ecletus:admin.filter.saved_filters"}}</button>
-            <ul style="display:none;" advanced-search-toggle>
-            {{range $filter := saved_filters}}
-                <li>
-                    <a href="{{$filter.URL}}">{{$filter.Name}}</a>
-                    <button class="mdl-button mdl-button--icon qor-advanced-filter__delete" style="display: none;" data-filter-name="{{$filter.Name}}">
-                        <i class="material-icons">close</i>
-                    </button>
-                </li>
-            {{end}}
-            </ul>
-        </div>
-    {{end}} -->
-
         <form method="GET">
-        {{range $filter := $filters}}
-          {{render_filter $filter}}
-        {{end}}
+            {{$resource := .Resource}}
+            {{if $scopes}}
+                <advanced-filter-group type="filter-selectone" class="clearfix">
+                    {{range $scope := $scopes}}
+                        {{if $scope.Group}}
+                            <select class="qor-action--select" data-toggle="qor.selector" data-clearable="true" name="scope[]" placeholder="{{$scope.Label}}">
+                                <option value=""></option>
+                                {{range $s := $scope.Scopes}}
+                                    <option value="{{$s.Name}}" {{if $s.Active}}selected{{end}}>{{$s.Label}}</option>
+                                {{end}}
+                            </select>
+                        {{else}}
+                            {{range $s := $scope.Scopes}}
+                                <a class="qor-action--label {{if $s.Active}}is-active{{end}}" href="{{patch_current_url "~scope[]" $s.Name}}">{{$s.Label}} {{if $s.Active}}<i class="material-icons">clear</i>{{end}}</a>
+                            {{end}}
+                        {{end}}
+                    {{end}}
+                </advanced-filter-group>
+            {{end}}
+            {{range $filter := $filters}}
+              {{render_filter $filter}}
+            {{end}}
+            {{range .Searcher.GetFilters false -}}
+                {{range .QueryValues -}}
+                <input type="hidden" name="{{.Name}}" value="{{.Value}}">
+                {{- end}}
+            {{- end}}
+            {{range .Searcher.GetScopes false}}<input type="hidden" name="scope[]" value="{{.}}">{{end}}
             <button type="submit" class="mdl-button mdl-button--colored mdl-button--raised">{{t "github_com:ecletus:admin.filter.apply"}}</button>
-            <!--
-            <button type="button" class="mdl-button mdl-button--colored qor-advanced-filter__save">{{t "github_com:ecletus:admin.filter.save_this_filter"}}</button>
-            -->
         </form>
     </div>
 </div>

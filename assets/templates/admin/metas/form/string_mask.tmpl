@@ -1,24 +1,26 @@
 <div class="qor-field">
-  <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
-    <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
-      {{meta_record_label .Meta .Record}}{{if  and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
-    </label>
-    {{$help := .Config.MaxSizeString}}
-    {{$help += meta_record_help .Meta .Record}}
-    {{if $help}}
-    <div class="qor-field__help">{{$help}}</div>
-    {{end}}
-
+  {{if .ReadOnly}}
+    {{if not .ModeSingle}}
+        <label class="qor-field__label" for="{{.InputId}}">
+            {{meta_record_label .Meta .Record}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+        </label>
+     {{end}}
+  <div class="qor-field__value{{if .MetaValue.Severity}} severity_{{.MetaValue.Severity}} severity--text severity--bg{{end}}">{{.Value}}</div>
+  {{else}}
     {{$js := .Meta.Config.GetJsCode .Context .Record | b64}}
-    {{if .ReadOnly}}
-      <div class="qor-field__value">{{.Value}}</div>
-    {{else}}
-      {{$validator := .Meta.UIValidator .Context.Context .Record}}
-      <div class="qor-field__show">{{.Value}}</div>
-      <div class="qor-field__edit">
-        <input class="mdl-textfield__input" {{if $validator}}data-validator="{{$validator | b64}}"{{end}} data-masker="{{$js}}" type="text" id="{{.InputId}}" name="{{.InputName}}" value="{{.Value}}" {{if not (has_update_permission .Meta)}}disabled{{end}}{{if .Meta.TemplateData}} {{index .Meta.TemplateData "attrs"}}{{end}}>
-      </div>
+    {{$validator := .Meta.UIValidator .Context.Context .Record}}
+    <div class="qor-field__edit mdl-textfield mdl-textfield--full-width mdl-js-textfield mdl-textfield--floating-label">
+      <input class="mdl-textfield__input" {{if $validator}}data-validator="{{$validator | b64}}"{{end}} data-masker="{{$js}}" type="text" id="{{.InputId}}" name="{{.InputName}}" value="{{.Value}}" {{if not (has_update_permission .Meta)}}disabled{{end}}{{if .Meta.TemplateData}} {{index .Meta.TemplateData "attrs"}}{{end}}>
 
+    {{if not .ModeSingle}}
+      <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
+        {{meta_record_label .Meta .Record}}{{if  and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+      </label>
+      {{$help := meta_record_help .Meta .Record .ReadOnly}}
+      {{if $help}}
+          <div class="qor-field__help">{{$help}}</div>
+      {{end}}
     {{end}}
-  </div>
+    </div>
+  {{end}}
 </div>

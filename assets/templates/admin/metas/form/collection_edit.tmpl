@@ -14,25 +14,19 @@
 
         <div class="qor-field__block">
         {{$meta := .Meta}}
-
-        {{range $index, $value := $current_values }}
+        {{$ctx := .Context}}
+        {{$rec := .Record}}
+        {{range $index, $item := $current_values }}
+            {{$itemContext := $ctx.CreateChild $meta.Resource $item}}
             <fieldset class="qor-fieldset">
-            {{if has_delete_permission $meta}}
-                <button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
-                    <i class="material-icons md-18">delete</i>
-                </button>
-            {{end}}
-            {{if (eq (admin_context).Action "edit")}}
-              {{render_nested_form $value $meta (edit_meta_sections $meta $value) $index}}
-            {{else}}
-              {{render_nested_form $value $meta (show_meta_sections $meta $value) $index}}
-            {{end}}
+                {{render_nested_ctx "form" $itemContext "show" $meta $index}}
             </fieldset>
         {{end}}
         </div>
     </div>
   {{end}}
 {{else}}
+    {{$appendable := and (has_create_permission .Meta) (.Meta.CanCreateItem .Context .Record)}}
 <div class="qor-field collection-edit qor-fieldset-container" {{if $metaConfig.Max}}data-max-item="{{$metaConfig.Max}}" data-max-item-hint="Up to {{$metaConfig.Max}} {{meta_record_label .Meta .Record}}"{{end}}>
   <label class="qor-field__label" for="{{.InputId}}">
     {{meta_record_label .Meta .Record}}{{if and .NotReadOnly .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
@@ -42,35 +36,48 @@
     <div class="qor-field__help">{{$help}}</div>
   {{end}}
 
-  <div class="qor-field__block">
     {{$meta := .Meta}}
-    {{if $current_values}}
-      {{range $index, $value := $current_values }}
-        <fieldset class="qor-fieldset">
-          {{if has_delete_permission $meta}}
+    {{$ctx := .Context}}
+    {{$inputName := .InputName}}
+
+    {{if $appendable}}
+      <template type="qor-collection-edit-new/html" data-next-index="{{len $current_values}}">
+          <fieldset class="qor-fieldset">
             <button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
               <i class="material-icons md-18">delete</i>
             </button>
-          {{end}}
-          {{if (eq (admin_context).Action "edit")}}
-            {{render_nested_form $value $meta (edit_meta_sections $meta $value) $index}}
+            {{$itemContext := $ctx.CreateChild $meta.Resource (new_resource_struct $meta.Resource)}}
+            {{render_nested_ctx "form" $itemContext "new" $meta -1}}
+          </fieldset>
+      </template>
+    {{end}}
+
+  <div class="qor-field__block">
+    {{$rec := .Record}}
+    {{if $current_values}}
+      {{range $index, $item := $current_values }}
+          {{$itemContext := $ctx.CreateChild $meta.Resource $item}}
+          {{if $meta.IsReadOnlyItem $ctx $rec .}}
+              {{render_nested_ctx "form" $itemContext "show" $meta $index}}
           {{else}}
-            {{render_nested_form $value $meta (show_meta_sections $meta $value) $index}}
+            <fieldset class="qor-fieldset">
+              <input type="hidden" name="{{$inputName}}.{{$index}}.id" value="{{primary_key_of $item}}" />
+              {{if and (has_delete_permission $meta) ($meta.CanDeleteItem $ctx $rec $item)}}
+                <button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
+                  <i class="material-icons md-18">delete</i>
+                </button>
+              {{end}}
+              {{if (eq (admin_context).Action "edit")}}
+                {{render_nested_ctx "form" $itemContext "edit" $meta $index}}
+              {{else}}
+                {{render_nested_ctx "form" $itemContext "show" $meta $index}}
+              {{end}}
+            </fieldset>
           {{end}}
-        </fieldset>
       {{end}}
     {{end}}
 
-    {{if has_create_permission .Meta}}
-      <script type="qor-collection-edit-new/html" data-next-index="{{len $current_values}}">
-          <fieldset class="qor-fieldset">
-            <button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
-              <i class="material-icons md-18">delete </i>
-            </button>
-            {{$value := (new_resource_struct $meta.Resource)}}
-            {{render_nested_form $value $meta (new_meta_sections $meta $value) -2}}
-          </fieldset>
-      </script>
+    {{if $appendable}}
       <button class="mdl-button mdl-button--primary qor-fieldset__add" type="button">
         {{printf (ts "^github_com:ecletus:admin.form.collection.add") (singular (meta_record_label .Meta .Record))}}
       </button>

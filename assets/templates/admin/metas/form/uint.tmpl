@@ -1,22 +1,26 @@
-<div class="qor-field">
-  <div class="mdl-textfield mdl-textfield--full-width mdl-js-textfield">
-    <label class="qor-field__label mdl-textfield__label" for="{{.InputId}}">
-      {{meta_record_label .Meta .Record}}{{if  and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
-    </label>
-    {{$help := meta_record_help .Meta .Record}}
-    {{if $help}}
-      <div class="qor-field__help">{{$help}}</div>
-    {{end}}
-
-
+<div class="qor-field" data-meta-type="{{.MetaType}}">
     {{if .ReadOnly}}
-      <div class="qor-field__value">{{.Value}}</div>
+        {{if not .ModeSingle}}
+            <label class="qor-field__label" for="{{.InputId}}">
+                {{meta_record_label .Meta .Record}}
+            </label>
+        {{end}}
+        <div class="qor-field__value{{if .MetaValue.Severity}} severity_{{.MetaValue.Severity}} severity--text severity--bg{{end}}">{{.Value}}</div>
     {{else}}
-      <div class="qor-field__show">{{.Value}}</div>
+        <div class="qor-field__edit mdl-textfield mdl-textfield--full-width mdl-js-textfield mdl-textfield--floating-label"
+             {{$style := .Meta.UITags.GetString "STYLE"}}{{if $style}}style="{{$style}}"{{end}}>
+            {{$value := raw_value_of .Record .Meta}}
+            <input {{.Meta.Config.HtmlAttributtes}} class="mdl-textfield__input" type="text" id="{{.InputId}}" name="{{.InputName}}" value="{{if $value}}{{$value}}{{end}}">
 
-      <div class="qor-field__edit">
-        <input class="mdl-textfield__input" type="number" min="0" id="{{.InputId}}" name="{{.InputName}}" value="{{.Value}}" {{if not (has_update_permission .Meta)}}disabled{{end}}>
-      </div>
+            {{if not .ModeSingle}}
+                <label class="mdl-textfield__label" for="{{.InputId}}">
+                    {{meta_record_label .Meta .Record}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+                </label>
+                {{$help := meta_record_help .Meta .Record .ReadOnly}}
+                {{if $help}}
+                    <div class="qor-field__help">{{$help}}</div>
+                {{end}}
+            {{end}}
+        </div>
     {{end}}
-  </div>
 </div>

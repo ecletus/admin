@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ecletus/core"
 	"github.com/moisespsena-go/aorm"
 )
 
@@ -34,10 +33,13 @@ func resourceParamIDName(level int, paramName string) string {
 func subResourceConfigureFilters(res *Resource) {
 	res.DefaultFilter(&DBFilter{
 		Name: "admin:parent_filter",
-		Handler: func(context *core.Context, db *aorm.DB) (DB *aorm.DB, err error) {
+		Handler: func(context *Context, db *aorm.DB) (DB *aorm.DB, err error) {
 			if context.ResourceID == nil && len(context.ParentResourceID) > 0 {
 				if parentId := context.ParentResourceID[len(context.ParentResourceID)-1]; parentId != nil {
-					return res.FilterByParent(context, db, parentId)
+					if res.Config.Sub.ParentFilter != nil {
+						return res.Config.Sub.ParentFilter(context.Context, db, parentId)
+					}
+					return res.FilterByParent(context.Context, db, parentId)
 				}
 			}
 			return db, nil
@@ -59,7 +61,7 @@ func subResourceConfigureFilters(res *Resource) {
 		}
 		res.DefaultFilter(&DBFilter{
 			Name: "admin:parent_filter:raw_fields",
-			Handler: func(context *core.Context, db *aorm.DB) (DB *aorm.DB, err error) {
+			Handler: func(context *Context, db *aorm.DB) (DB *aorm.DB, err error) {
 				return db.Where(aorm.IQ(strings.Join(rawDbFields, " AND ")), rawDbFieldsValues...), nil
 			},
 		})

@@ -15,26 +15,26 @@ func configureDefaultLayouts(res *Resource) {
 	defaultLayout := &Layout{
 		Layout: &resource.Layout{StructValue: resource.NewStructValue(res.Value)},
 		MetasFunc: func(res *Resource, context *Context, record interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName) {
-			metas = res.ConvertSectionToMetas(res.allowedSections(record, res.IndexAttrs(), context, roles...))
+			metas = res.IndexAttrs().Allowed(record, context, roles...).ToMetas()
 			return
 		}}
-	res.Layout(DEFAULT_LAYOUT, defaultLayout)
+	res.Layout(SectionLayoutDefault, defaultLayout)
 	res.Layout("index", &Layout{
 		Layout: defaultLayout.Layout,
 		MetasFunc: func(res *Resource, context *Context, record interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName) {
-			metas = res.ConvertSectionToMetas(res.allowedSections(record, res.IndexAttrs(), context, roles...))
+			metas = res.IndexAttrs().Allowed(record, context, roles...).ToMetas()
 			return
 		}})
 	res.Layout("show", &Layout{
 		Layout: defaultLayout.Layout,
 		MetasFunc: func(res *Resource, context *Context, record interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName) {
-			metas = res.ConvertSectionToMetas(res.allowedSections(record, res.ShowAttrs(), context, roles...))
+			metas = res.ShowAttrs().Allowed(record, context, roles...).ToMetas()
 			return
 		}})
 	res.Layout("edit", &Layout{
 		Layout: defaultLayout.Layout,
 		MetasFunc: func(res *Resource, context *Context, record interface{}, roles ...roles.PermissionMode) (metas []*Meta, names []*resource.MetaName) {
-			metas = res.ConvertSectionToMetas(res.allowedSections(record, res.EditAttrs(), context, roles...))
+			metas = res.EditAttrs().Allowed(record, context, roles...).ToMetas()
 			return
 		}})
 

@@ -3,21 +3,36 @@ package admin
 import (
 	"fmt"
 	"net/http"
+	"path"
 	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/ecletus/core/resource"
 	"github.com/moisespsena-go/aorm"
+	"github.com/moisespsena-go/maps"
 
 	"github.com/ecletus/roles"
 
-	"github.com/ecletus/core"
 	"github.com/ecletus/core/utils"
 )
 
+func (this *Resource) OnActionAdded(f func(action *Action)) {
+	this.ActionAddedCallbacks = append(this.ActionAddedCallbacks, f)
+
+	for _, action := range this.Actions {
+		f(action)
+	}
+}
+
 // Action register action for qor resource
 func (this *Resource) Action(action *Action) *Action {
+	if action.Name == "" {
+		action.Name = utils.ToParamString(action.Label)
+	} else if action.LabelKey == "" && action.Label == "" {
+		action.Label = utils.HumanizeStringU(action.Name)
+	}
+
 	for _, a := range this.Actions {
 		if a.Name == action.Name {
 			if action.Label != "" {
@@ -38,6 +53,10 @@ func (this *Resource) Action(action *Action) *Action {
 
 			if action.Visible != nil {
 				a.Visible = action.Visible
+			}
+
+			if action.RecordAvailable != nil {
+				a.RecordAvailable = action.RecordAvailable
 			}
 
 			if action.Available != nil {
@@ -64,6 +83,10 @@ func (this *Resource) Action(action *Action) *Action {
 				a.PermissionMode = action.PermissionMode
 			}
 
+			if action.SkipRecordLoad {
+				a.SkipRecordLoad = true
+			}
+
 			*action = *a
 			return a
 		}
@@ -78,7 +101,7 @@ func (this *Resource) Action(action *Action) *Action {
 	}
 
 	if action.Method == "" {
-		if action.ReadOnly || action.URL != nil {
+		if action.ReadOnly() || action.URL != nil {
 			action.Method = http.MethodGet
 		} else {
 			action.Method = http.MethodPut
@@ -93,15 +116,35 @@ func (this *Resource) Action(action *Action) *Action {
 		}
 	}
 
+	if action.Resource != nil {
+		if action.Permission == nil && action.BaseResource.Config.Permission != nil {
+			action.Resource.Permission = action.BaseResource.Config.Permission
+		} else {
+			action.Resource.Permission = roles.AllowAny(roles.Anyone)
+		}
+
+		for name := range action.Resource.ModelStruct.ChildrenByName {
+			action.Resource.Meta(&Meta{
+				Name:       name,
+				Permission: roles.AllowAny(roles.Anyone),
+			}).Resource.Permission = roles.AllowAny(roles.Anyone)
+		}
+
+	}
+
 	if action.PermissionMode == "" {
-		action.PermissionMode = roles.Update
-		switch strings.ToUpper(action.Method) {
-		case http.MethodPost:
-			action.PermissionMode = roles.Create
-		case http.MethodDelete:
-			action.PermissionMode = roles.Delete
-		case http.MethodGet:
+		if action.ReadOnly() {
 			action.PermissionMode = roles.Read
+		} else {
+			action.PermissionMode = roles.Update
+			switch strings.ToUpper(action.Method) {
+			case http.MethodPost:
+				action.PermissionMode = roles.Create
+			case http.MethodDelete:
+				action.PermissionMode = roles.Delete
+			case http.MethodGet:
+				action.PermissionMode = roles.Read
+			}
 		}
 	}
 
@@ -129,30 +172,48 @@ func (this *Resource) Action(action *Action) *Action {
 		}
 		actionParam := "/" + action.ToParam()
 
-		if action.ReadOnly {
-			this.ItemRouter.Get(actionParam, NewHandler(actionController.Action, routeConfig))
+		h := func() *RouteHandler {
+			return NewHandler(actionController.Action, routeConfig)
+		}
+
+		if action.ReadOnly() && action.Method == http.MethodGet {
+			this.ItemRoutes.Add(actionParam, &RouteNode{Action: action}).Get(h())
 		} else if action.Resource != nil || action.Handler != nil {
 			bulkPattern := "/!action" + actionParam
 			if action.Resource != nil {
 				if !this.IsSingleton() {
 					// Bulk Action
-					this.Router.Get(bulkPattern, NewHandler(actionController.Action, routeConfig))
-					this.Router.Put(bulkPattern, NewHandler(actionController.Action, routeConfig))
-					this.Router.Post(bulkPattern, NewHandler(actionController.Action, routeConfig))
+					node := this.Routes.Add(bulkPattern, &RouteNode{Action: action}).Post(h())
+
+					if !action.ReadOnly() {
+						node.Get(NewHandler(actionController.Action, routeConfig))
+						node.Put(NewHandler(actionController.Action, routeConfig))
+					}
 				}
-				// Single Resource Action
-				this.ItemRouter.Get(actionParam, NewHandler(actionController.Action, routeConfig))
-				this.ItemRouter.Put(actionParam, NewHandler(actionController.Action, routeConfig))
-				this.ItemRouter.Post(actionParam, NewHandler(actionController.Action, routeConfig))
+				if !action.ItemDisabled {
+					// Single Resource Action
+					node := this.ItemRoutes.Add(actionParam, &RouteNode{Action: action}).Post(h())
+
+					if !action.ReadOnly() {
+						node.Get(h())
+						node.Put(h())
+					}
+				}
 			} else if action.Handler != nil {
 				if !this.IsSingleton() {
-					// Bulk Action
-					this.Router.HandleMethod(action.Method, bulkPattern, NewHandler(actionController.Action, routeConfig))
+					node := this.Routes.Add(bulkPattern, &RouteNode{Action: action}).Handle(action.Method, h())
+					if action.EmptyBulkAllowed && action.Method != http.MethodGet {
+						node.Get(h())
+					}
 				}
 				// Single Resource action
-				this.ItemRouter.HandleMethod(action.Method, actionParam, NewHandler(actionController.Action, routeConfig))
+				this.ItemRoutes.Add(actionParam, &RouteNode{Action: action}).Handle(action.Method, h())
 			}
 		}
+	}
+
+	for _, cb := range this.ActionAddedCallbacks {
+		cb(action)
 	}
 
 	return action
@@ -174,6 +235,8 @@ type ActionArgument struct {
 	PrimaryValues       []aorm.ID
 	Context             *Context
 	Argument            interface{}
+	Record              interface{}
+	Data                interface{}
 	SkipDefaultResponse bool
 	successMessage      string
 }
@@ -220,6 +283,14 @@ func (this Actions) Sort() Actions {
 	return this
 }
 
+const (
+	ActionFormNew ActionFormType = iota + 1
+	ActionFormShow
+	ActionFormEdit
+)
+
+type ActionFormType uint8
+
 // Action action definiation
 type Action struct {
 	Name        string
@@ -229,29 +300,77 @@ type Action struct {
 	Method      string
 	URL         func(record interface{}, context *Context, args ...interface{}) string
 	URLOpenType string
+
+	FindRecord func(s *Searcher) (rec interface{}, err error)
+
 	Available,
 	IndexVisible func(context *Context) bool
-	Visible func(record interface{}, context *Context) bool
+
+	Visible,
+	RecordAvailable func(record interface{}, context *Context) bool
+
 	Handler,
 	ShowHandler,
-	SetupArgument func(argument *ActionArgument) error
+	SetupArgument func(arg *ActionArgument) error
 	Modes          []string
 	BaseResource   *Resource
 	Resource       *Resource
 	Permission     *roles.Permission
-	Permissioner   core.Permissioner
+	Permissioner   Permissioner
 	Type           ActionType
 	PermissionMode roles.PermissionMode
-	ReadOnly       bool
+	FormType       ActionFormType
 	ReturnURL,
 	RefreshURL func(record interface{}, context *Context) string
 	// executes and disable now
 	One bool
 	// allow executes with empty bulk records
 	EmptyBulkAllowed bool
+	ItemDisabled     bool // only on bulk mode
 	//
 	TargetWindow      bool
 	PassCurrentParams bool
+	SkipRecordLoad    bool
+
+	Data          maps.Map
+	TemplatePaths []string
+	States        []*ActionState
+}
+
+func (this *Action) ReadOnly() bool {
+	return this.FormType == ActionFormShow
+}
+
+func (this *Action) State(state ...*ActionState) {
+	this.States = append(this.States, state...)
+}
+
+func (this *Action) GetData() maps.Interface {
+	if this.Data == nil {
+		this.Data = make(maps.Map)
+	}
+	return &this.Data
+}
+
+func (this *Action) ConfigSet(key, value interface{}) {
+	this.Data.Set(key, value)
+}
+
+func (this *Action) ConfigGet(key interface{}) (value interface{}, ok bool) {
+	return this.Data.Get(key)
+}
+
+func (this *Action) GetTemplatePaths() (pths []string) {
+	if len(this.TemplatePaths) > 0 {
+		return this.TemplatePaths
+	}
+
+	for _, pth := range this.BaseResource.GetTemplatePaths() {
+		pths = append(pths, pth+"/actions/"+this.Name)
+	}
+	pths = append(pths, path.Join(strings.TrimSuffix(this.BaseResource.PkgPath, "/models"), "actions/"+this.Name))
+	pths = append(pths, "actions/"+this.Name)
+	return
 }
 
 func (this *Action) TypeName() string {
@@ -266,13 +385,25 @@ func (this *Action) ToParam() string {
 // IsAllowed check if current user has permission to view the action
 func (this *Action) IsAllowed(context *Context, records ...interface{}) bool {
 	if len(records) == 0 {
+		if this.Available != nil && !this.Available(context) {
+			return false
+		}
 		if this.IndexVisible != nil && !this.IndexVisible(context) {
 			return false
 		}
-	} else if this.Visible != nil {
-		for _, record := range records {
-			if !this.Visible(record, context) {
-				return false
+	} else {
+		if this.RecordAvailable != nil {
+			for _, record := range records {
+				if !this.RecordAvailable(record, context) {
+					return false
+				}
+			}
+		}
+		if this.Visible != nil {
+			for _, record := range records {
+				if !this.Visible(record, context) {
+					return false
+				}
 			}
 		}
 	}
@@ -288,12 +419,12 @@ func (this *Action) IsAllowed(context *Context, records ...interface{}) bool {
 	return context.HasPermission(this, this.PermissionMode)
 }
 
-// HasContextPermission check if current user has permission for the action
-func (this *Action) HasPermission(mode roles.PermissionMode, context *core.Context) (perm roles.Perm) {
+// AdminHasContextPermission check if current user has permission for the action
+func (this *Action) AdminHasPermission(mode roles.PermissionMode, context *Context) (perm roles.Perm) {
 	if this.Permission != nil {
 		return this.Permission.HasPermission(context, mode, context.Roles.Interfaces()...)
 	}
-	return this.Permissioner.HasPermission(mode, context)
+	return this.Permissioner.AdminHasPermission(mode, context)
 }
 
 func (this *Action) GetLabelPair() ([]string, string) {
@@ -317,21 +448,24 @@ func (this *Action) GetLabelKeys() []string {
 }
 
 // FindSelectedRecords find selected records when run bulk actions
-func (actionArgument *ActionArgument) FindSelectedRecords() []interface{} {
+func (this *ActionArgument) FindSelectedRecords() []interface{} {
+	if this.Record != nil {
+		return []interface{}{this.Record}
+	}
 	var (
-		context   = actionArgument.Context
+		context   = this.Context
 		res       = context.Resource
 		records   = []interface{}{}
 		sqls      []string
 		sqlParams []interface{}
 	)
 
-	if len(actionArgument.PrimaryValues) == 0 {
+	if len(this.PrimaryValues) == 0 {
 		return records
 	}
 
 	clone := context.Clone()
-	for _, primaryValue := range actionArgument.PrimaryValues {
+	for _, primaryValue := range this.PrimaryValues {
 		primaryQuerySQL, primaryParams, err := resource.IdToPrimaryQuery(context.Context, res, false, primaryValue)
 		if err != nil {
 			context.AddError(err)
@@ -345,7 +479,7 @@ func (actionArgument *ActionArgument) FindSelectedRecords() []interface{} {
 		clone.SetRawDB(clone.DB().Where(strings.Join(sqls, " OR "), sqlParams...))
 	}
 
-	results, err := clone.FindMany()
+	results, err := clone.ParseFindMany()
 	if err != nil {
 		context.AddError(err)
 		return nil

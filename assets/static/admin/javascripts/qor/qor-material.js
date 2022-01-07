@@ -12,18 +12,19 @@
 })(function($) {
     'use strict';
 
-    var componentHandler = window.componentHandler;
-    var NAMESPACE = 'qor.material';
-    var EVENT_ENABLE = 'enable.' + NAMESPACE;
-    var EVENT_DISABLE = 'disable.' + NAMESPACE;
-    var EVENT_UPDATE = 'update.' + NAMESPACE;
-    var SELECTOR_COMPONENT = '[class*="mdl-js"],[class*="mdl-tooltip"]';
+    const componentHandler = window.componentHandler,
+        NAMESPACE = 'qor.material',
+        EVENT_ENABLE = 'enable.' + NAMESPACE,
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_UPDATE = 'update.' + NAMESPACE,
+        SELECTOR_COMPONENT = '[class*="mdl-js"],[class*="mdl-tooltip"]';
 
     function enable(target) {
+        const $el = $(target);
         /*jshint undef:false */
         if (componentHandler) {
             // Enable all MDL (Material Design Lite) components within the target element
-            if ($(target).is(SELECTOR_COMPONENT)) {
+            if ($el.is(SELECTOR_COMPONENT)) {
                 componentHandler.upgradeElements(target);
             } else {
                 componentHandler.upgradeElements($(SELECTOR_COMPONENT, target).toArray());
@@ -32,10 +33,11 @@
     }
 
     function disable(target) {
+        const $el = $(target);
         /*jshint undef:false */
         if (componentHandler) {
             // Destroy all MDL (Material Design Lite) components within the target element
-            if ($(target).is(SELECTOR_COMPONENT)) {
+            if ($el.is(SELECTOR_COMPONENT)) {
                 componentHandler.downgradeElements(target);
             } else {
                 componentHandler.downgradeElements($(SELECTOR_COMPONENT, target).toArray());

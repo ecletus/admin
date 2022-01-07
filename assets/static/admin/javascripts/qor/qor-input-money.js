@@ -15,10 +15,13 @@
     let NAMESPACE = 'qor.input_money',
         SELECTOR = 'input.input-money',
         EVENT_ENABLE = 'enable.' + NAMESPACE,
-        EVENT_DISABLE = 'disable.' + NAMESPACE;
+        EVENT_DISABLE = 'disable.' + NAMESPACE,
+        EVENT_CHANGE = 'change.' + NAMESPACE;
 
     function QorInputMoney(element, options) {
         this.$el = $(element);
+        let $p = this.$el.closest('.mdl-js-textfield');
+        this.MDL = $p.length ? $p[0].MaterialTextfield : null;
         this.init();
     }
 
@@ -31,11 +34,24 @@
 
         bind: function () {
             this.$el.maskMoney();
+            this.$el.on(EVENT_CHANGE, this.changed.bind(this))
         },
 
         destroy: function () {
             this.$el.maskMoney('destroy');
             this.$el.removeData(NAMESPACE);
+            this.$el.off(EVENT_CHANGE, this.changed);
+            this.MDL = null;
+        },
+
+        changed: function (e) {
+            if (!this.MDL) {
+                let $p = this.$el.closest('.mdl-js-textfield');
+                this.MDL = $p.length ? $p[0].MaterialTextfield : null;
+            }
+            if (this.MDL) {
+                this.MDL.checkDirty()
+            }
         }
     };
 

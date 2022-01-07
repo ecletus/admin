@@ -10,6 +10,9 @@ import (
 
 type Layout struct {
 	*resource.Layout
+	SectionsLayout   string
+	SectionsProvider string
+
 	Resource         *Resource
 	Parent           *Layout
 	Metas            []string
@@ -21,11 +24,39 @@ type Layout struct {
 	MetaID           string
 }
 
-func (l *Layout) GetMetas(res *Resource, context *Context, recorde interface{}) []string {
-	if l.MetaNamesFunc != nil {
-		return l.MetaNamesFunc(res, context, recorde)
+func (l *Layout) GetSectionsProvider(ctx *Context) *SchemeSectionsProvider {
+	if l.SectionsProvider != "" {
+		if l.SectionsLayout != "" {
+			old := ctx.SectionLayout
+			defer func() {
+				ctx.SectionLayout = old
+			}()
+			ctx.SectionLayout = l.SectionsLayout
+		}
 	}
-	return l.Metas
+	return ctx.Scheme.GetSectionsProvider(ctx, ctx.Type, l.SectionsProvider)
+}
+
+func (l *Layout) GetSections(res *Resource, context *Context, recorde interface{}, f *SectionsFilter) Sections {
+	var (
+		names []string
+		f2    *SectionsFilter
+	)
+	if l.MetaNamesFunc != nil {
+		names = l.MetaNamesFunc(res, context, recorde)
+	}
+	if names == nil {
+		names = l.Metas
+	}
+	f2 = new(SectionsFilter).SetInclude(names...)
+	if f != nil && len(f.Exclude) > 0 {
+		for name := range f.Exclude {
+			delete(f2.Include, name)
+		}
+	}
+	return l.GetSectionsProvider(context).
+		MustContextSections(&SectionsContext{Ctx: context, Record: recorde}).
+		Filter(f2)
 }
 
 func (l *Layout) MetaNameDiscovery(key string) *resource.MetaName {
@@ -99,7 +130,7 @@ func (l *Layout) Prepare(crud *resource.CRUD) *resource.CRUD {
 }
 
 func (this *Resource) Layout(name string, layout resource.LayoutInterface) {
-	if this.registered {
+	if this.initialized {
 		if l, ok := layout.(*Layout); ok {
 			l.Resource = this
 			l.SetMetaNames(l.MetaNames)

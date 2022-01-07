@@ -1,9 +1,15 @@
 package admin
 
-type ResourceSetuper interface {
-	AdminResourceSetup(res *Resource, defaultSetup func())
-}
+type (
+	ResourceSetuper interface {
+		AdminResourceSetup(res *Resource, defaultSetup func())
+	}
 
-type ResourceMetaHasInitialValuer interface {
-	AdminIsDefaultValue(meta *Meta) bool
-}
+	ResourceTagsGetter interface {
+		AdminGetResourceTags(res *Resource) (tags *ResourceTags)
+	}
+
+	ResourceMetaHasInitialValuer interface {
+		AdminIsDefaultValue(meta *Meta) bool
+	}
+)

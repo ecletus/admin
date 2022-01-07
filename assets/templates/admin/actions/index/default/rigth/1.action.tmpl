@@ -1,8 +1,6 @@
-{{if .Searcher.Pagination.Total}}
-    {{$allowed_actions := (allowed_actions .Resource.Actions .Action)}}
-    {{if gt (len $allowed_actions) 0 }}
-        <div class="qor-action-bulk-buttons" data-toggle="qor.action.bulk">
-          <button class="mdl-button mdl-button--colored qor-action--bulk" type="button">{{t "github_com:ecletus:admin.actions.bulk_edit"}}</button>
-        </div>
-    {{end}}
+{{$allowed_actions := (allowed_actions .Resource.Actions .Action)}}
+{{if gt (len $allowed_actions) 0 }}
+    <div class="qor-action-bulk-buttons" data-toggle="qor.action.bulk">
+      <button class="mdl-button mdl-button--colored qor-action--bulk" type="button">{{t "github_com:ecletus:admin.actions.bulk_edit"}}</button>
+    </div>
 {{end}}

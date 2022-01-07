@@ -79,7 +79,7 @@
         .on(EVENT_RELOAD, `.${CLASS_ONE}`, this.reloadData.bind(this));
       this.$element
         .on(EVENT_CLICK, CLASS_CLEAR_SELECT, this.clearSelect.bind(this))
-        .on(EVENT_CLICK, '[data-selectone-url]', this.openBottomSheets.bind(this))
+        .on(EVENT_CLICK, '[data-selectone-url],[data-selectone-url] .material-icons', this.openBottomSheets.bind(this))
         .on(EVENT_CLICK, CLASS_CHANGE_SELECT, this.changeSelect);
     },
 
@@ -93,7 +93,7 @@
         $parent = $target.closest(CLASS_PARENT);
 
       $parent.find(CLASS_SELECT_FIELD).remove();
-      $parent.find(CLASS_SELECT_INPUT).html('');
+      $parent.find(CLASS_SELECT_INPUT).html('<option value="" selected></option>');
       $parent.find(CLASS_SELECT_INPUT)[0].value = '';
       $parent.find(CLASS_SELECT_TRIGGER).show();
 
@@ -116,10 +116,12 @@
 
       glock.lock = true;
       setTimeout(gunlock, 1000*3);
-      var $this = $(e.target);
+      let $this = $(e.target);
+      if ($this.is('.material-icons')) {
+        $this = $this.parent()
+      }
       this.lock.currentData = $this.data();
 
-      this.lock.BottomSheets = $body.data('qor.bottomsheets');
       this.lock.$parent = $this.closest(CLASS_PARENT);
       this.lock.$select = this.lock.$parent.find('select');
 
@@ -133,7 +135,7 @@
       if (this.lock.$select.length) {
         data.$element = this.lock.$select;
       }
-      this.lock.BottomSheets.open(data, this.handleSelectOne.bind(this));
+      $('body').qorBottomSheets('open', data, this.handleSelectOne.bind(this));
     },
 
     initItem: function() {
@@ -168,7 +170,8 @@
     },
 
     renderSelectOne: function(data) {
-      return Mustache.render(this.$selectOneSelectedTemplate.html(), data);
+      const res = Mustache.render(this.$selectOneSelectedTemplate.html().replace(/\[\[ *&amp;/g, '[[&'), data);
+      return res;
     },
 
     handleSelectOne: function($bottomsheets) {
@@ -191,7 +194,7 @@
     },
 
     handleResults: function(data) {
-      var template,
+      let template,
           $parent = this.lock.$parent,
           $selectField = $parent.find(CLASS_SELECT_FIELD);
 
@@ -223,8 +226,9 @@
       $parent.prepend(template);
       $parent.find(CLASS_SELECT_TRIGGER).hide();
 
-      this.lock.$select.html(Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data));
-      this.lock.$select[0].value = data.primaryKey || data.ID;
+      const res = Mustache.render(QorSelectOne.SELECT_ONE_OPTION_TEMPLATE, data);
+      this.lock.$select.html(res);
+      // this.lock.$select[0].value = data.primaryKey || data.ID;
 
       $parent.trigger('qor.selectone.selected', [data]);
 
@@ -265,7 +269,7 @@
   };
 
   $(function() {
-    var selector = '[data-toggle="qor.selectone"]';
+    const selector = '[data-toggle="qor.selectone"]';
     $(document)
       .on(EVENT_DISABLE, function(e) {
         QorSelectOne.plugin.call($(selector, e.target), 'destroy');

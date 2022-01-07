@@ -62,3 +62,9 @@ func RegisterMetaConfigor(name string, configor func(meta *Meta)) {
 	}
 	metaConfigorMaps[name] = configor
 }
+
+var metaPreConfigorMaps []func(*Meta)
+
+func RegisterMetaPreConfigor(cb func(meta *Meta)) {
+	metaPreConfigorMaps = append(metaPreConfigorMaps, cb)
+}

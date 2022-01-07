@@ -3,23 +3,19 @@ package admin
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"math/rand"
 	"net/url"
 	"path"
 	"reflect"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/ecletus/auth"
 	"github.com/ecletus/roles"
 	"github.com/moisespsena-go/assetfs"
 	"github.com/moisespsena-go/assetfs/assetfsapi"
 	"github.com/moisespsena-go/tracederror"
-	"github.com/pkg/errors"
-
-	"github.com/moisespsena/template/funcs"
 	"github.com/moisespsena/template/html/template"
 
 	"github.com/ecletus/core"
@@ -27,7 +23,11 @@ import (
 	"github.com/moisespsena-go/aorm"
 )
 
-var TemplateExecutorMetaValue = template.Must(template.New(PKG + ".meta_value").Parse("{{.Value}}")).CreateExecutor()
+var TemplateExecutorMetaValue = template.Must(template.New(PKG + ".meta_value").Parse(`{{if and .MetaValue .MetaValue.Severity -}}
+    <span class="severity_{{.MetaValue.Severity}} severity--text severity--bg">{{.Value}}</span>
+{{- else -}}
+    {{.Value}}
+{{- end}}`)).CreateExecutor()
 
 func (this *Context) primaryKeyOf(value interface{}) interface{} {
 	if idGetter, ok := value.(interface{ GetID() aorm.ID }); ok {
@@ -73,7 +73,7 @@ func (this *Context) newResourcePath(res *Resource) string {
 	if res2 := this.Value(PKG + ".new_resource_path"); res2 != nil {
 		res = res2.(*Resource)
 	}
-	return res.GetContextIndexURI(this.Context) + "/new"
+	return res.GetContextIndexURI(this) + "/new"
 }
 
 func (this *Context) linkTo(text interface{}, link interface{}) template.HTML {
@@ -108,6 +108,7 @@ func (this *Context) valueOf(valuer func(interface{}, *core.Context) interface{}
 		if value == nil {
 			return nil
 		}
+
 		reflectValue := reflect.ValueOf(value)
 		if reflectValue.Kind() != reflect.Ptr {
 			reflectPtr := reflect.New(reflectValue.Type())
@@ -122,11 +123,12 @@ func (this *Context) valueOf(valuer func(interface{}, *core.Context) interface{}
 				if reflectValue.IsNil() || !reflectValue.Elem().IsValid() {
 					return nil
 				}
-				result = reflectValue.Elem().Interface()
+				reflectValue = reflectValue.Elem()
+				result = reflectValue.Interface()
 			}
 
 			if meta.Type == "number" || meta.Type == "float" {
-				if this.isNewRecord(value) && equal(reflect.Zero(reflect.TypeOf(result)).Interface(), result) {
+				if this.isNewRecord(value) && equal(reflect.Zero(reflectValue.Type()).Interface(), result) {
 					return nil
 				}
 			} else if ID, ok := result.(aorm.ID); ok {
@@ -137,368 +139,10 @@ func (this *Context) valueOf(valuer func(interface{}, *core.Context) interface{}
 		return nil
 	}
 
-	if !meta.Virtual {
+	if meta.Virtual {
 		panic(fmt.Errorf("No valuer found for meta %v of resource %v", meta.Name, meta.BaseResource.Name))
 	}
 	return nil
-}
-
-func (this *Context) renderForm(state *template.State, value interface{}, sections []*Section) {
-	if len(*this.metaPath) == 0 {
-		*this.metaPath = append(*this.metaPath, "QorResource")
-		defer func() {
-			*this.metaPath = (*this.metaPath)[0 : len(*this.metaPath)-1]
-		}()
-	}
-	this.renderSections(state, value, sections, []string{"QorResource"}, state.Writer(), "form", this.Type.Has(SHOW) || this.Type.Has(INDEX))
-}
-
-func (this *Context) renderSections(state *template.State, value interface{}, sections []*Section, prefix []string, writer io.Writer, kind string, readOnly bool) {
-	var (
-		res            *Resource
-		getMeta        func(string) *Meta
-		rendered       = map[string]bool{}
-		skipAttrsCheck = map[string]bool{}
-	)
-
-	if reflect.TypeOf(value).Kind() != reflect.Ptr {
-		value = func(v interface{}) interface{} {
-			nv := reflect.New(reflect.TypeOf(v))
-			nv.Elem().Set(reflect.ValueOf(v))
-			return nv.Elem().Addr().Interface()
-		}(value)
-	}
-
-	for _, section := range sections {
-		var (
-			hasRequired bool
-			rows        []struct {
-				Length      int
-				ColumnsHTML template.HTML
-			}
-		)
-
-		if res != section.Resource {
-			res = section.Resource
-			getMeta = section.Resource.MetaContextGetter(this)
-		}
-
-		for i := 0; i < len(section.Rows); i++ {
-			var (
-				columnsHTML bytes.Buffer
-				w           = NewTrimLeftWriter(&columnsHTML)
-				column      = section.Rows[i]
-				exclude     int
-			)
-			for j := 0; j < len(column); j++ {
-				var col = column[j]
-				if _, ok := rendered[col]; ok {
-					continue
-				}
-				meta := getMeta(col)
-				if meta != nil {
-					if meta.Enabled == nil || meta.Enabled(value, this, meta) {
-						if meta.IsRequired() {
-							hasRequired = true
-						}
-						_, skipAttrCheck := skipAttrsCheck[col]
-						if attS := meta.Tags.GetString("ATTR"); attS != "" && !skipAttrCheck {
-							skipAttrsCheck[col] = true
-
-							if attS[0] == ';' {
-								// append to new sections
-								var news []string
-								for _, col2 := range strings.Split(attS, ";")[1:] {
-									col2 = strings.TrimSpace(col2)
-									if col2 == "." {
-										col2 = col
-									}
-									news = append(news, col2)
-								}
-								news = append(news, column[j+1:]...)
-								column = append(column[0:j], news...)
-								section.Rows[i] = column
-								section.Rows = append(section.Rows[0:i], append([][]string{news}, section.Rows[i+1:]...)...)
-								j--
-							} else {
-								for _, col2 := range strings.Split(attS, ";") {
-									col2 = strings.TrimSpace(col2)
-									if col2 == "." {
-										this.renderMeta(state, meta, value, prefix, kind, w)
-									} else {
-										m := getMeta(col2)
-										if m == nil {
-											panic(fmt.Errorf("Resource %q: meta %s: meta %q in TAG[ATTR]=%q is nil", this.Resource.ID, col, col2, attS))
-										}
-										this.renderMeta(state, m, value, prefix, kind, w)
-										rendered[col2] = true
-									}
-								}
-							}
-						} else {
-							this.renderMeta(state, meta, value, prefix, kind, w)
-							rendered[col] = true
-						}
-					} else {
-						exclude++
-					}
-				}
-			}
-
-			if !hasRequired && (this.Action == "show" || this.Action == "action_show") && w.Empty() {
-				continue
-			}
-
-			rows = append(rows, struct {
-				Length      int
-				ColumnsHTML template.HTML
-			}{
-				Length:      len(column) - exclude,
-				ColumnsHTML: template.HTML(columnsHTML.Bytes()),
-			})
-		}
-
-		if len(rows) > 0 {
-			var data = map[string]interface{}{
-				"Section":  section,
-				"Title":    template.HTML(section.Title),
-				"Rows":     rows,
-				"ReadOnly": readOnly,
-			}
-
-			if executor, err := this.GetTemplate("metas/section"); err == nil {
-				err = executor.Execute(writer, data, this.FuncValues())
-			}
-		}
-	}
-}
-
-func (this *Context) renderFilter(filter *Filter) template.HTML {
-	var (
-		err      error
-		executor *template.Executor
-		dir      = "filter"
-		result   = bytes.NewBufferString("")
-	)
-
-	if filter.advanced {
-		dir = "advanced_filter"
-	}
-
-	if executor, err = this.GetTemplate(fmt.Sprintf("metas/%v/%v", dir, filter.Type)); err == nil {
-		var label string
-		if !filter.LabelDisabled {
-			label = filter.GetLabelC(this.Context)
-		}
-		var data = map[string]interface{}{
-			"Filter":          filter,
-			"Label":           label,
-			"InputNamePrefix": fmt.Sprintf("filtersByName[%v]", filter.Name),
-			"Context":         this,
-			"Resource":        this.Resource,
-		}
-
-		err = executor.Execute(result, data, this.FuncValues())
-	}
-
-	if err != nil {
-		this.AddError(err)
-		result.WriteString(errors.Wrap(err, fmt.Sprintf("render filter template for %v(%v)", filter.Name, filter.Type)).Error())
-	}
-
-	return template.HTML(result.String())
-}
-
-func (this *Context) savedFilters() (filters []SavedFilter) {
-	this.Admin.settings.Get("saved_filters", &filters, this)
-	return
-}
-
-func (this *Context) NestedForm() bool {
-	return this.nestedForm > 0
-}
-
-func (this *Context) renderMeta(state *template.State, meta *Meta, record interface{}, prefix []string, metaType string, writer io.Writer) {
-	var (
-		err             error
-		funcsMap        = funcs.FuncMap{}
-		executor        *template.Executor
-		formattedValue  interface{}
-		show            = this.Type.Has(SHOW) || this.Type.Has(INDEX)
-		nestedFormCount int
-		readOnly        = show
-	)
-	*this.metaPath = append(*this.metaPath, meta.Name)
-	defer func() {
-		*this.metaPath = (*this.metaPath)[0 : len(*this.metaPath)-1]
-	}()
-
-	if show && meta.Resource == nil {
-		formattedValue = meta.ReadOnlyFormattedValue(this, record)
-	}
-	if formattedValue == nil {
-		formattedValue = this.FormattedValueOf(record, meta)
-	}
-
-	if show && !meta.IsRequired() {
-		if !meta.ForceShowZero && meta.IsZero(record, formattedValue) {
-			return
-		}
-		if !meta.ForceEmptyFormattedRender {
-			if formattedValue == nil {
-				return
-			}
-			switch t := formattedValue.(type) {
-			case string:
-				if len(t) == 0 {
-					return
-				}
-			case template.HTML:
-				if len(t) == 0 {
-					return
-				}
-			case aorm.Zeroer:
-				if t.IsZero() {
-					return
-				}
-			}
-		}
-	}
-
-	if !meta.Include {
-		prefix = append(prefix, meta.Name)
-	}
-
-	var generateNestedRenderSections = func(kind string) func(*template.State, interface{}, *Meta, []*Section, int, ...string) {
-		return func(state *template.State, record interface{}, meta *Meta, sections []*Section, index int, prefx ...string) {
-			this.nestedForm++
-			if index == -2 {
-				*this.metaPath = append(*this.metaPath, "{{index}}")
-			} else {
-				*this.metaPath = append(*this.metaPath, strconv.Itoa(nestedFormCount))
-			}
-
-			if record == nil && !show && meta.Resource != nil {
-				record = meta.Resource.New()
-			}
-
-			defer func() {
-				nestedFormCount++
-				this.nestedForm--
-				*this.metaPath = (*this.metaPath)[0 : len(*this.metaPath)-1]
-			}()
-
-			newPrefix := append([]string{}, prefix...)
-
-			if len(prefx) > 0 && prefx[0] != "" {
-				for prefx[0][0] == '.' {
-					newPrefix = newPrefix[0 : len(newPrefix)-1]
-					prefx[0] = prefx[0][1:]
-				}
-
-				newPrefix = append(newPrefix, prefx...)
-			}
-
-			if index >= 0 {
-				last := newPrefix[len(newPrefix)-1]
-				newPrefix = append(newPrefix[:len(newPrefix)-1], fmt.Sprintf("%v[%v]", last, index))
-			} else if index == -2 {
-				last := newPrefix[len(newPrefix)-1]
-				newPrefix = append(newPrefix[:len(newPrefix)-1], fmt.Sprintf("%v[{{index}}]", last))
-			}
-
-			if len(sections) > 0 {
-				w := NewTrimLeftWriter(state.Writer())
-				w.Before = func() {
-					if this.Type.Has(EDIT) {
-						if !sections[0].Resource.Config.DisableFormID {
-							for _, field := range aorm.StructOf(record).PrimaryFields {
-								if meta := sections[0].Resource.GetMeta(field.Name); meta != nil {
-									this.renderMeta(state, meta, record, newPrefix, kind, w)
-								}
-							}
-						}
-					}
-				}
-				this.renderSections(state, record, sections, newPrefix, w, kind, readOnly)
-			}
-		}
-	}
-
-	funcsMap["render_nested_form"] = generateNestedRenderSections("form")
-
-	defer func() {
-		if err != nil {
-			panic(err)
-		}
-		if r := recover(); r != nil {
-			var (
-				msg          string
-				metaTreePath = path.Join(*this.metaPath...)
-			)
-
-			msg = fmt.Sprintf("render meta %q (%v)", metaTreePath, meta.Type)
-			writer.Write([]byte(msg))
-
-			if et, ok := r.(tracederror.TracedError); ok {
-				panic(tracederror.Wrap(et, msg))
-			} else if err, ok := r.(error); ok {
-				panic(tracederror.New(errors.Wrap(err, msg), et.Trace()))
-			} else {
-				panic(tracederror.New(errors.Wrap(fmt.Errorf("recoverd_error %T: %v", r, r), msg)))
-			}
-		}
-	}()
-
-	switch {
-	case meta.Config != nil:
-		if templater, ok := meta.Config.(interface {
-			GetTemplate(context *Context, metaType string) (*template.Executor, error)
-		}); ok {
-			if executor, err = templater.GetTemplate(this, metaType); err == nil {
-				break
-			}
-		}
-		fallthrough
-	default:
-		var others []string
-		metaUserType := meta.GetType(record, this)
-
-		if metaUserType != "" {
-			others = append(others, fmt.Sprintf("metas/%v/%v", metaType, metaUserType))
-		}
-
-		if executor, err = this.GetTemplateOrDefault(fmt.Sprintf("%v/metas/%v/%v", meta.BaseResource.ToParam(), metaType, meta.Name),
-			TemplateExecutorMetaValue, others...); err != nil {
-			err = errors.Wrap(err, fmt.Sprintf("haven't found %v template for meta %v", metaType, meta.Name))
-		}
-	}
-
-	if err == nil {
-		if !readOnly {
-			readOnly = meta.IsReadOnly(this, record)
-		}
-		var data = map[string]interface{}{
-			"Context":         this,
-			"BaseResource":    meta.BaseResource,
-			"Meta":            meta,
-			"Record":          record,
-			"ResourceValue":   record,
-			"Value":           formattedValue,
-			"Label":           meta.Label,
-			"InputName":       strings.Join(prefix, "."),
-			"ReadOnly":        readOnly,
-			"NotReadOnly":     !readOnly,
-			"InputParentName": strings.Join(prefix[0:len(prefix)-1], "."),
-		}
-		data["InputId"] = strings.Join(*this.metaPath, "_")
-		executor.SetSuper(state)
-		err = executor.Execute(writer, data, this.FuncValues(), funcsMap)
-	}
-
-	if err != nil {
-		err = tracederror.TracedWrap(err, "got error when render meta %v template for %v(%v)", metaType, meta.Name, meta.Type)
-	}
 }
 
 func (this *Context) isEqual(value interface{}, hasValue interface{}) bool {
@@ -506,12 +150,24 @@ func (this *Context) isEqual(value interface{}, hasValue interface{}) bool {
 		return false
 	}
 
-	var result string
+	if equaler, ok := value.(Equaler); ok {
+		return equaler.Equals(hasValue)
+	}
 
-	if reflect.Indirect(reflect.ValueOf(hasValue)).Kind() == reflect.Struct {
+	var (
+		result          string
+		reflectHasValue = reflect.Indirect(reflect.ValueOf(hasValue))
+	)
+
+	if reflectHasValue.Kind() == reflect.Struct {
 		result = aorm.IdOf(hasValue).String()
 	} else {
 		result = fmt.Sprint(hasValue)
+	}
+
+	switch vt := value.(type) {
+	case Equaler:
+		return vt.Equals(result)
 	}
 
 	reflectValue := reflect.Indirect(reflect.ValueOf(value))
@@ -522,6 +178,13 @@ func (this *Context) isEqual(value interface{}, hasValue interface{}) bool {
 	for reflectValue.Kind() == reflect.Ptr {
 		reflectValue = reflectValue.Elem()
 	}
+
+	if reflectHasValue.Type().ConvertibleTo(reflectValue.Type()) {
+		if reflect.DeepEqual(reflectValue.Interface(), reflectHasValue.Convert(reflectValue.Type()).Interface()) {
+			return true
+		}
+	}
+
 	return fmt.Sprint(reflectValue.Interface()) == result
 }
 
@@ -572,23 +235,25 @@ func (this *Context) getResource(resources ...*Resource) *Resource {
 	return this.Resource
 }
 
-func (this *Context) indexSections(resources ...*Resource) []*Section {
-	res := this.getResource(resources...)
+func (this *Context) indexSections() (sections Sections) {
 	if this.Layout != "" && this.Layout != "index" {
-		layout := res.GetAdminLayout(this.Layout)
-		attrs := layout.Metas
+		layout := this.Resource.GetAdminLayout(this.Layout)
+		filter := new(SectionsFilter)
+
 		if layout.NotIndexRenderID && !this.Api {
-			attrs = append(attrs, "-"+layout.MetaID)
+			filter.SetExcludes(layout.MetaID)
 		}
-		sections := res.SectionsList(attrs)
-		sections = res.allowedSections(nil, sections, this, roles.Read)
-		return sections
+
+		sections = layout.GetSections(this.Resource, this, nil, filter)
+	} else {
+		scheme := this.Scheme
+		if scheme == nil {
+			scheme = this.Resource.Scheme
+		}
+		sections = scheme.IndexSections(this)
 	}
-	scheme := this.Scheme
-	if scheme == nil {
-		scheme = res.Scheme
-	}
-	sections := scheme.IndexSections(this)
+
+	sections = sections.Allowed(nil, this, roles.Read)
 	return sections
 }
 
@@ -599,76 +264,71 @@ func (this *Context) editSections(res *Resource, recorde ...interface{}) []*Sect
 	return res.EditSections(this, recorde[0])
 }
 
-func (this *Context) newSections(resources ...*Resource) []*Section {
-	res := this.getResource(resources...)
-	return res.NewSections(this)
+func (this *Context) newSections(res *Resource) []*Section {
+	secs := res.NewSections(this)
+	return secs
 }
 
-func (this *Context) showSections(recorde interface{}, resources ...*Resource) []*Section {
-	res := this.getResource(resources...)
-	return res.ShowSections(this, recorde)
+func (this *Context) showSections() []*Section {
+	return this.Resource.ShowSections(this, this.ResourceRecord)
 }
 
-func (this *Context) editMetaSections(meta *Meta, record interface{}) []*Section {
-	if meta.Resource == nil {
-		panic("admin.func_map.editMetaSections: meta.Resource is nil")
-	}
-	if meta.Resource.ModelStruct.Parent == nil {
-		this = this.Clone()
-		_, this.Context = this.Context.NewChild(nil)
-		this.Resource = meta.Resource
-		this.Result = record
-	} else {
-		this = this.CreateChild(meta.Resource, record)
-	}
+func (this *Context) editMetaSections(meta *Meta) []*Section {
 	res := meta.Resource
 	var attrs []*Section
 	if meta.Config != nil {
 		if sc, ok := meta.Config.(*SingleEditConfig); ok {
-			attrs = sc.EditSections(this, record)
+			attrs = sc.EditSections(this, this.ResourceRecord)
+		}
+		if sc, ok := meta.Config.(*CollectionEditConfig); ok && sc.Sections != nil {
+			attrs = sc.EditSections(this, this.ResourceRecord)
 		}
 	}
 	if len(attrs) == 0 {
 		attrs = res.EditAttrs()
 	}
-	secs := res.allowedSections(record, attrs, this, roles.Update)
+	secs := Sections(attrs).Allowed(this.ResourceRecord, this, roles.Update)
 	return secs
 }
 
-func (this *Context) newMetaSections(meta *Meta, record interface{}) []*Section {
+func (this *Context) newMetaSections(meta *Meta) []*Section {
 	if meta.Resource == nil {
 		panic("admin.func_map.newMetaSections: meta.Resource is nil")
 	}
-	this = this.CreateChild(meta.Resource, record)
 	res := meta.Resource
 	var attrs []*Section
 	if meta.Config != nil {
 		if sc, ok := meta.Config.(*SingleEditConfig); ok {
 			attrs = sc.NewSections(this)
 		}
+		if sc, ok := meta.Config.(*CollectionEditConfig); ok && sc.Sections != nil {
+			attrs = sc.NewSections(this)
+		}
 	}
 	if len(attrs) == 0 {
 		attrs = res.NewAttrs()
 	}
-	return res.allowedSections(record, attrs, this, roles.Create)
+	return Sections(attrs).Allowed(this.ResourceRecord, this, roles.Create)
 }
 
-func (this *Context) showMetaSections(meta *Meta, record interface{}) []*Section {
+func (this *Context) showMetaSections(meta *Meta) []*Section {
 	if meta.Resource == nil {
 		panic("admin.func_map.showMetaSections: meta.Resource is nil")
 	}
-	this = this.CreateChild(meta.Resource, record)
 	res := meta.Resource
 	var attrs []*Section
 	if meta.Config != nil {
 		if sc, ok := meta.Config.(*SingleEditConfig); ok {
-			attrs = sc.ShowSections(this, record)
+			attrs = sc.ShowSections(this)
+		}
+		if sc, ok := meta.Config.(*CollectionEditConfig); ok && sc.Sections != nil {
+			attrs = sc.ShowSections(this, this.ResourceRecord)
 		}
 	}
 	if len(attrs) == 0 {
-		attrs = res.ShowSections(this, record)
+		attrs = res.ShowSections(this, this.ResourceRecord)
 	}
-	return res.allowedSections(record, attrs, this, roles.Read)
+	return Sections(attrs).Allowed(this.ResourceRecord, this, roles.Read)
 }
 
 func (this *Context) themesClass() (result string) {
@@ -806,7 +466,7 @@ func (this *Context) loadActions(action string, subPath ...string) template.HTML
 	case "index", "show", "edit", "new":
 		actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", action, sub), TemplateGlob.Wrap("actions", sub)}
 
-		if !this.Resource.isSetShowAttrs && action == "edit" {
+		if !this.Resource.Sections.Default.Screen.Show.IsSetI() && action == "edit" {
 			actionPatterns = []assetfs.GlobPatter{TemplateGlob.Wrap("actions", "show", sub), TemplateGlob.Wrap("actions", sub)}
 		}
 	case "global":
@@ -876,7 +536,7 @@ func (this *Context) loadActions(action string, subPath ...string) template.HTML
 			}
 			result.WriteString(err.Error())
 			panic(err)
-			return template.HTML("")
+			return ""
 		}
 	}
 
@@ -885,6 +545,9 @@ func (this *Context) loadActions(action string, subPath ...string) template.HTML
 
 func (this *Context) logoutURL() string {
 	if this.Admin.Auth != nil {
+		if auth.IsAlternated(this.Admin.Auth.Auth(), this.Context) {
+			return this.Path(AuthRevertPath)
+		}
 		return this.Admin.Auth.LogoutURL(this)
 	}
 	return ""
@@ -912,48 +575,18 @@ func (this *Context) tt(key string, data interface{}, defaul ...interface{}) tem
 	return this.TT(key, data, defaul...)
 }
 
-func (this *Context) isSortableMeta(meta *Meta) bool {
-	for _, attr := range this.Resource.SortableAttrs() {
-		if attr == meta.Name && meta.FieldStruct != nil && meta.FieldStruct.IsNormal && meta.FieldStruct.DBName != "" {
-			return true
-		}
-	}
-	return false
+func (this *Context) isSortableMeta(name string) bool {
+	return this.Scheme.IsSortableMeta(name)
 }
 
-func (this *Context) convertSectionToMetas(res *Resource, sections []*Section) []*Meta {
-	return res.ConvertSectionToMetas(sections, res.MetaContextGetter(this))
+func (this *Context) convertSectionToMetas(sections Sections) []*Meta {
+	return sections.ToMetas(func(res *Resource, name string) *Meta {
+		return res.GetContextMeta(this, name)
+	})
 }
 
-type formattedError struct {
-	Label  string
-	Errors []string
-}
-
-func (this *Context) getFormattedErrors() (formatedErrors []formattedError) {
-	type labelInterface interface {
-		Label() string
-	}
-	ctx := this.GetI18nContext()
-
-	for _, err := range this.GetErrors() {
-		if labelErr, ok := err.(labelInterface); ok {
-			var found bool
-			label := labelErr.Label()
-			for _, formatedError := range formatedErrors {
-				if formatedError.Label == label {
-					formatedError.Errors = append(formatedError.Errors, core.StringifyErrorT(ctx, err))
-					found = true
-				}
-			}
-			if !found {
-				formatedErrors = append(formatedErrors, formattedError{Label: label, Errors: []string{core.StringifyErrorT(ctx, err)}})
-			}
-		} else {
-			formatedErrors = append(formatedErrors, formattedError{Errors: []string{core.StringifyErrorT(ctx, err)}})
-		}
-	}
-	return
+func (this *Context) convertSectionToMetasTable(res *Resource, sections Sections) *MetasTable {
+	return res.ConvertSectionToMetasTable(sections, res.MetaContextGetter(this))
 }
 
 func (this *Context) pageTitle() template.HTML {
@@ -991,6 +624,11 @@ func (this *Context) pageTitle() template.HTML {
 	if crumb := this.Breadcrumbs().Last(); crumb != nil {
 		if label := crumb.Label(); label == "" {
 			return "[NO LABEL]"
+		} else if cr, ok := crumb.(*ResourceCrumb); ok {
+			if cr.ID != nil {
+				return template.HTML(cr.Resource.GetLabel(this, false) + ": " + label)
+			}
+			return this.t(label)
 		} else {
 			return this.t(label)
 		}

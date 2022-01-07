@@ -1,4 +1,4 @@
-(function(factory) {
+(function (factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -9,7 +9,7 @@
         // Browser globals.
         factory(jQuery);
     }
-})(function($) {
+})(function ($) {
     'use strict';
 
     $.extend({}, QOR.messages, {
@@ -44,7 +44,7 @@
         CLASS_IS_UNDO = 'is_undo',
         CLASS_BULK_EXIT = '.qor-action--exit-bulk',
         QOR_SLIDEOUT = '.qor-slideout',
-        ACTION_FORM_DATA = 'primary_values[]';
+        ACTION_FORM_DATA = ':pk';
 
     function QorAction(element, options) {
         this.$element = $(element);
@@ -57,20 +57,20 @@
     QorAction.prototype = {
         constructor: QorAction,
 
-        init: function() {
+        init: function () {
             this.bind();
             this.initActions();
         },
 
-        bind: function() {
-            this.$element.on(EVENT_CLICK, $.proxy(this.click, this));
-            this.$wrap.find(CLASS_BULK_EXIT).on(EVENT_CLICK, $.proxy(this.click, this));
+        bind: function () {
+            this.$element.on(EVENT_CLICK, this.click.bind(this));
+            this.$wrap.find(CLASS_BULK_EXIT).on(EVENT_CLICK, this.click.bind(this));
             $(document)
-                .on(EVENT_CLICK, '.qor-table--bulking tr', this.click)
-                .on(EVENT_CLICK, ACTION_LINK, this.actionLink);
+                .on(EVENT_CLICK, '.qor-table--bulking tr', this.click.bind(this))
+                .on(EVENT_CLICK, ACTION_LINK, this.actionLink.bind(this));
         },
 
-        unbind: function() {
+        unbind: function () {
             this.$element.off(EVENT_CLICK, this.click);
 
             $(document)
@@ -78,7 +78,7 @@
                 .off(EVENT_CLICK, ACTION_LINK, this.actionLink);
         },
 
-        initActions: function() {
+        initActions: function () {
             this.tables = $(QOR_TABLE).find('table').length;
 
             if (!this.tables) {
@@ -89,14 +89,14 @@
             }
         },
 
-        collectFormData: function() {
+        collectFormData: function () {
             let checkedInputs = $(QOR_TABLE_BULK).find('.mdl-checkbox__input:checked'),
                 formData = [],
                 normalFormData = [],
                 tempObj;
 
             if (checkedInputs.length) {
-                checkedInputs.each(function() {
+                checkedInputs.each(function () {
                     let id = $(this)
                         .closest('tr')
                         .data('primary-key');
@@ -118,14 +118,14 @@
             return this.ajaxForm;
         },
 
-        actionLink: function() {
+        actionLink: function () {
             // if not in index page
             if (!$(QOR_TABLE).find('table').length) {
                 return false;
             }
         },
 
-        actionSubmit: function($action) {
+        actionSubmit: function ($action) {
             let $target = $($action);
             this.$actionButton = $target;
             if ($target.data().method) {
@@ -138,7 +138,7 @@
             }
         },
 
-        click: function(e) {
+        click: function (e) {
             let $target = $(e.target),
                 $pageHeader = $('.qor-page > .qor-page__header'),
                 $pageBody = $('.qor-page > .qor-page__body'),
@@ -147,10 +147,7 @@
             this.$actionButton = $target;
 
             if ($target.data().ajaxForm) {
-                this.collectFormData();
-                this.ajaxForm.properties = $target.data();
-                this.submit();
-                return false;
+                return;
             }
 
             if ($target.is('.qor-action--bulk')) {
@@ -209,7 +206,7 @@
                     if (slideroutActionForm.length && hasPopoverForm) {
                         if (isChecked && !$alreadyHaveValue.length) {
                             slideroutActionForm.prepend(
-                                '<input class="js-primary-value" type="hidden" name="primary_values[]" value="' + primaryValue + '" />'
+                                '<input class="js-primary-value" type="hidden" name=":pk" value="' + primaryValue + '" />'
                             );
                         }
 
@@ -223,13 +220,15 @@
             }
         },
 
-        renderFlashMessage: function(data) {
-            let flashMessageTmpl = QorAction.FLASHMESSAGETMPL;
+        renderFlashMessage: function (data) {
+            let flashMessageTmpl = QorAction.FLASHMESSAGETMPL,
+                msg;
             Mustache.parse(flashMessageTmpl);
-            return Mustache.render(flashMessageTmpl, data);
+            msg = Mustache.render(flashMessageTmpl, data)
+            return msg;
         },
 
-        submit: function() {
+        submit: function () {
             let _this = this,
                 $parent,
                 $element = this.$element,
@@ -242,7 +241,9 @@
                 isInSlideout = $actionButton.closest(QOR_SLIDEOUT).length,
                 isOne = properties.one,
                 needDisableButtons = $element && !isInSlideout,
-                headers = {};
+                headers = {
+                    'X-Error-Body': 'true'
+                };
 
             if (properties.disableSuccessRedirection) {
                 headers['X-Disabled-Success-Redirection'] = 'true';
@@ -261,9 +262,13 @@
             }
 
             if (properties.confirm && properties.ajaxForm && !properties.fromIndex) {
-                QOR.qorConfirm(properties, function(confirm) {
+                QOR.qorConfirm(properties, function (confirm) {
                     if (confirm) {
-                        let success = function(data, status, response) {
+                        let success = function (data, status, response) {
+                            if (properties.reloadDisabled) {
+                                return
+                            }
+
                             // TODO: self reload if in resource object page (check slideout)
 
                             let xLocation = response.getResponseHeader('X-Location');
@@ -291,9 +296,13 @@
                             // TODO: process JSON data type {message?}
                             //dataType: properties.datatype,
                             headers: headers,
-                            success:success})
+                            success: success,
+                            error: function (res) {
+                                QOR.showDialog({level: 'error', ok: true}, res.responseText)
+                            }
+                        })
                     } else {
-                        return;
+
                     }
                 });
             } else {
@@ -302,9 +311,9 @@
                 }
 
                 if (properties.targetWindow) {
-                    let formS = '<form action="'+url+'" method="POST" target="_blank">';
-                    this.ajaxForm.formData.forEach(function(el) {
-                        formS += '<input type="hidden" name="'+el.name+'" value="'+el.value+'">'
+                    let formS = '<form action="' + url + '" method="POST" target="_blank">';
+                    this.ajaxForm.formData.forEach(function (el) {
+                        formS += '<input type="hidden" name="' + el.name + '" value="' + el.value + '">'
                     })
                     formS += "</form>";
                     let $form = $(formS);
@@ -319,14 +328,22 @@
                     data: ajaxForm.formData,
                     dataType: properties.datatype,
                     headers: headers,
-                    beforeSend: function() {
+                    beforeSend: function () {
                         if (undoUrl) {
                             $actionButton.prop('disabled', true);
                         } else if (needDisableButtons) {
                             _this.switchButtons($element, 1);
                         }
                     },
-                    success: function(data, status, response) {
+                    success: function (data, status, response) {
+                        if (properties.readOnly) {
+                            let title = this.$actionButton.text();
+                            $('body').qorBottomSheets('renderResponse', data, {url: url, title: title});
+                            return
+                        }
+                        if (properties.reloadDisabled) {
+                            return
+                        }
                         let xLocation = response.getResponseHeader('X-Location');
 
                         if (xLocation) {
@@ -346,7 +363,7 @@
                             disposition = response.getResponseHeader('Content-Disposition');
 
                         if (disposition && disposition.indexOf('attachment') !== -1) {
-                            var fileNameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
+                            let fileNameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
                                 matches = fileNameRegex.exec(disposition),
                                 fileData = {},
                                 fileName = '';
@@ -390,76 +407,90 @@
                             // properties.fromIndex || properties.fromMenu
                             window.location.reload();
                         }
-                    },
-                    error: function(xhr, textStatus, errorThrown) {
+                    }.bind(this),
+                    error: function (xhr, textStatus, errorThrown) {
                         if (undoUrl) {
                             $actionButton.prop('disabled', false);
                         } else if (needDisableButtons) {
                             _this.switchButtons($element);
                         }
                         QOR.alert([textStatus, errorThrown].join(': '));
-                    }
+                    }.bind(this)
                 });
             }
         },
 
-        switchButtons: function($element, disbale) {
-            let needDisbale = disbale ? true : false;
+        switchButtons: function ($element, disable) {
+            let needDisbale = !!disable;
             $element.find(ACTION_BUTTON).prop('disabled', needDisbale);
         },
 
-        destroy: function() {
+        destroy: function () {
             this.unbind();
             this.$element.removeData(NAMESPACE);
         },
 
         // Helper
-        removeTableCheckbox: function() {
-            $('.qor-page__body .mdl-data-table__select').each(function(i, e) {
-                $(e)
-                    .parents('td')
-                    .remove();
-            });
-            $('.qor-page__body .mdl-data-table__select').each(function(i, e) {
-                $(e)
-                    .parents('th')
-                    .remove();
-            });
+        removeTableCheckbox: function () {
+            $('.qor-page__body .mdl-data-table__select')
+                .each(function (i, e) {
+                    $(e)
+                        .parents('td')
+                        .remove();
+                })
+                .each(function (i, e) {
+                    $(e)
+                        .parents('th')
+                        .remove();
+                });
             $('.qor-table-container tr.is-selected').removeClass('is-selected');
             $('.qor-page__body table.mdl-data-table--selectable').removeClass('mdl-data-table--selectable');
             $('.qor-page__body tr.is-selected').removeClass('is-selected');
         },
 
-        appendTableCheckbox: function() {
+        appendTableCheckbox: function () {
             // Only value change and the table isn't selectable will add checkboxes
-            $('.qor-page__body .mdl-data-table__select').each(function(i, e) {
-                $(e)
-                    .parents('td')
-                    .remove();
-            });
-            $('.qor-page__body .mdl-data-table__select').each(function(i, e) {
-                $(e)
-                    .parents('th')
-                    .remove();
-            });
+            $('.qor-page__body .mdl-data-table__select')
+                .each(function (i, e) {
+                    $(e)
+                        .parents('td')
+                        .remove();
+                })
+                .each(function (i, e) {
+                    $(e)
+                        .parents('th')
+                        .remove();
+                });
             $('.qor-table-container tr.is-selected').removeClass('is-selected');
-            $('.qor-page__body table').addClass('mdl-data-table--selectable');
+
+            let $tb = $('.qor-page__body table:eq(0)').addClass('mdl-data-table--selectable'),
+                headRows = $tb.find('thead tr').length;
 
             // init google material
-            new window.MaterialDataTable($('.qor-page__body table').get(0));
-            $('thead.is-hidden tr th:not(".mdl-data-table__cell--non-numeric")')
-                .clone()
-                .prependTo($('thead:not(".is-hidden") tr'));
+            new window.MaterialDataTable($tb.get(0));
 
-            let $fixedHeadCheckBox = $('thead:not(".is-fixed") .mdl-checkbox__input'),
-                isMediaLibrary = $('.qor-table--medialibrary').length,
+            $tb.find('thead :checkbox').closest('th').attr('rowspan', headRows);
+
+            let $selection = $tb.find('thead.is-hidden tr:first th:first').remove();
+
+            $selection.clone().attr('rowspan', headRows).prependTo($tb.find('thead.is-hidden tr:last'));
+            $selection.prependTo($tb.find('thead:not(.is-hidden) tr:last'));
+            /*
+            $('<th />').prependTo($('thead:not(".is-hidden") tr,thead.is-hidden tr:not(:last)'));
+
+            $('thead.is-hidden tr').each(function (){
+                $('<th />').insertAfter($(this).find('th:first'));
+            })*/
+
+            let $fixedHeadCheckBox = $tb.find(`thead:not(.is-fixed) .mdl-checkbox__input`),
+                isMediaLibrary = $tb.is('.qor-table--medialibrary'),
                 hasPopoverForm = $('body').hasClass('qor-bottomsheets-open') || $('body').hasClass('qor-slideout-open');
 
             isMediaLibrary && ($fixedHeadCheckBox = $('thead .mdl-checkbox__input'));
 
-            $fixedHeadCheckBox.on('click', function() {
+            $fixedHeadCheckBox.on('click', function () {
                 if (!isMediaLibrary) {
-                    $('thead.is-fixed tr th')
+                    $($tb, 'thead.is-fixed tr th')
                         .eq(0)
                         .find('label')
                         .click();
@@ -473,15 +504,21 @@
 
                 if (slideroutActionForm.length && hasPopoverForm) {
                     if ($(this).is(':checked')) {
-                        let allPrimaryValues = $('.qor-table--bulking tbody tr');
-                        allPrimaryValues.each(function() {
+                        let allPrimaryValues = $($tb, 'tbody tr'),
+                            pkValues = [];
+
+                        allPrimaryValues.each(function () {
                             let primaryValue = $(this).data('primary-key');
                             if (primaryValue) {
-                                slideroutActionForm.prepend(
-                                    '<input class="js-primary-value" type="hidden" name="primary_values[]" value="' + primaryValue + '" />'
-                                );
+                                pkValues[pkValues.length] = primaryValue
                             }
                         });
+
+                        if (pkValues.length > 0) {
+                            slideroutActionForm.prepend(
+                                '<input class="js-primary-value" type="hidden" name=":pk" value="' + pkValues.join(":") + '" />'
+                            );
+                        }
                     } else {
                         slideroutActionFormPrimaryValues.remove();
                     }
@@ -505,26 +542,31 @@
 
     QorAction.DEFAULTS = {};
 
-    $.fn.qorSliderAfterShow.qorActionInit = function(url, html) {
+    $.fn.qorSliderAfterShow.qorActionInit = function (url, html) {
         let hasAction = $(html).find('[data-toggle="qor-action-slideout"]').length,
             $actionForm = $('[data-toggle="qor-action-slideout"]').find('form'),
             $checkedItem = $('.qor-page__body .mdl-checkbox__input:checked');
 
         if (hasAction && $checkedItem.length) {
+            let pkValues = [];
             // insert checked value into sliderout form
-            $checkedItem.each(function(i, e) {
+            $checkedItem.each(function (i, e) {
                 let id = $(e)
                     .parents('tbody tr')
                     .data('primary-key');
                 if (id) {
-                    $actionForm.prepend('<input class="js-primary-value" type="hidden" name="primary_values[]" value="' + id + '" />');
+                    pkValues[pkValues.length] = id;
                 }
             });
+            if (pkValues.length) {
+                $actionForm.prepend('<input class="js-primary-value" type="hidden" name=":pk" value="' + pkValues.join(":") + '" />');
+            }
+
         }
     };
 
-    QorAction.plugin = function(options) {
-        return this.each(function() {
+    QorAction.plugin = function (options) {
+        return this.each(function () {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 fn;
@@ -539,18 +581,18 @@
         });
     };
 
-    $(function() {
+    $(function () {
         let options = {},
             selector = '[data-toggle="qor.action.bulk"]';
 
         $(document)
-            .on(EVENT_DISABLE, function(e) {
+            .on(EVENT_DISABLE, function (e) {
                 QorAction.plugin.call($(selector, e.target), 'destroy');
             })
-            .on(EVENT_ENABLE, function(e) {
+            .on(EVENT_ENABLE, function (e) {
                 QorAction.plugin.call($(selector, e.target), options);
             })
-            .on(EVENT_CLICK, MENU_ACTIONS, function() {
+            .on(EVENT_CLICK, MENU_ACTIONS, function () {
                 new QorAction().actionSubmit(this);
                 return false;
             })

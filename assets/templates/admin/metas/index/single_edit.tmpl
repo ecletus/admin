@@ -1,7 +1,7 @@
-{{$value := (raw_value_of .ResourceValue .Meta)}}
-{{$url := url_for $value}}
+{{$value := .MetaValue.Raw}}
+{{$url := (.Meta.URLFor (admin_context) $value)}}
 {{if (and $url (defined_resource_show_page .Meta.Resource))}}
-  <a data-url="{{$url}}" href="{{$url}}">{{stringify $value}}</a>
+  <a data-url="{{$url}}" href="{{$url}}">{{stringify $value (make_opts "admin:table_cell" true)}}</a>
 {{else}}
-  {{stringify $value}}
+  {{.MetaValue.Value}}
 {{end}}

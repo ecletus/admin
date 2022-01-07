@@ -9,6 +9,7 @@ QOR.messages = jQuery.extend(true, QOR.messages, {
     },
     common: {
         ajaxError: 'Houve um erro de servidor. Por favor, tente novamente',
+        recordNotFoundError: 'Registro não encontrado',
         confirm: {
             ok: "OK",
             cancel: "Cancelar"
@@ -49,4 +50,7 @@ QOR.messages = jQuery.extend(true, QOR.messages, {
             cancel: 'Cancelar'
         }
     },
+    replicator: {
+        undoDelete: 'Desfazer exclusão'
+    }
 });

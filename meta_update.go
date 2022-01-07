@@ -14,6 +14,10 @@ import (
 )
 
 func (this *Meta) updateMeta() {
+	if this.Disabled {
+		return
+	}
+
 	if this.Meta == nil {
 		this.Meta = &resource.Meta{
 			MetaName:         &resource.MetaName{this.Name, this.EncodedName},
@@ -28,6 +32,8 @@ func (this *Meta) updateMeta() {
 			Config:           this.Config,
 			Required:         this.Required,
 			Icon:             this.Icon,
+			Typ:              this.Typ,
+			DefaultDeny:      this.DefaultDeny,
 		}
 	} else if this.ProxyTo == nil {
 		// proxy does not updates resource Meta
@@ -45,6 +51,11 @@ func (this *Meta) updateMeta() {
 		this.Meta.ContextResourcer = this.ContextResourcer
 		this.Meta.Required = this.Required
 		this.Meta.Icon = this.Icon
+		this.Meta.DefaultDeny = this.DefaultDeny
+
+		if this.Typ != nil {
+			this.Meta.Typ = this.Typ
+		}
 	} else {
 		this.Meta.Setter = this.Setter
 		this.Meta.Valuer = this.Valuer
@@ -67,12 +78,27 @@ func (this *Meta) updateMeta() {
 	}
 
 	this.PreInitialize()
-	this.tagsConfigure()
+
+	if this.Typ == nil {
+		this.Typ = this.Meta.Typ
+	}
 
 	if this.FieldStruct != nil {
+		if this.FieldStruct.IsReadOnly {
+			this.ReadOnly = true
+		}
+	}
+
+	this.tagsConfigure()
+
+	if this.FieldStruct != nil && !this.Virtual {
 		if injector, ok := reflect.New(indirectType(this.Typ)).Interface().(resource.ConfigureMetaBeforeInitializeInterface); ok {
 			injector.ConfigureQorMetaBeforeInitialize(this)
 		}
+	}
+
+	for _, cb := range metaPreConfigorMaps {
+		cb(this)
 	}
 
 	if this.Virtual {
@@ -88,7 +114,11 @@ func (this *Meta) updateMeta() {
 		}
 	}
 
-	this.Initialize()
+	this.Initialize(this.Virtual)
+
+	if this.Meta.Setter == nil && this.FieldStruct != nil && this.FieldStruct.Link != nil {
+		this.ReadOnly = true
+	}
 
 	if this.Label != "" && this.DefaultLabel == "" && !strings.ContainsRune(this.Label, '.') {
 		this.DefaultLabel = this.Label
@@ -103,7 +133,7 @@ func (this *Meta) updateMeta() {
 		}
 
 		if this.FieldStruct != nil {
-			if reflect.PtrTo(typ).Implements(reflect.TypeOf((*sql.Scanner)(nil)).Elem()) {
+			if !aorm.CanFieldType(typ) && reflect.PtrTo(typ).Implements(reflect.TypeOf((*sql.Scanner)(nil)).Elem()) {
 				if typ.Kind() == reflect.Struct {
 					typ = reflect.Indirect(reflect.New(typ)).Field(0).Type()
 				}
@@ -111,39 +141,57 @@ func (this *Meta) updateMeta() {
 
 			// Set Meta Type
 			if this.Type == "" {
-				if relationship := this.FieldStruct.Relationship; relationship != nil {
-					if relationship.Kind == "has_one" {
-						this.Type = "single_edit"
-					} else if relationship.Kind == "has_many" {
-						this.Type = "collection_edit"
-					} else if relationship.Kind == "belongs_to" {
-						this.Type = "select_one"
-					} else if relationship.Kind == "many_to_many" {
-						this.Type = "select_many"
+				switch t := reflect.New(this.FieldStruct.Struct.Type).Interface().(type) {
+				case MetaTyper:
+					this.Type = t.AdminMetaType(this)
+				case MetaSingleTyper:
+					this.Type = t.AdminMetaType()
+				case MetaRecordTyper:
+					this.TypeHandler = func(meta *Meta, record interface{}, context *Context) string {
+						v := reflect.ValueOf(record).Elem().FieldByIndex(this.FieldStruct.StructIndex)
+						if v.Kind() != reflect.Ptr && v.CanAddr() {
+							v = v.Addr()
+						}
+						return v.Interface().(MetaRecordTyper).AdminMetaType(meta, context)
 					}
-				} else if _, ok := metaTypeConfigorMaps[indirectType(typ)]; !ok {
-					switch typ.Kind() {
-					default:
-						if this.FieldStruct.TagSettings["TYPE"] == "date" {
-							this.Type = "date"
-						} else if regexp.MustCompile(`^(.*)?(u)?(int)(\d+)?`).MatchString(typ.Kind().String()) {
-							this.Type = "number"
-						} else if regexp.MustCompile(`^(.*)?(float)(\d+)?`).MatchString(typ.Kind().String()) {
-							this.Type = "float"
-						} else if _, ok := reflect.New(typ).Interface().(*time.Time); ok {
-							this.Type = "datetime"
-						} else {
-							if typ.Kind() == reflect.Struct {
-								if !this.Tags.Flag("SINGLE_EDIT_DISABLED") {
-									this.Type = "single_edit"
-								}
-							} else if typ.Kind() == reflect.Slice {
-								refelectType := typ.Elem()
-								for refelectType.Kind() == reflect.Ptr {
-									refelectType = refelectType.Elem()
-								}
-								if refelectType.Kind() == reflect.Struct {
-									this.Type = "collection_edit"
+				default:
+					if this.FieldStruct.IsEmbedded {
+						this.Type = "single_edit"
+					} else if relationship := this.FieldStruct.Relationship; relationship != nil {
+						switch relationship.Kind {
+						case aorm.HAS_ONE:
+							this.Type = "single_edit"
+						case aorm.HAS_MANY:
+							this.Type = "collection_edit"
+						case aorm.BELONGS_TO:
+							this.Type = "select_one"
+						case aorm.M2M:
+							this.Type = "select_many"
+						}
+					} else if _, ok := metaTypeConfigorMaps[indirectType(typ)]; !ok {
+						switch typ.Kind() {
+						default:
+							if this.FieldStruct.TagSettings["TYPE"] == "date" {
+								this.Type = "date"
+							} else if regexp.MustCompile(`^(.*)?(u)?(int)(\d+)?`).MatchString(typ.Kind().String()) {
+								this.Type = "number"
+							} else if regexp.MustCompile(`^(.*)?(float)(\d+)?`).MatchString(typ.Kind().String()) {
+								this.Type = "float"
+							} else if _, ok := reflect.New(typ).Interface().(*time.Time); ok {
+								this.Type = "datetime"
+							} else {
+								if typ.Kind() == reflect.Struct {
+									if !aorm.CanFieldType(typ) && !this.Tags.Flag("SINGLE_EDIT_DISABLED") {
+										this.Type = "single_edit"
+									}
+								} else if typ.Kind() == reflect.Slice {
+									refelectType := typ.Elem()
+									for refelectType.Kind() == reflect.Ptr {
+										refelectType = refelectType.Elem()
+									}
+									if refelectType.Kind() == reflect.Struct {
+										this.Type = "collection_edit"
+									}
 								}
 							}
 						}
@@ -151,7 +199,7 @@ func (this *Meta) updateMeta() {
 				}
 			} else {
 				if relationship := this.FieldStruct.Relationship; relationship != nil {
-					if (relationship.Kind == "has_one" || relationship.Kind == "has_many") && this.Meta.Setter == nil && (this.Type == "select_one" || this.Type == "select_many") {
+					if relationship.Kind.Is(aorm.HAS_MANY, aorm.HAS_ONE) && this.Meta.Setter == nil && (this.Type == "select_one" || this.Type == "select_many") {
 						this.SetSetter(func(record interface{}, metaValue *resource.MetaValue, context *core.Context) error {
 							reflectValue := reflect.Indirect(reflect.ValueOf(record))
 							field := reflectValue.FieldByName(this.FieldName)
@@ -178,7 +226,7 @@ func (this *Meta) updateMeta() {
 
 							if !aorm.ZeroIdOf(record) {
 								// 2020-03-31: nao havia tratamento de erro
-								if err := context.DB().Model(record).Association(this.FieldName).Replace(field.Interface()).Error(); err != nil {
+								if err := context.DB().Model(record).Association(this.FieldName).Replace(field.Interface()).Error; err != nil {
 									panic(err)
 								}
 								field.Set(reflect.Zero(field.Type()))
@@ -202,22 +250,37 @@ func (this *Meta) updateMeta() {
 						res *Resource
 						ok  bool
 					)
-
-					if res, ok = this.BaseResource.Resources[this.FieldStruct.Name]; !ok {
-						if res, ok = this.BaseResource.GetAdmin().ResourcesByUID[utils.TypeId(typ)]; !ok {
-							if res = this.BaseResource.FindResource(this.FieldStruct.Struct.Type); res == nil {
-								if this.Tags.Managed() {
-									if res = this.BaseResource.AddResource(&SubConfig{FieldName: this.FieldStruct.Name}, result); res == nil {
+					if modes := this.Tags.Managed(); modes != nil {
+						cfg := &Config{}
+						if len(modes) != 0 {
+							for _, mode := range modes {
+								switch mode {
+								case "RO":
+									cfg.Controller = &struct {
+										IndexSearchController
+										ReadController
+									}{}
+								}
+							}
+						}
+						res = this.BaseResource.AddResourceFieldConfig(this.FieldStruct.Name, result, cfg, true)
+					} else if this.Meta.FieldStruct.IsChild || this.Meta.FieldStruct.IsEmbedded {
+						res = this.BaseResource.NewResource(&SubConfig{FieldName: this.FieldStruct.Name}, result)
+						res.metaEmbedded = true
+						res.BaseResource = this.Meta.BaseResource.(*Resource)
+					} else {
+						if res, ok = this.BaseResource.Resources[this.FieldStruct.Name]; !ok {
+							if res, ok = this.BaseResource.GetAdmin().ResourcesByUID[utils.TypeId(typ)]; !ok {
+								if res = this.BaseResource.FindResource(this.FieldStruct.Struct.Type); res == nil {
+									if res = this.BaseResource.NewResource(&SubConfig{FieldName: this.FieldStruct.Name}, result); res == nil {
 										goto a
 									}
-								} else if res = this.BaseResource.NewResource(&SubConfig{FieldName: this.FieldStruct.Name}, result); res == nil {
-									goto a
+									res.metaEmbedded = true
 								}
 							}
 						}
 					}
 					this.Resource = res
-					this.Meta.Permission = this.Meta.Permission.Concat(res.Config.Permission)
 				}
 			} else if this.Config == nil && this.Resource.mounted {
 				switch this.Type {
@@ -228,11 +291,7 @@ func (this *Meta) updateMeta() {
 				}
 			}
 
-			if this.Resource != nil && this.Resource != this.BaseResource {
-				permission := this.Resource.Permission.Concat(this.Meta.Permission)
-				this.Meta.Resource = this.Resource
-				this.SetPermission(permission)
-			}
+			this.Meta.Resource = this.Resource
 		}
 	}
 
@@ -296,6 +355,10 @@ a:
 
 	if this.Resource != nil {
 		this.Resource.AddForeignMeta(this)
+	}
+
+	for _, f := range this.updateCallbacks {
+		f(this)
 	}
 
 	func(f ...func()) {

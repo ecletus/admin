@@ -1,0 +1,17 @@
+<advanced-filter-group class="clearfix">
+    <label class="qor-field__label">{{.Label}}</label>
+
+    {{ $start := .Context.Request.URL.Query.Get (print .InputNamePrefix ".Start") }}
+    {{ $end := .Context.Request.URL.Query.Get (print .InputNamePrefix ".End") }}
+    {{ $format := .Filter.Config.FormatC .Context.Context }}
+    <div class="qor-field qor-field__edit qor-field__range qor-field__date_range">
+          <span class="mdl-textfield qor-field__range-from">
+                <input class="mdl-textfield__input" type="date" name="{{.InputNamePrefix}}.Start" value="{{$start}}"
+                       style="width: 120px">
+            </span> -
+        <span class="mdl-textfield qor-field__range-to">
+            <input class="mdl-textfield__input" type="date" {{if $start}}min="{{$start}}"{{end}}
+                       name="{{.InputNamePrefix}}.End" value="{{$end}}" style="width: 120px">
+          </span>
+    </div>
+</advanced-filter-group>

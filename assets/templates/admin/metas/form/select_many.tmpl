@@ -116,7 +116,9 @@
           {{t "github_com:ecletus:admin.form.add_items"}}
         </a>
 
-        <select class="qor-field__input qor-field__selectmany-input hidden" id="{{.InputId}}" name="{{.InputName}}" multiple {{if not (has_update_permission .Meta)}}disabled{{end}}>
+        <select class="qor-field__input qor-field__selectmany-input hidden" id="{{.InputId}}" name="{{.InputName}}" multiple
+                {{if not (has_update_permission .Meta)}}disabled{{end}}
+                {{if .Meta.Config.AllowBlank}}data-allow-clear="true"{{end}}>
           {{range $value := $current_values}}
             <option value="{{primary_key_of $value}}" selected>{{$meta.Config.Stringify $context $value}}</option>
           {{end}}
@@ -127,6 +129,7 @@
           data-placeholder="{{meta_placeholder .Meta .Context (ts "github_com:ecletus:admin.form.select_some_options")}}"
           name="{{.InputName}}"
           multiple
+          {{if .Meta.Config.AllowBlank}}data-allow-clear="true"{{end}}
           {{if not (has_update_permission .Meta)}}disabled{{end}}
           {{if .Meta.Config.IsRemote}}
             data-remote-data="true" data-ajax-url="{{url_for .Meta.Config}}"
@@ -146,6 +149,9 @@
             {{end}}
           {{end}}
         </select>
+      {{end}}
+      {{if .Meta.Config.AllowBlank}}
+        <input type="hidden" name="{{.InputName}}" />
       {{end}}
     </div>
   </div>

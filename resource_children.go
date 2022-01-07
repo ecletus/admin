@@ -18,6 +18,25 @@ func (this *Resource) NewResource(cfg *SubConfig, value interface{}, config ...*
 	return this.Admin.NewResource(value, config[0])
 }
 
+// NewResource initialize a new ecletus resource, won't add it to admin, just initialize it
+func (this *Resource) NewActionResource(value interface{}, config ...*Config) *Resource {
+	var (
+		cfg  *Config
+		name = indirectType(reflect.TypeOf(value)).Name()
+	)
+	for _, cfg = range config {
+	}
+	if cfg == nil {
+		cfg = &Config{}
+	}
+	cfg.UID = this.UID + ":actions:" + name
+	cfg.ID = "Actions." + name
+	cfg.PrependSetup(func(res *Resource) {
+		res.I18nPrefix = this.I18nPrefix + ".action_resources." + name
+	})
+	return this.Admin.NewResource(value, cfg)
+}
+
 // AddResource register sub-resource with optional config into admin
 func (this *Resource) AddResource(cfg *SubConfig, value interface{}, config ...*Config) *Resource {
 	cfg.Parent = this
@@ -39,7 +58,7 @@ func (this *Resource) AddResourceConfig(value interface{}, cfg *Config) *Resourc
 }
 
 // AddResourceFieldConfig register sub-resource from field type with config into admin. Value is optional.
-func (this *Resource) AddResourceFieldConfig(fieldName string, value interface{}, cfg *Config) *Resource {
+func (this *Resource) AddResourceFieldConfig(fieldName string, value interface{}, cfg *Config, addMetaDisabled ...bool) (res *Resource) {
 	if value == nil {
 		field, _ := utils.IndirectType(this.Value).FieldByName(fieldName)
 		fieldType := utils.IndirectType(field.Type)
@@ -52,15 +71,22 @@ func (this *Resource) AddResourceFieldConfig(fieldName string, value interface{}
 	}
 	setup := cfg.Setup
 	cfg.Setup = func(child *Resource) {
+		if cfg.Permission == nil {
+			child.Permissioner(this)
+		}
 		this.SetMeta(&Meta{Name: fieldName, Resource: child})
 		if setup != nil {
 			setup(child)
 		}
 	}
-	defer func() {
-		this.Meta(&Meta{Name: fieldName, Resource: this})
-	}()
-	return this.AddResource(&SubConfig{FieldName: fieldName}, value, cfg)
+	res = this.AddResource(&SubConfig{FieldName: fieldName}, value, cfg)
+	for _, dis := range addMetaDisabled {
+		if dis {
+			return
+		}
+	}
+	this.Meta(&Meta{Name: fieldName, Resource: res})
+	return
 }
 
 // AddResourceField register sub-resource from field type into admin. Value and setup function is optional.

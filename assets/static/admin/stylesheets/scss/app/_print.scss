@@ -7,6 +7,10 @@ a {
     }
 }
 
+html, body {
+    font-size: 12px;
+}
+
 .qor-page__header {
     width: 100% !important;
 }
@@ -38,6 +42,10 @@ a.qor-button--edit{
     }
 }
 
+
+th {
+    background-color: #ddd !important;
+}
 
 .qor-page__header + .qor-page__body {
     padding-top: 5px;
@@ -162,6 +170,12 @@ a.qor-button--edit{
 
     .qor-fieldset {
         padding: 8px;
+        margin-top: 4px;
+        margin-bottom: 4px;
+    }
+
+    .qor-field.collection-edit-tabled > .qor-field__block > .collection-edit-table {
+        margin-bottom: 0;
     }
 
     .qor-field__label {

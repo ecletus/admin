@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ecletus/core"
+	"github.com/ecletus/core/resource"
 	"github.com/moisespsena-go/tracederror"
 	"github.com/moisespsena/template/funcs"
 	"github.com/moisespsena/template/html/template"
@@ -16,10 +18,14 @@ import (
 )
 
 func (this *Context) renderForm(state *template.State, value interface{}, sections []*Section) {
-	if this.MetaStack.Empty() {
-		defer this.MetaStack.Push(&Meta{Name: "QorResource"})()
+	prefix := this.FormOptions.InputPrefix
+	if prefix == "" {
+		prefix = resource.DefaultFormInputPrefix
 	}
-	this.renderSections(state, value, []string{"QorResource"}, state.Writer(), "form", this.Type.Has(SHOW) || this.Type.Has(INDEX), sections...)
+	if this.MetaStack.Empty() {
+		defer this.MetaStack.Push(&Meta{Name: prefix})()
+	}
+	this.renderSections(state, value, []string{prefix}, state.Writer(), "form", this.Type.Has(SHOW) || this.Type.Has(INDEX), sections...)
 }
 
 func (this *Context) renderSections(state *template.State, value interface{}, prefix []string, writer io.Writer, kind string, readOnly bool, sections ...*Section) {
@@ -75,6 +81,31 @@ func (this *Context) renderSections(state *template.State, value interface{}, pr
 				}
 				switch col := col.(type) {
 				case string:
+					switch col {
+					case ":SUBMIT":
+						meta := &Meta{
+							BaseResource: res,
+							Type:         "submit",
+							Meta: &resource.Meta{
+								BaseResource: res,
+								MetaName:     &resource.MetaName{Name: ":SUBMIT"},
+								Valuer: func(record interface{}, context *core.Context) interface{} {
+									if res.Config.SubmitLabel == "" {
+										key := res.Config.SubmitLabelKey
+										if key == "" {
+											key = I18NGROUP + ".form.submit"
+										}
+										return context.Ts(key, "Submit")
+									}
+									return res.Config.SubmitLabel
+								},
+							},
+						}
+						this.renderMeta(state, meta, value, prefix, kind, "", &buf)
+						rendered[col] = true
+						add(&columnsHtml)
+						continue colsLoop
+					}
 					meta := getMeta(col)
 					if meta != nil {
 						if meta.IsEnabled(value, this, meta, readOnly) {
@@ -370,7 +401,7 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 
 		switch index {
 		case -2:
-			defer this.MetaStack.Push(meta)()
+			// defer this.MetaStack.Push(meta)()
 		case -1:
 			defer this.MetaStack.Push(meta, "{{index}}")()
 		default:

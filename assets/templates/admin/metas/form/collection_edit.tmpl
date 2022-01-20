@@ -4,9 +4,11 @@
 {{if .ReadOnly}}
   {{if $current_values}}
     <div class="qor-field collection-edit qor-fieldset-container" {{if $metaConfig.Max}}data-max-item="{{$metaConfig.Max}}" data-max-item-hint="Up to {{$metaConfig.Max}} {{meta_record_label .Meta .Record}}"{{end}}>
-        <label class="qor-field__label" for="{{.InputId}}">
-        {{meta_record_label .Meta .Record}}
-        </label>
+        {{- if not (.Meta.UITags.Flag "LABEL_DISABLED") -}}
+            <label class="qor-field__label" for="{{.InputId}}">
+            {{meta_record_label .Meta .Record}}
+            </label>
+        {{- end -}}
         {{$help := meta_record_help .Meta .Record}}
         {{if $help}}
             <div class="qor-field__help">{{$help}}</div>
@@ -18,7 +20,8 @@
         {{$rec := .Record}}
         {{range $index, $item := $current_values }}
             {{$itemContext := $ctx.CreateChild $meta.Resource $item}}
-            <fieldset class="qor-fieldset">
+            {{- admin_ctx_set $itemContext "section_layout" ($ctx.GetValue (printf "meta:%s:%s" $ctx.MetaStack.AnyIndexPathString "section_layout")) -}}
+            <fieldset data-path="{{printf "meta:%s:%s" $ctx.MetaStack.AnyIndexPathString "section_layout"}}" class="qor-fieldset">
                 {{render_nested_ctx "form" $itemContext "show" $meta $index}}
             </fieldset>
         {{end}}
@@ -57,6 +60,7 @@
     {{if $current_values}}
       {{range $index, $item := $current_values }}
           {{$itemContext := $ctx.CreateChild $meta.Resource $item}}
+          {{- admin_ctx_set $itemContext "section_layout" ($ctx.GetValue (printf "meta:%s:%s" $ctx.MetaStack.AnyIndexPathString "section_layout")) -}}
           {{if $meta.IsReadOnlyItem $ctx $rec .}}
               {{render_nested_ctx "form" $itemContext "show" $meta $index}}
           {{else}}

@@ -224,6 +224,9 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 			"render_text": this.renderText,
 			"render_with": this.renderWith,
 			"render_form": this.renderForm,
+			"render_form_ctx": func(state *template.State, ctx *Context, sections []*Section) {
+				ctx.renderForm(state, ctx.Result, sections)
+			},
 			"render_meta": func(state *template.State, value interface{}, meta *Meta, types ...string) {
 				renderMeta(state, this, value, meta, types...)
 			},
@@ -745,6 +748,29 @@ func (this *Context) FuncMaps() []funcs.FuncMap {
 					return t.DeletedMap()
 				}
 				return make(map[string]bool, 0)
+			},
+
+			"admin_ctx_set": func(ctx *Context, name string, value ...interface{}) {
+				switch name {
+				case "type":
+					ctx.Type = 0
+					for _, t := range value {
+						if t == nil {
+							break
+						}
+
+						switch t := t.(type) {
+						case ContextType:
+							ctx.Type |= t
+						case string:
+							ctx.Type.ParseMerge(t)
+						}
+					}
+				case "section_layout":
+					if value[0] != nil {
+						ctx.SectionLayout = value[0].(string)
+					}
+				}
 			},
 		},
 		this.Admin.funcMaps,

@@ -22,7 +22,7 @@
         <a href="{{join_url (url_for .Result .Resource) "edit"}}" class="mdl-button mdl-button--fab mdl-button--primary mdl-js-button mdl-js-ripple-effect qor-button--edit" data-url="{{join_url (url_for .Result .Resource) "edit"}}">
           <i class="material-icons">edit</i>
         </a>
-        <form class="qor-form" action="{{url_for .Result .Resource}}" method="POST" enctype="multipart/form-data">
+        <form class="qor-form qor-form__show" action="{{url_for .Result .Resource}}" method="POST" enctype="multipart/form-data">
           <input name="_method" value="PUT" type="hidden">
           {{record_frame .Resource .Result "show/form/start"}}
           {{render_form .Result (show_sections_ctx .)}}

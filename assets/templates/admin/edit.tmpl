@@ -15,7 +15,7 @@
     {{- record_frame .Resource .Result "common/start" -}}
     {{- record_frame .Resource .Result "edit/start" -}}
     {{- $cfg := update_config -}}
-    <form class="qor-form" action="{{$cfg.FormAction}}" data-id="{{.Context.ResourceID}}" method="POST" enctype="multipart/form-data" data-async="true">
+    <form class="qor-form qor-form__edit" action="{{$cfg.FormAction}}" data-id="{{.Context.ResourceID}}" method="POST" enctype="multipart/form-data" data-async="true">
       <input name="_method" value="PUT" type="hidden">
       {{- record_frame .Resource .Result "edit/form/start" -}}
       <div class="qor-alert qor-alert--form-required-message" role="alert">(<strong><i class="required-asterisk">*</i></strong>) {{t "github_com:ecletus:admin.form.required_fields"}}</div>

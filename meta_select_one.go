@@ -483,9 +483,7 @@ func (cfg *SelectOneConfig) ConfigureQorMeta(metaor resource.Metaor) {
 									return (&FormattedValue{Record: record, Raw: item[0], Value: item[1]}).SetNonZero()
 								}
 							}
-							return &FormattedValue{Record: record, Raw: value, Value: s, IsZeroF: func(record, value interface{}) bool {
-								return value.(string) == ""
-							}}
+							return &FormattedValue{Record: record, Raw: value, Value: s, Zero: s == ""}
 						}
 					}
 					return nil

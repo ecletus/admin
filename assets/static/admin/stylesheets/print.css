@@ -9,6 +9,10 @@ a[href]::after {
   display: none;
 }
 
+html, body {
+  font-size: 12px;
+}
+
 .qor-page__header {
   width: 100% !important;
 }
@@ -37,6 +41,10 @@ a.qor-button--edit {
 
 .qor-actions .mdl-chip {
   border: 1px solid #666;
+}
+
+th {
+  background-color: #ddd !important;
 }
 
 .qor-page__header + .qor-page__body {
@@ -147,6 +155,11 @@ a.qor-button--edit {
 }
 .qor-form-container .qor-fieldset {
   padding: 8px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+.qor-form-container .qor-field.collection-edit-tabled > .qor-field__block > .collection-edit-table {
+  margin-bottom: 0;
 }
 .qor-form-container .qor-field__label {
   position: inherit; 

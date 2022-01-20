@@ -7234,13 +7234,13 @@ a:focus, a:hover {
   margin-bottom: 0;
 }
 
-.qor-page__show .qor-field__show {
+.qor-form__show .qor-field__show {
   display: block;
 }
 
-.qor-page__show .qor-field__edit,
-.qor-page__show .qor-fieldset__delete,
-.qor-page__show .qor-fieldset__add {
+.qor-form__show .qor-field__edit,
+.qor-form__show .qor-fieldset__delete,
+.qor-form__show .qor-fieldset__add {
   display: none;
 }
 
@@ -7249,19 +7249,15 @@ a:focus, a:hover {
   cursor: pointer;
 }
 
-.qor-page__edit .qor-field__show {
-  display: none;
-}
-
-.qor-page__edit .qor-field__edit,
-.qor-page__edit .qor-fieldset__delete {
+.qor-form__edit .qor-field__edit,
+.qor-form__edit .qor-fieldset__delete {
   display: block;
 }
 
-.qor-page__edit .qor-fieldset__add {
+.qor-form__edit .qor-fieldset__add {
   display: inline-block;
 }
-.qor-page__edit .qor-fieldset__add.mdl-menu__item {
+.qor-form__edit .qor-fieldset__add.mdl-menu__item {
   display: block;
 }
 
@@ -7436,7 +7432,7 @@ button.qor-fieldset__add:hover, button.qor-fieldset__add:active, button.qor-fiel
   height: auto;
 }
 .qor-field.collection-edit-tabled .collection-edit-table th, .qor-field.collection-edit-tabled .collection-edit-table td {
-  padding: 5px;
+  padding: 2px;
   font-size: 12px;
 }
 .qor-field.collection-edit-tabled .collection-edit-table th {
@@ -9580,6 +9576,9 @@ pre {
   a[href]::after {
     display: none;
   }
+  html, body {
+    font-size: 12px;
+  }
   .qor-page__header {
     width: 100% !important;
   }
@@ -9603,6 +9602,9 @@ pre {
   }
   .qor-actions .mdl-chip {
     border: 1px solid #666;
+  }
+  th {
+    background-color: #ddd !important;
   }
   .qor-page__header + .qor-page__body {
     padding-top: 5px;
@@ -9703,6 +9705,11 @@ pre {
   }
   .qor-form-container .qor-fieldset {
     padding: 8px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+  .qor-form-container .qor-field.collection-edit-tabled > .qor-field__block > .collection-edit-table {
+    margin-bottom: 0;
   }
   .qor-form-container .qor-field__label {
     position: inherit; 

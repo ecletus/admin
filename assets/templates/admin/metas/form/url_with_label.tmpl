@@ -1,0 +1,39 @@
+<div class="qor-field qor-field-url">
+    {{if .ReadOnly}}
+      {{$label := .MetaValue.Raw.Label}}
+      {{if or (not $label) (.Meta.Config.ReadonlyLabelEnabled)}}
+          <label class="qor-field__label">
+            {{meta_record_label .Meta .Record}}
+          </label>
+      {{end}}
+
+      <div class="qor-field__value">
+        {{if .Meta.Config.Copy}}<a data-content-copy title="{{t (admin_i18n ":messages.copy_to_clipboard")}}"><i class="material-icons">file_copy</i></a>{{end}}
+        {{if .Meta.Config.Download}}<a href="{{.Context.ParseUrl .MetaValue.Raw.Url}}" title="{{t (admin_i18n ":messages.file_download")}}"><i class="material-icons">file_download</i></a>{{end}}
+        {{if .Meta.Config.NoLink}}
+            {{arg | .Meta.Config.Wrap .Context .Record -}}
+          <span class="qor-field__value-value" data-content-copy-value>{{.MetaValue.Raw.Url}}</span>
+            {{- end}}
+        {{else}}
+            {{arg | .Meta.Config.Wrap .Context .Record -}}
+          <a class="qor-field__value-value" data-copy-value {{if .Meta.Config.Target}}target="{{.Meta.Config.Target}}" {{end}}href="{{.Context.ParseUrl .MetaValue.Raw.Url}}">{{if $label}}{{$label}}{{else}}{{.MetaValue.Raw.Url}}{{end}}</a>
+            {{- end}}
+        {{end}}
+      </div>
+    {{else}}
+      {{$label := .MetaValue.Raw.Url}}
+      <div class="qor-field__edit mdl-textfield mdl-textfield--full-width mdl-js-textfield mdl-textfield--floating-label">
+        <input class="mdl-textfield__input" type="text" id="{{.InputId}}" name="{{.InputName}}" value="{{.MetaValue.Raw.Url}}" {{if not (has_update_permission .Meta)}}disabled{{end}}{{if .Meta.TemplateData}} {{index .Meta.TemplateData "attrs"}}{{end}}>
+
+          {{if not .ModeSingle}}
+              <label class="mdl-textfield__label" for="{{.InputId}}">
+                  {{meta_record_label .Meta .Record}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+              </label>
+              {{$help := meta_record_help .Meta .Record .ReadOnly}}
+              {{if $help}}
+                  <div class="qor-field__help">{{$help}}</div>
+              {{end}}
+          {{end}}
+      </div>
+    {{end}}
+</div>

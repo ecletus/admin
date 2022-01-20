@@ -32,6 +32,8 @@ type Config struct {
 	Prefix             string
 	Param              string
 	Name               string
+	SubmitLabelKey     string
+	SubmitLabel        string
 	PluralName         string
 	Menu               []string
 	Permission         *roles.Permission

@@ -149,7 +149,7 @@
   margin-bottom: 0;
 }
 
-.qor-page__show {
+.qor-form__show {
   .qor-field__show {
     display: block;
   }
@@ -166,11 +166,7 @@
   color: #0099ff;
 }
 
-.qor-page__edit {
-  .qor-field__show {
-    display: none;
-  }
-
+.qor-form__edit {
   .qor-field__edit,
   .qor-fieldset__delete {
     display: block;
@@ -388,7 +384,7 @@ button.qor-fieldset__add,
       }
 
       th, td {
-        padding: 5px;
+        padding: 2px;
         font-size: 12px;
       }
 

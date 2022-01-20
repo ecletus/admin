@@ -1,11 +1,20 @@
 package admin
 
+import (
+	"strings"
+	"unicode"
+)
+
 type MetaStackItem struct {
 	Meta *Meta
 	Key  string
 }
 
 type MetaStack []*MetaStackItem
+
+func (this MetaStack) String() string {
+	return strings.Join(this.Path(), ".")
+}
 
 func (this MetaStack) Empty() bool {
 	return len(this) == 0
@@ -57,6 +66,32 @@ func (this MetaStack) Path() (pth []string) {
 	for i, item := range this {
 		if item.Key == "" {
 			pth[i] = item.Meta.Name
+		} else {
+			pth[i] = item.Key
+		}
+	}
+	return
+}
+
+func (this MetaStack) AnyIndexPathString() string {
+	return strings.Join(this.AnyIndexPath(), ".")
+}
+
+func (this MetaStack) AnyIndexPath() (pth []string) {
+	isDigit := func(s string) bool {
+		for _, r := range s {
+			if !unicode.IsDigit(r) {
+				return false
+			}
+		}
+		return true
+	}
+	pth = make([]string, len(this))
+	for i, item := range this {
+		if item.Key == "" {
+			pth[i] = item.Meta.Name
+		} else if isDigit(item.Key) {
+			pth[i] = "*"
 		} else {
 			pth[i] = item.Key
 		}

@@ -11,6 +11,7 @@
 {{- $metas := make_slice -}}
 {{- $typ := "form" -}}
 {{- $child := $ctx.CreateReadOnlerTypedChild $readOnly "meta_index" $meta.Resource (null) }}
+{{- admin_ctx_set $child "section_layout" ($ctx.GetValue (printf "meta:%s:%s" .Context.MetaStack.AnyIndexPathString "section_layout")) -}}
 {{- admin_ctx_set_type $child $child.Type "inline" -}}
 {{- $readable := has_read_permission $child $meta.Resource -}}
 {{- if $readOnly -}}
@@ -55,6 +56,7 @@
         </template>
     {{end}}
     <div class="qor-field__block">
+        {{- if not ($meta.UITags.Flag "LABEL_DISABLED") -}}
         <label class="qor-field__label">
             {{- meta_record_label .Meta .Record -}}{{if and $this.NotReadOnly $meta.Required}} <i class="required-asterisk">*</i>{{end -}}
             {{- if $helpEnabled -}}
@@ -64,6 +66,7 @@
                 {{- end}}
             {{- end}}
         </label>
+        {{- end -}}
         <div class="collection-edit-table">
             <table class="mdl-data-table mdl-js-data-table qor-table qor-js-table">
                 {{if not ($meta.UITags.Flag "NO_TITLE")}}

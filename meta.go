@@ -1113,7 +1113,11 @@ func (this *Meta) GetFormattedValuer() func(interface{}, *core.Context) *Formatt
 
 // FormattedValue get formatted valuer from meta
 func (this *Meta) Value(ctx *core.Context, record interface{}) interface{} {
-	if valuer := this.GetValuer(); valuer != nil {
+	if this.Meta == nil {
+		if this.Valuer != nil {
+			return this.Valuer(record, ctx)
+		}
+	} else if valuer := this.GetValuer(); valuer != nil {
 		return valuer(record, ctx)
 	}
 	return nil
@@ -1150,7 +1154,7 @@ func (this *Meta) FormattedValue(ctx *core.Context, record interface{}) (fv *For
 			}
 		}
 
-		if fv.Raw != nil {
+		if fv.Raw != nil && !fv.IsZero() {
 			if fv.Slice {
 				if len(fv.Values) == 0 && len(fv.SafeValues) == 0 {
 					var (
@@ -1213,6 +1217,9 @@ func (this *Meta) IsZeroInput(record interface{}, ctx *core.Context) (zero bool)
 }
 
 func (this *Meta) IsZero(record, value interface{}) (zero bool) {
+	if this.Meta == nil {
+		goto checkVal
+	}
 	if value == nil {
 		if this.FieldStruct != nil && this.FieldStruct.Relationship != nil && indirectType(this.FieldStruct.Struct.Type).Kind() == reflect.Struct {
 			return this.FieldStruct.Relationship.GetRelatedID(record).IsZero()
@@ -1225,6 +1232,8 @@ func (this *Meta) IsZero(record, value interface{}) (zero bool) {
 			return true
 		}
 	}
+
+checkVal:
 	if this.NilAsZero {
 		return value == nil
 	}
@@ -1251,6 +1260,9 @@ func (this *Meta) IsZero(record, value interface{}) (zero bool) {
 
 // GetSetter get setter from meta
 func (this *Meta) GetSetter() func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) error {
+	if this.Meta == nil {
+		return nil
+	}
 	if setter := this.Meta.GetSetter(); setter != nil {
 		return func(recorde interface{}, metaValue *resource.MetaValue, context *core.Context) (err error) {
 			valuer := this.Meta.GetValuer()

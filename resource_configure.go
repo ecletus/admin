@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	uurl "github.com/ecletus/core/utils/url"
@@ -53,6 +54,43 @@ func (this *Resource) ParseTagsFromUnderlineField(typ reflect.Type) *ResourceTag
 }
 
 func (this *Resource) ParseSectionLayoutTags(name string, tags Tags, dst, from *SectionsLayout) {
+	var (
+		parseFrom = func(ctags tag_scanner.Map) (from2 *SectionsLayout, exclude []string) {
+			value := ctags["_"]
+			if value == "" {
+				return from, nil
+			}
+			scanner := ctags.Scanner()
+			if !scanner.IsTags(value) && value != "" {
+				return this.Sections.Layouts.Layouts[value], nil
+			}
+			tags, flags := tag_scanner.Parse(ctags.Scanner(), value)
+			exclude = tags.GetTags("EXCLUDE", tag_scanner.FlagPreserveKeys).Flags()
+			if len(flags) > 0 {
+				from2 = this.Sections.Layouts.Layouts[flags.Strings()[0]]
+			}
+			delete(ctags, "_")
+			if from2 == nil {
+				from2 = from
+			}
+			return
+		}
+
+		parse = func(id string, tags tag_scanner.Map) {
+			var (
+				from, exclude = parseFrom(tags)
+				value         = dst.Get(id)
+			)
+			if from != nil && value == nil {
+				value = NewCRUDSchemeSectionsLayout(name+"/"+id, from.Get(id))
+				dst.Set(id, value)
+			}
+			ResourceTags{Tags: tags}.SetAttrsTo(&this.SectionsAttribute, value)
+			if len(exclude) > 0 {
+				value.Exclude(exclude...)
+			}
+		}
+	)
 	for key := range tags {
 		tags := tags.GetTags(key)
 		if tags == nil {
@@ -60,16 +98,8 @@ func (this *Resource) ParseSectionLayoutTags(name string, tags Tags, dst, from *
 		}
 
 		switch key {
-		case "SCREEN":
-			if from != nil && dst.Screen == nil {
-				dst.Screen = NewCRUDSchemeSectionsLayout(name+"/screen", from.Screen)
-			}
-			ResourceTags{Tags: tags}.SetAttrsTo(&this.SectionsAttribute, dst.Screen)
-		case "PRINT":
-			if from != nil && dst.Print == nil {
-				dst.Print = NewCRUDSchemeSectionsLayout(name+"/print", from.Print)
-			}
-			ResourceTags{Tags: tags}.SetAttrsTo(&this.SectionsAttribute, dst.Print)
+		case "SCREEN", "PRINT":
+			parse(strings.ToLower(key), tags)
 		}
 	}
 
@@ -83,7 +113,7 @@ func (this *Resource) ParseSectionLayoutTags(name string, tags Tags, dst, from *
 	}
 }
 
-func (this *Resource) ParseSectionsLayouts(raw string) {
+func (this *Resource) ParseSectionsLayouts(raw string) *Resource {
 	var parseTags = this.ParseSectionLayoutTags
 	tags := this.Tags.TagsOf(raw, tag_scanner.FlagPreserveKeys)
 	if tags != nil {
@@ -124,15 +154,12 @@ func (this *Resource) ParseSectionsLayouts(raw string) {
 				continue
 			}
 			layout := &SectionsLayout{Name: key}
-			var from = this.Sections.Default
-			if inherits := layoutTags.Get("_"); inherits != "" {
-				from = this.Sections.Layouts.Layouts[inherits]
-				delete(layoutTags, "_")
-			}
-			parseTags(key, layoutTags, layout, from)
+			parseTags(key, layoutTags, layout, this.Sections.Default)
 			this.Sections.Layouts.Layouts[key] = layout
 		}
 	}
+
+	return this
 }
 
 func (this *Resource) configureParseSections(tags *ResourceTags) {

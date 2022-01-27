@@ -314,7 +314,15 @@ func (this *SectionsAttribute) SetSectionsTo(provider *SchemeSectionsProvider, v
 	var (
 		replaces [][]string
 		removes  []string
+		opts     *SectionsOpts
 	)
+
+	if len(values) > 0 {
+		if opts, _ = values[0].(*SectionsOpts); opts != nil {
+			values = values[1:]
+			removes = opts.Exclude
+		}
+	}
 
 	if len(values) == 0 {
 		if len(sections) == 0 && this.AllSectionsFunc != nil {

@@ -469,46 +469,54 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 	var (
 		others           []string
 		typeTemplateName string
+		h                = &MetaConfigHelper{this.MetaStack.AnyIndexPathString()}
 	)
 
-	switch {
-	case meta.Config != nil:
-		switch cfg := meta.Config.(type) {
-		case MetaTemplateExecutorGetter:
-			if executor, err = cfg.GetTemplateExecutor(mctx.Context, record, kind, readOnly); err != nil {
-				goto failed
+	if executor, err = h.GetTemplateExecutor(this, kind, meta, formattedValue); err != nil {
+		goto failed
+	} else if executor == nil {
+		if v := h.GetTemplate(&this.LocalContext); v != "" {
+			if executor, err = mctx.Context.GetTemplateOrDefault(v,
+				TemplateExecutorMetaValue, others...); err != nil {
+				err = errors.Wrapf(err, "meta %v", strings.Join(mctx.Context.MetaStack.Path(), "."))
 			}
-		case MetaTemplateNameGetter:
-			var templateName string
-			if templateName, err = cfg.GetTemplateName(mctx.Context, record, kind, readOnly); err != nil {
-				goto failed
-			}
-			if templateName != "" {
-				others = append(others, templateName)
-			}
-		case MetaUserTypeTemplateNameGetter:
-			if typeTemplateName, err = cfg.GetUserTypeTemplateName(mctx.Context, record, readOnly); err != nil {
-				goto failed
+		} else if typeTemplateName = h.GetTypeName(&this.LocalContext); typeTemplateName == "" && meta.Config != nil {
+			switch cfg := meta.Config.(type) {
+			case MetaTemplateExecutorGetter:
+				if executor, err = cfg.GetTemplateExecutor(mctx.Context, record, kind, readOnly); err != nil {
+					goto failed
+				}
+			case MetaTemplateNameGetter:
+				var templateName string
+				if templateName, err = cfg.GetTemplateName(mctx.Context, record, kind, readOnly); err != nil {
+					goto failed
+				}
+				if templateName != "" {
+					others = append(others, templateName)
+				}
+			case MetaUserTypeTemplateNameGetter:
+				if typeTemplateName, err = cfg.GetUserTypeTemplateName(mctx.Context, record, readOnly); err != nil {
+					goto failed
+				}
 			}
 		}
-		fallthrough
-	default:
-		if typeTemplateName == "" {
-			typeTemplateName = meta.GetType(record, mctx.Context, readOnly)
-		}
+	}
 
-		if typeTemplateName != "" {
-			others = append(others, fmt.Sprintf("metas/%v/%v", kind, typeTemplateName))
-		}
+	if typeTemplateName == "" {
+		typeTemplateName = meta.GetType(record, mctx.Context, readOnly)
+	}
 
-		if executor, err = mctx.Context.GetTemplateOrDefault(fmt.Sprintf("%v/metas/%v/%v", meta.BaseResource.ToParam(), kind, meta.Name),
-			TemplateExecutorMetaValue, others...); err != nil {
-			err = errors.Wrapf(err, "meta %v", strings.Join(mctx.Context.MetaStack.Path(), "."))
-		} else {
-			parts := strings.SplitN(executor.Template().Path, "/metas/", 2)
-			if len(parts) == 2 {
-				kind = strings.TrimSuffix(parts[1], ".tmpl")
-			}
+	if typeTemplateName != "" {
+		others = append(others, fmt.Sprintf("metas/%v/%v", kind, typeTemplateName))
+	}
+
+	if executor, err = mctx.Context.GetTemplateOrDefault(fmt.Sprintf("%v/metas/%v/%v", meta.BaseResource.ToParam(), kind, meta.Name),
+		TemplateExecutorMetaValue, others...); err != nil {
+		err = errors.Wrapf(err, "meta %v", strings.Join(mctx.Context.MetaStack.Path(), "."))
+	} else {
+		parts := strings.SplitN(executor.Template().Path, "/metas/", 2)
+		if len(parts) == 2 {
+			kind = strings.TrimSuffix(parts[1], ".tmpl")
 		}
 	}
 
@@ -540,6 +548,7 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 			"InputName":       strings.Join(prefix, "."),
 			"InputParentName": strings.Join(prefix[0:len(prefix)-1], "."),
 			"ModeSingle":      mode == "single",
+			"MetaHelper":      h,
 		}
 		data["ReloadValue"] = func() {
 			formattedValue = meta.GetFormattedValue(mctx.Context, record, mctx.ReadOnly)

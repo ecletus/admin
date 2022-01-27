@@ -231,6 +231,10 @@ footer, video, audio, object, embed {
   position: initial !important;
 }
 
+.no-print {
+  display: none;
+}
+
 * {
   color: #000  !important;
   text-shadow: none !important;

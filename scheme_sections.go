@@ -1,6 +1,9 @@
 package admin
 
-import "github.com/ecletus/roles"
+import (
+	"github.com/ecletus/roles"
+	tag_scanner "github.com/unapu-go/tag-scanner"
+)
 
 type SectionsContext struct {
 	Ctx    *Context
@@ -13,6 +16,11 @@ type SchemeSectionsProvider struct {
 	setMiddlewares []func(sections Sections) Sections
 	Parent         *SchemeSectionsProvider
 	GetContextFunc func(ctx *SectionsContext) []*Section
+	Excludes       tag_scanner.Set
+}
+
+func (s *SchemeSectionsProvider) Exclude(names ...string) {
+	s.Excludes.Add(names...)
 }
 
 func (s *SchemeSectionsProvider) Update(do func(sections Sections) Sections) *SchemeSectionsProvider {
@@ -37,6 +45,9 @@ func (s *SchemeSectionsProvider) GetSections() (name string, sections Sections) 
 	p := s
 	for p != nil {
 		if p.sections != nil {
+			if len(s.Excludes) > 0 {
+				return p.Name, sections.Exclude(s.Excludes.Strings()...)
+			}
 			return p.Name, p.sections
 		}
 		p = p.Parent
@@ -48,9 +59,17 @@ func (s *SchemeSectionsProvider) Sections(cb func(pv *SchemeSectionsProvider, s 
 	p := s
 	for p != nil {
 		if p.sections != nil {
-			for _, s := range p.sections {
-				if !cb(p, s) {
-					return
+			if len(s.Excludes) > 0 {
+				for _, s := range p.sections.Exclude(s.Excludes.Strings()...) {
+					if !cb(p, s) {
+						return
+					}
+				}
+			} else {
+				for _, s := range p.sections {
+					if !cb(p, s) {
+						return
+					}
 				}
 			}
 			return
@@ -160,6 +179,16 @@ type CRUDSchemeSectionsLayout struct {
 	Show *SchemeSectionsProvider
 
 	Custom map[string]*SchemeSectionsProvider
+}
+
+func (s *CRUDSchemeSectionsLayout) Exclude(names ...string) {
+	s.Index.Exclude(names...)
+	s.New.Exclude(names...)
+	s.Edit.Exclude(names...)
+	s.Show.Exclude(names...)
+	for _, c := range s.Custom {
+		c.Exclude(names...)
+	}
 }
 
 func (l *CRUDSchemeSectionsLayout) MetasNamesCb(cb func(name string)) {
@@ -275,6 +304,30 @@ type SectionsLayout struct {
 	Name string
 	Screen,
 	Print *CRUDSchemeSectionsLayout
+}
+
+func (s *SectionsLayout) Get(fieldName string) *CRUDSchemeSectionsLayout {
+	switch fieldName {
+	case "screen", "Screen":
+		return s.Screen
+	case "print", "Print":
+		return s.Print
+	}
+	return nil
+}
+
+func (s *SectionsLayout) Set(fieldName string, value *CRUDSchemeSectionsLayout) {
+	switch fieldName {
+	case "screen", "Screen":
+		s.Screen = value
+	case "print", "Print":
+		s.Print = value
+	}
+}
+
+func (s *SectionsLayout) Exclude(names ...string) {
+	s.Screen.Exclude(names...)
+	s.Print.Exclude(names...)
 }
 
 type NewSchemeSectionsLayoutsOptions struct {

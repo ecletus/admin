@@ -9774,6 +9774,9 @@ pre {
   .qor-table thead {
     position: initial !important;
   }
+  .no-print {
+    display: none;
+  }
   * {
     color: #000  !important;
     text-shadow: none !important;

@@ -21,22 +21,24 @@ func (this ResourceTags) ShowPage() bool {
 	return this.Flag("SHOW_PAGE")
 }
 
-func (this ResourceTags) Attrs() []*Section {
+func (this ResourceTags) Attrs() ([]*Section, *SectionsOpts) {
 	if sections, _ := this.GetOk("ATTRS"); sections != "" {
 		return ParseSections(sections)
 	}
-	return nil
+	return nil, nil
 }
 
 func (this ResourceTags) AttrsInclude() []*Section {
 	if sections, _ := this.GetOk("ATTRS+"); sections != "" {
-		return ParseSections(sections)
+		res, _ := ParseSections(sections)
+		return res
 	}
 	return nil
 }
 func (this ResourceTags) AttrsIncludeBeginning() []*Section {
 	if sections, _ := this.GetOk("ATTRS^"); sections != "" {
-		return ParseSections(sections)
+		res, _ := ParseSections(sections)
+		return res
 	}
 	return nil
 }
@@ -47,11 +49,11 @@ func (this ResourceTags) AttrsExclude() []string {
 	return nil
 }
 
-func (this ResourceTags) NewAttrs() []*Section {
+func (this ResourceTags) NewAttrs() ([]*Section, *SectionsOpts) {
 	if sections, _ := this.GetOk("NEW_ATTRS"); sections != "" {
 		return ParseSections(sections)
 	}
-	return nil
+	return nil, nil
 }
 
 func (this ResourceTags) NewAttrsExclude() []string {
@@ -62,22 +64,24 @@ func (this ResourceTags) NewAttrsExclude() []string {
 }
 func (this ResourceTags) NewAttrsInclude() []*Section {
 	if sections, _ := this.GetOk("NEW_ATTRS+"); sections != "" {
-		return ParseSections(sections)
+		res, _ := ParseSections(sections)
+		return res
 	}
 	return nil
 }
 func (this ResourceTags) NewAttrsIncludeBeginning() []*Section {
 	if sections, _ := this.GetOk("NEW_ATTRS^"); sections != "" {
-		return ParseSections(sections)
+		res, _ := ParseSections(sections)
+		return res
 	}
 	return nil
 }
 
-func (this ResourceTags) EditAttrs() []*Section {
+func (this ResourceTags) EditAttrs() ([]*Section, *SectionsOpts) {
 	if sections, _ := this.GetOk("EDIT_ATTRS"); sections != "" {
 		return ParseSections(sections)
 	}
-	return nil
+	return nil, nil
 }
 
 func (this ResourceTags) EditAttrsExclude() []string {
@@ -88,22 +92,24 @@ func (this ResourceTags) EditAttrsExclude() []string {
 }
 func (this ResourceTags) EditAttrsInclude() []*Section {
 	if sections, _ := this.GetOk("EDIT_ATTRS+"); sections != "" {
-		return ParseSections(sections)
+		res, _ := ParseSections(sections)
+		return res
 	}
 	return nil
 }
 func (this ResourceTags) EditAttrsIncludeBeginning() []*Section {
 	if sections, _ := this.GetOk("EDIT_ATTRS^"); sections != "" {
-		return ParseSections(sections)
+		res, _ := ParseSections(sections)
+		return res
 	}
 	return nil
 }
 
-func (this ResourceTags) ShowAttrs() []*Section {
+func (this ResourceTags) ShowAttrs() ([]*Section, *SectionsOpts) {
 	if sections, _ := this.GetOk("SHOW_ATTRS"); sections != "" {
 		return ParseSections(sections)
 	}
-	return nil
+	return nil, nil
 }
 func (this ResourceTags) ShowAttrsExclude() []string {
 	if sections, _ := this.GetOk("SHOW_ATTRS-"); sections != "" {
@@ -113,22 +119,24 @@ func (this ResourceTags) ShowAttrsExclude() []string {
 }
 func (this ResourceTags) ShowAttrsInclude() []*Section {
 	if sections, _ := this.GetOk("SHOW_ATTRS+"); sections != "" {
-		return ParseSections(sections)
+		res, _ := ParseSections(sections)
+		return res
 	}
 	return nil
 }
 func (this ResourceTags) ShowAttrsIncludeBeginning() []*Section {
 	if sections, _ := this.GetOk("SHOW_ATTRS^"); sections != "" {
-		return ParseSections(sections)
+		res, _ := ParseSections(sections)
+		return res
 	}
 	return nil
 }
 
-func (this ResourceTags) IndexAttrs() []*Section {
+func (this ResourceTags) IndexAttrs() ([]*Section, *SectionsOpts) {
 	if sections, _ := this.GetOk("INDEX_ATTRS"); sections != "" {
 		return ParseSections(sections)
 	}
-	return nil
+	return nil, nil
 }
 func (this ResourceTags) IndexAttrsAliasTo() string {
 	if val, _ := this.GetOk("INDEX_ATTRS"); val != "" && val[0] == '@' {
@@ -156,8 +164,26 @@ func (this ResourceTags) SortAttrs() []string {
 }
 
 func (this ResourceTags) SetAttrsTo(sa *SectionsAttribute, layout *CRUDSchemeSectionsLayout) {
-	if sections := this.Attrs(); len(sections) > 0 {
-		sa.NESAttrsOf(layout, sections)
+	var (
+		attrsOfV = func(f func(prov *CRUDSchemeSectionsLayout, values ...interface{}), opts *SectionsOpts, secs []*Section) {
+			if opts == nil {
+				f(layout, secs)
+			} else {
+				f(layout, opts, secs)
+			}
+		}
+		attrsOf = func(f func(prov *CRUDSchemeSectionsLayout, values ...interface{}) Sections, opts *SectionsOpts, secs []*Section) {
+			if opts == nil {
+				f(layout, secs)
+			} else if len(secs) == 0 {
+				f(layout, opts)
+			} else {
+				f(layout, opts, secs)
+			}
+		}
+	)
+	if sections, opts := this.Attrs(); len(sections) > 0 {
+		attrsOfV(sa.NESAttrsOf, opts, sections)
 	}
 	if sections := this.AttrsInclude(); len(sections) > 0 {
 		sa.NESAttrsOf(layout, sa.NewAttrsOf(layout), sections)
@@ -168,8 +194,8 @@ func (this ResourceTags) SetAttrsTo(sa *SectionsAttribute, layout *CRUDSchemeSec
 	if names := this.AttrsExclude(); len(names) > 0 {
 		sa.NESAttrsOf(layout, sa.NewAttrsOf(layout).Exclude(names...))
 	}
-	if sections := this.ShowAttrs(); len(sections) > 0 {
-		sa.ShowAttrsOf(layout, sections)
+	if sections, opts := this.ShowAttrs(); len(sections) > 0 || opts != nil {
+		attrsOf(sa.ShowAttrsOf, opts, sections)
 	}
 	if names := this.ShowAttrsExclude(); len(names) > 0 {
 		sa.ShowAttrsOf(layout, sa.ShowAttrsOf(layout).Exclude(names...))
@@ -180,8 +206,8 @@ func (this ResourceTags) SetAttrsTo(sa *SectionsAttribute, layout *CRUDSchemeSec
 	if sections := this.ShowAttrsIncludeBeginning(); len(sections) > 0 {
 		sa.ShowAttrsOf(layout, sections, sa.ShowAttrsOf(layout))
 	}
-	if sections := this.NewAttrs(); len(sections) > 0 {
-		sa.NewAttrsOf(layout, sections)
+	if sections, opts := this.NewAttrs(); len(sections) > 0 || opts != nil {
+		attrsOf(sa.NewAttrsOf, opts, sections)
 	}
 	if names := this.NewAttrsExclude(); len(names) > 0 {
 		sa.NewAttrsOf(layout, sa.NewAttrsOf(layout).Exclude(names...))
@@ -192,8 +218,8 @@ func (this ResourceTags) SetAttrsTo(sa *SectionsAttribute, layout *CRUDSchemeSec
 	if sections := this.NewAttrsIncludeBeginning(); len(sections) > 0 {
 		sa.NewAttrsOf(layout, sections, sa.NewAttrsOf(layout))
 	}
-	if sections := this.EditAttrs(); len(sections) > 0 {
-		sa.EditAttrsOf(layout, sections)
+	if sections, opts := this.EditAttrs(); len(sections) > 0 || opts != nil {
+		attrsOf(sa.EditAttrsOf, opts, sections)
 	}
 	if names := this.EditAttrsExclude(); len(names) > 0 {
 		sa.EditAttrsOf(layout, sa.EditAttrsOf(layout).Exclude(names...))
@@ -211,8 +237,8 @@ func (this ResourceTags) SetAttrsTo(sa *SectionsAttribute, layout *CRUDSchemeSec
 			layout.Index.sections = layout.Index.MustSections().Exclude(names...)
 		}
 	} else {
-		if sections := this.IndexAttrs(); len(sections) > 0 {
-			sa.IndexAttrsOf(layout, sections)
+		if sections, opts := this.IndexAttrs(); len(sections) > 0 || opts != nil {
+			attrsOf(sa.IndexAttrsOf, opts, sections)
 		}
 		if names := this.IndexAttrsExclude(); len(names) > 0 {
 			sa.IndexAttrsOf(layout, sa.IndexAttrsOf(layout).Exclude(names...))

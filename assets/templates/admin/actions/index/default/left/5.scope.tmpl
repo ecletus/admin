@@ -6,7 +6,7 @@
       {{if $scope.Group}}
         <select class="qor-action--select" data-toggle="qor.selector" data-clearable="true" name="scope[]" placeholder="{{$scope.Label}}">
           {{range $s := $scope.Scopes}}
-            <option value="{{$s.Name}}" {{if $s.Active}}selected{{end}}>{{$s.Label}}</option>
+            <option value="{{$s.Name}}" {{if $s.Active}}selected{{end}}>{{if $s.Active}}{{$scope.Group}}: {{end}}{{$s.Label}}</option>
           {{end}}
         </select>
       {{else}}

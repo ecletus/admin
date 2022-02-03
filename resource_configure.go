@@ -401,7 +401,7 @@ func (this *Resource) configure() {
 			},
 		})
 
-		if this.ControllerBuilder.IsBulkDeleter() {
+		if !this.Config.BulkDeletionDisabled && this.ControllerBuilder.IsBulkDeleter() {
 			this.Action(&Action{
 				Name:     ActionBulkDelete,
 				LabelKey: I18NGROUP + ".actions.bulk_delete",

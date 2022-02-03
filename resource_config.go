@@ -63,8 +63,9 @@ type Config struct {
 	RecordUriHandler        func(ctx *Context, record interface{}, parentKeys ...aorm.ID) string
 	IndexUriHandler         func(ctx *Context, parentKeys ...aorm.ID) string
 
-	Deletable    func(ctx *Context, record interface{}) bool
-	DeleteableDB func(ctx *Context, db *aorm.DB) *aorm.DB
+	Deletable            func(ctx *Context, record interface{}) bool
+	DeleteableDB         func(ctx *Context, db *aorm.DB) *aorm.DB
+	BulkDeletionDisabled bool
 
 	Wizard *Wizard
 

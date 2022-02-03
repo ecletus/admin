@@ -27,7 +27,7 @@
 {{- end}}>
 {{if .Filter.Config.RemoteDataResource}}
   {{if $value}}
-      <option value="{{primary_key_of $value}}" selected>{{stringify $value}}</option>
+      <option value="{{primary_key_of $value}}" selected>{{$label}}: {{stringify $value}}</option>
   {{else}}
       <option></option>
   {{end}}

@@ -79,6 +79,9 @@ func (this *TimeConfig) FormattedValue(meta *Meta, record interface{}, context *
 			if date == nil {
 				return nil
 			}
+			if date.IsZero() {
+				return nil
+			}
 			t = *date
 		case time.Time:
 			if date.IsZero() {

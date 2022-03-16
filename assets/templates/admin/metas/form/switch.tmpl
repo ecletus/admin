@@ -6,21 +6,25 @@
           <input type="hidden" name="{{.InputName}}" value="false">
       </label>
   {{else}}
-      {{if or (.Context.Type.HasS "show") .ReadOnly}}
-        {{if .Value}}
-          <label><span class="qor-field__label{{if .MetaValue.Severity}} severity_{{.MetaValue.Severity}} severity--text severity--bg{{end}}">{{meta_record_label .Meta .Record}}</span></label>
-        {{end}}
+      {{if .ReadOnly}}
+          {{if .MetaValue.Raw}}
+              <label><span
+                          class="qor-field__label{{if .MetaValue.Severity}} severity_{{.MetaValue.Severity}} severity--text severity--bg{{end}}"><i
+                              style="font-size: 100%"
+                              class="material-icons">done</i> {{meta_record_label .Meta .Record}} </span></label>
+          {{end}}
       {{else}}
-        <label class="mdl-switch mdl-js-switch mdl-js-ripple-effect" {{if .InputId}}for="{{.InputId}}"{{end}}>
-          <input type="checkbox" {{if .InputId}}id="{{.InputId}}"{{end}} name="{{.InputName}}" class="mdl-switch__input"
-              type="checkbox" {{if .Value}}checked{{end}}{{if (or (.Context.Type.HasS "show") (not (has_update_permission .Meta)))}} disabled{{end}}>
-          <span class="qor-field__label mdl-switch__label">
+          <label class="mdl-switch mdl-js-switch mdl-js-ripple-effect" {{if .InputId}}for="{{.InputId}}"{{end}}>
+              {{if not .Context.FormOptions.DefaultValueFixerDisabled}}
+                  <input type="hidden" name="{{.InputName}}" value="false">
+              {{end}}
+              <input data-raw-value="{{.MetaValue.Raw}}" type="checkbox" {{if .InputId}}id="{{.InputId}}"{{end}}
+                     name="{{.InputName}}" class="mdl-switch__input"
+                     type="checkbox" {{if .MetaValue.Raw}}checked{{end}}{{if (or (.Context.Type.HasS "show") (not (has_update_permission .Meta)))}} disabled{{end}}>
+              <span class="qor-field__label mdl-switch__label">
             {{meta_record_label .Meta .Record}}
           </span>
-          {{if not .Context.FormOptions.DefaultValueFixerDisabled}}
-          <input type="hidden" name="{{.InputName}}" value="false">
-          {{end}}
-        </label>
+          </label>
       {{end}}
 
       {{$help := meta_record_help .Meta .Record}}

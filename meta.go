@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/ecletus/fragment"
 	"github.com/moisespsena-go/i18n-modular/i18nmod"
@@ -12,8 +11,6 @@ import (
 	"github.com/moisespsena-go/maps"
 
 	"github.com/pkg/errors"
-
-	"github.com/ecletus/core/helpers"
 
 	"github.com/moisespsena-go/assetfs"
 	"github.com/moisespsena-go/edis"
@@ -108,6 +105,8 @@ type Meta struct {
 	Setter            MetaSetter
 	Valuer            MetaValuer
 	FormattedValuer   MetaFValuer
+	DefaultFormat     string
+	DefaultFormatF    func(value interface{}) string
 	ContextResourcer  func(meta resource.Metaor, ctx *core.Context) resource.Resourcer
 	ContextMetas      func(record interface{}, context *Context) []*Meta
 	SkipResourceModel bool
@@ -1043,6 +1042,16 @@ func (this *Meta) GetValuer() func(interface{}, *core.Context) interface{} {
 	return nil
 }
 
+func (this *Meta) FormatValue(value interface{}) string {
+	if this.DefaultFormatF != nil {
+		return this.DefaultFormatF(value)
+	}
+	if this.DefaultFormat != "" {
+		return fmt.Sprintf(this.DefaultFormat, value)
+	}
+	return ""
+}
+
 // GetFormattedValuer get formatted valuer from meta
 func (this *Meta) GetFormattedValuer() func(interface{}, *core.Context) *FormattedValue {
 	var valuer MetaFValuer
@@ -1105,9 +1114,12 @@ func (this *Meta) GetFormattedValuer() func(interface{}, *core.Context) *Formatt
 			if fv == nil {
 				return fv
 			}
+			if fv.Value == "" {
+				fv.Value = this.FormatValue(fv.Raw)
+			}
 			return fv
 		}
-		return &FormattedValue{Record: record, Raw: v, IsZeroF: this.IsZero}
+		return &FormattedValue{Record: record, Raw: v, IsZeroF: this.IsZero, Value: this.FormatValue(v)}
 	}
 }
 
@@ -1147,14 +1159,11 @@ func (this *Meta) FormattedValue(ctx *core.Context, record interface{}) (fv *For
 			case fmt.Stringer:
 				return t.String()
 			default:
-				if !aorm.IsBlank(reflect.Indirect(reflect.ValueOf(fv.Raw))) {
-					return fmt.Sprint(fv.Raw)
-				}
-				return ""
+				return fmt.Sprint(fv.Raw)
 			}
 		}
 
-		if fv.Raw != nil && !fv.IsZero() {
+		if fv.Raw != nil && (!fv.IsZero() || this.ForceShowZero) {
 			if fv.Slice {
 				if len(fv.Values) == 0 && len(fv.SafeValues) == 0 {
 					var (
@@ -1240,22 +1249,7 @@ checkVal:
 	if this.IsZeroFunc != nil {
 		return this.IsZeroFunc(this, record, value)
 	}
-	switch vt := value.(type) {
-	case helpers.Zeroer:
-		return vt.IsZero()
-	case time.Time:
-		return vt.IsZero()
-	case *time.Time:
-		return vt == nil || vt.IsZero()
-	case interface{ PrimaryGoValue() interface{} }:
-		return this.IsZero(record, vt.PrimaryGoValue())
-	case bool:
-		return false
-	case *bool:
-		return vt == nil
-	default:
-		return aorm.IsBlank(reflect.ValueOf(value))
-	}
+	return aorm.IsZero(value)
 }
 
 // GetSetter get setter from meta

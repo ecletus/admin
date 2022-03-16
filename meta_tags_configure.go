@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/ecletus/core"
+	"github.com/moisespsena-go/aorm"
 )
 
 var MetaConfigureTagsHandlers []func(meta *Meta, tags *MetaTags)
@@ -53,6 +54,9 @@ func (this *Meta) tagsConfigure() {
 	if this.Label == "" {
 		this.Label = tags.Label()
 	}
+	if this.DefaultFormat == "" {
+		this.DefaultFormat = tags.Fmt()
+	}
 	if this.Type == "" {
 		this.Type = tags.Type()
 	}
@@ -94,6 +98,14 @@ func (this *Meta) tagsConfigure() {
 	}
 	if tags.Search() {
 		// TODO
+	}
+	if tags.UnZero() {
+		if this.IsZeroFunc == nil {
+			this.IsZeroFunc = MetaUnzeroCheck
+		}
+	}
+	if !this.ForceShowZero {
+		this.ForceShowZero = tags.ZeroRender()
 	}
 	if this.Help == "" {
 		this.Help = tags.Help()
@@ -200,4 +212,11 @@ func (this *Meta) tagsConfigure() {
 		f(this, &tags)
 	}
 	this.Tags = tags
+}
+
+func MetaUnzeroCheck(m *Meta, record, value interface{}) bool {
+	if len(m.BaseResource.PrimaryFields) > 0 {
+		return m.BaseResource.GetKey(record).IsZero()
+	}
+	return aorm.IsZero(value)
 }

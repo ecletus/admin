@@ -8,6 +8,7 @@ import (
 	"github.com/ecletus/core/helpers"
 	"github.com/ecletus/validations"
 	"github.com/leekchan/accounting"
+	"github.com/moisespsena-go/aorm"
 	"github.com/moisespsena-go/aorm/types/money"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
@@ -67,31 +68,7 @@ func (this *MoneyConfig) NumberFormatter(locale string) func(value money.Money) 
 }
 
 func (this *MoneyConfig) ToStringInterface(context *core.Context, record, value interface{}) string {
-	var (
-		lc = accounting.LocaleInfo[this.RecordLocale(context, record)]
-		ac = accounting.Accounting{
-			Symbol:    lc.ComSymbol,
-			Precision: 2,
-			Thousand:  lc.ThouSep,
-			Decimal:   lc.DecSep,
-		}
-	)
-	if this.Precision > 0 {
-		ac.Precision = this.Precision
-	}
-
-	if lc.Pre {
-		ac.Format = "%s %v"
-		ac.FormatNegative = "%s -%v"
-	} else {
-		ac.Format = "%v %s"
-		ac.FormatNegative = "-%v %s"
-	}
-	if m, ok := value.(interface{ GetDecimal() decimal.Decimal }); ok {
-		return ac.FormatMoney(m.GetDecimal())
-	}
-	v := ac.FormatMoney(value)
-	return v
+	return MoneyToString(this.RecordLocale(context, record), this.Precision, value)
 }
 
 func (this *MoneyConfig) FormattedValue(meta *Meta, record interface{}, context *core.Context) *FormattedValue {
@@ -102,12 +79,14 @@ func (this *MoneyConfig) FormattedValue(meta *Meta, record interface{}, context 
 
 	if value.(helpers.Zeroer).IsZero() {
 		if this.Zero != "" && this.Zero != "blank" {
-			return (&FormattedValue{Record: record, Raw: money.Zero, Value: this.Zero})
+			return &FormattedValue{Record: record, Raw: money.Zero, Value: this.Zero}
 		}
-		return nil
+		if !meta.Tags.ZeroRender() {
+			return nil
+		}
 	}
 
-	fv := (&FormattedValue{Record: record, Raw: value})
+	fv := &FormattedValue{Record: record, Raw: value}
 	ctx := ContextFromCoreContext(context)
 
 	if enc := ctx.Encoder(); enc != nil && enc.IsType(CSVTransformerType) {
@@ -243,8 +222,37 @@ func init() {
 	RegisterMetaTypeConfigor(reflect.TypeOf(money.Money{}), cfg)
 }
 
-func MoneyToString(context *core.Context, record interface{}, value money.Money) string {
-	return (&MoneyConfig{}).ToStringInterface(context, record, value)
+func MoneyToString(locale string, precision int, value interface{}) string {
+	if precision == 0 {
+		precision = 2
+	}
+	var (
+		lc = accounting.LocaleInfo[locale]
+		ac = accounting.Accounting{
+			Symbol:    lc.ComSymbol,
+			Precision: precision,
+			Thousand:  lc.ThouSep,
+			Decimal:   lc.DecSep,
+		}
+	)
+
+	switch t := value.(type) {
+	case decimal.Decimal:
+	case *decimal.Decimal:
+		value = *t
+	case aorm.ToDecimalConverter:
+		value = t.ToDecimal()
+	}
+
+	if lc.Pre {
+		ac.Format = "%s %v"
+		ac.FormatNegative = "%s -%v"
+	} else {
+		ac.Format = "%v %s"
+		ac.FormatNegative = "-%v %s"
+	}
+
+	return ac.FormatMoney(value)
 }
 
 func MoneyTagsOf(v money.Money) string {

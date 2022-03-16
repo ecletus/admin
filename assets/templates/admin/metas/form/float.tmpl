@@ -13,12 +13,15 @@
             {{$value := raw_value_of .Record .Meta}}
             <div class="qor-field__row">
                 {{$places := .Meta.UITags.Get "PLACES"}}
-                <input class="mdl-textfield__input" type="number" step="{{if $places}}0.{{$places}}{{else}}any{{end}}" id="{{.InputId}}" name="{{.InputName}}" {{if $value}}value="{{$value}}"{{end}} {{if not (has_update_permission .Meta)}}disabled{{end}}>
+                <input class="mdl-textfield__input" type="number" step="{{if $places}}0.{{$places}}{{else}}any{{end}}"
+                       id="{{.InputId}}" name="{{.InputName}}"
+                       {{if or $value (.Meta.Tags.UnZero)}}value="{{$value}}"{{end}} {{if not (has_update_permission .Meta)}}disabled{{end}}>
                 {{if not .ModeSingle}}
                     {{$label = meta_record_label .Meta .Record}}
                     {{$help = meta_record_help .Meta .Record .ReadOnly}}
                     {{- if $help}}
-                        <span data-dialog="#{{.InputId}}--tooltip" class="material-icons qor-meta-help__icon">help</span>
+                        <span data-dialog="#{{.InputId}}--tooltip"
+                              class="material-icons qor-meta-help__icon">help</span>
                     {{end -}}
                 {{end}}
             </div>

@@ -96,7 +96,14 @@ func (this *TimeConfig) FormattedValue(meta *Meta, record interface{}, context *
 	if t.IsZero() {
 		return &FormattedValue{Record: record}
 	}
-	return (&FormattedValue{Record: record, Raw: t, Value: utils.FormatTime(t, this.Layout(context), context)}).SetNonZero()
+	return (&FormattedValue{Record: record, Raw: t, Value: this.Format(context, t)}).SetNonZero()
+}
+
+func (this *TimeConfig) Format(context *core.Context, t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return utils.FormatTime(t, this.Layout(context), context)
 }
 
 // ConfigureQorMeta configure select one meta

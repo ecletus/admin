@@ -39,6 +39,38 @@ func (this *UintConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	meta := metaor.(*Meta)
 	meta.Type = "uint"
 
+	if meta.Tags.Flag("%") {
+		this.Max = 100
+
+		if meta.DefaultFormat == "" {
+			meta.DefaultFormat = "%d%%"
+		}
+	}
+
+	if s := meta.Tags.Get("MIN"); s != "" {
+		v, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		if this.Min == 0 || v > this.Min {
+			this.Min = v
+		}
+	}
+
+	if s := meta.Tags.Get("MAX"); s != "" {
+		v, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		if this.Max == 0 || v < this.Max {
+			this.Max = v
+		}
+	}
+
+	if this.Min > 0 && this.Max > 0 && this.Min > this.Max {
+		panic(fmt.Errorf("UintConfig: meta %s of %s: min > max", meta.BaseResource.UID, meta.Name, this.Min, this.Max))
+	}
+
 	if meta.Setter == nil {
 		meta.Meta.Setter = resource.SingleFieldSetter(meta.FieldName, func(ptr bool, field reflect.Value, metaValue *resource.MetaValue, ctx *core.Context, record interface{}) (err error) {
 			var (

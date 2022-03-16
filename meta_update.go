@@ -116,7 +116,7 @@ func (this *Meta) updateMeta() {
 
 	this.Initialize(this.Virtual)
 
-	if this.Meta.Setter == nil && this.FieldStruct != nil && this.FieldStruct.Link != nil {
+	if this.Meta.Setter == nil && (this.FieldStruct == nil || this.FieldStruct.Link != nil) {
 		this.ReadOnly = true
 	}
 

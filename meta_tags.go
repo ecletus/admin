@@ -87,6 +87,15 @@ func (this MetaTags) NilAsZero() bool {
 func (this MetaTags) Sort() bool {
 	return this.Tags.Flag("SORT")
 }
+func (this MetaTags) ZeroRender() bool {
+	return this.Tags.Flag("ZERO_RENDER")
+}
+func (this MetaTags) UnZero() bool {
+	return this.Tags.Flag("UNZERO")
+}
+func (this MetaTags) Fmt() string {
+	return this.Tags.GetString("FMT")
+}
 func (this MetaTags) Search() bool {
 	return this.Tags.Flag("SEARCH")
 }

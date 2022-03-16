@@ -100,18 +100,21 @@ func (this *Controller) Update(ctx *Context) {
 	if !ctx.ValidateLayoutOrError() {
 		return
 	}
-	var record, old interface{}
+	var (
+		record, old interface{}
+		notLoad     bool
+	)
 	res := ctx.Resource
 
 	if !ctx.LoadDisplayOrError() {
 		return
 	}
 
-	record = this.LoadShowData(ctx)
-
-	var notLoad bool
-	if check, ok := this.controller.(CheckLoaderForUpdater); ok {
-		notLoad = !check.IsLoadForUpdate(ctx)
+	record, notLoad = this.LoadShowData(ctx)
+	if !notLoad {
+		if check, ok := this.controller.(CheckLoaderForUpdater); ok {
+			notLoad = !check.IsLoadForUpdate(ctx)
+		}
 	}
 
 	cfg := ParseUpdateConfig(ctx)
@@ -181,11 +184,13 @@ func (this *Controller) Update(ctx *Context) {
 			}
 		}
 
-		old = res.New()
+		if !notLoad {
+			old = res.New()
 
-		if err := copier.Copy(old, record); err != nil {
-			ctx.AddError(err)
-			goto done
+			if err := copier.Copy(old, record); err != nil {
+				ctx.AddError(err)
+				goto done
+			}
 		}
 
 		excludes := &core.DecoderExcludes{}

@@ -9,6 +9,15 @@ type DateConfig struct {
 	TimeConfig
 }
 
+func NewDateConfig(timeConfig *TimeConfig) *DateConfig {
+	if timeConfig == nil {
+		timeConfig = &TimeConfig{}
+	}
+	c := &DateConfig{TimeConfig: *timeConfig}
+	c.Setup()
+	return c
+}
+
 func (this *DateConfig) Setup() {
 	if this.I18nKey == "" {
 		this.I18nKey = I18NGROUP + ".metas.date.format"

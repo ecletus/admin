@@ -4587,6 +4587,7 @@
         resetSelect2Width: function() {
             if (!this.$element) {
                 this.destroy()
+                return;
             }
 
             let $container, select2 = this.$element.data().select2;

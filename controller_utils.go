@@ -19,7 +19,7 @@ func (this *Controller) showOrEdit(context *Context, onRecorde func(record inter
 		}
 	}
 
-	recorde := this.LoadShowData(context)
+	recorde, _ := this.LoadShowData(context)
 
 	if recorde == nil && !context.HasError() {
 		context.Writer.WriteHeader(http.StatusNotFound)

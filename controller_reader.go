@@ -64,7 +64,7 @@ func (this *Controller) Show(ctx *Context) {
 	})
 }
 
-func (this *Controller) LoadShowData(context *Context) (result interface{}) {
+func (this *Controller) LoadShowData(context *Context) (result interface{}, notExists bool) {
 	if setuper, ok := this.controller.(ControllerSetuper); ok {
 		if context.AddError(setuper.SetupContext(context)); context.HasError() {
 			return
@@ -82,6 +82,7 @@ func (this *Controller) LoadShowData(context *Context) (result interface{}) {
 			result = res.NewStruct(context.Site)
 		}
 		if result == nil {
+			notExists = true
 			if context.HasPermission(res, roles.Create) {
 				if creator, ok := this.controller.(ControllerCreator); ok {
 					result = creator.New(context)

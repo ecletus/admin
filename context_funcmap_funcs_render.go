@@ -280,19 +280,19 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 		show            = this.Type.Has(PRINT, SHOW, INDEX) || kind == "index" || kind == "show"
 		nestedFormCount int
 		readOnly        = show
-		formattedValue  *FormattedValue
+		fv              *FormattedValue
 		value           interface{}
 		readOnlyCalled  bool
-	)
 
-	mctx := &MetaContext{
-		Meta:     meta,
-		Out:      writer,
-		Context:  this,
-		Record:   record,
-		Prefix:   prefix,
-		ReadOnly: readOnly,
-	}
+		mctx = &MetaContext{
+			Meta:     meta,
+			Out:      writer,
+			Context:  this,
+			Record:   record,
+			Prefix:   prefix,
+			ReadOnly: readOnly,
+		}
+	)
 	defer func() {
 		for _, cb := range mctx.deferRenderHandlers {
 			cb()
@@ -318,46 +318,35 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 	}
 
 	mctx.ReadOnly = readOnly
-	formattedValue = meta.GetFormattedValue(mctx.Context, record, readOnly)
-	mctx.FormattedValue = formattedValue
+	fv = meta.GetFormattedValue(mctx.Context, record, readOnly)
+	mctx.FormattedValue = fv
 
 	if readOnly && mctx.Context.Type.Has(EDIT, NEW, SHOW) {
-		if formattedValue == nil {
+		if fv == nil {
 			return
 		}
-		if formattedValue.Raw != nil {
-			switch formattedValue.Value {
+		if fv.Raw != nil {
+			switch fv.Value {
 			case "":
-				if formattedValue.SafeValue == "" {
+				if fv.SafeValue == "" {
 					return
-				}
-			case "0":
-				switch v := formattedValue.Raw.(type) {
-				case int, int8, int16, int32, int64:
-					if v == 0 {
-						return
-					}
-				case uint, uint8, uint16, uint32, uint64:
-					if v == 0 {
-						return
-					}
 				}
 			}
 		}
 	}
 	if show && !meta.IsRequired() {
-		if formattedValue == nil {
+		if fv == nil {
 			return
 		}
 		if !meta.ForceShowZero {
-			if formattedValue.IsZero() {
+			if fv.IsZero() {
 				return
 			} else if !meta.ForceEmptyFormattedRender {
-				if formattedValue.Raw == nil && formattedValue.Raws == nil {
+				if fv.Raw == nil && fv.Raws == nil {
 					return
 				}
 
-				if formattedValue.Value == "" && formattedValue.SafeValue == "" {
+				if fv.Value == "" && fv.SafeValue == "" {
 					return
 				}
 			}
@@ -472,7 +461,7 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 		h                = &MetaConfigHelper{this.MetaStack.AnyIndexPathString()}
 	)
 
-	if executor, err = h.GetTemplateExecutor(this, kind, meta, formattedValue); err != nil {
+	if executor, err = h.GetTemplateExecutor(this, kind, meta, fv); err != nil {
 		goto failed
 	} else if executor == nil {
 		if v := h.GetTemplate(&this.LocalContext); v != "" {
@@ -520,14 +509,14 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 		}
 	}
 
-	if formattedValue == nil {
-		formattedValue = &FormattedValue{Zero: true}
+	if fv == nil {
+		fv = &FormattedValue{Zero: true}
 	}
 
-	if formattedValue.SafeValue != "" {
-		value = template.HTML(formattedValue.SafeValue)
+	if fv.SafeValue != "" {
+		value = template.HTML(fv.SafeValue)
 	} else {
-		value = formattedValue.Value
+		value = fv.Value
 	}
 
 	if err == nil {
@@ -542,7 +531,7 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 			"Meta":            meta,
 			"Record":          record,
 			"ResourceValue":   record,
-			"MetaValue":       formattedValue,
+			"MetaValue":       fv,
 			"Value":           value,
 			"Label":           meta.Label,
 			"InputName":       strings.Join(prefix, "."),
@@ -551,14 +540,14 @@ func (this *Context) renderMeta(state *template.State, meta *Meta, record interf
 			"MetaHelper":      h,
 		}
 		data["ReloadValue"] = func() {
-			formattedValue = meta.GetFormattedValue(mctx.Context, record, mctx.ReadOnly)
+			fv = meta.GetFormattedValue(mctx.Context, record, mctx.ReadOnly)
 			var value interface{}
-			if formattedValue.SafeValue != "" {
-				value = template.HTML(formattedValue.SafeValue)
+			if fv.SafeValue != "" {
+				value = template.HTML(fv.SafeValue)
 			} else {
-				value = formattedValue.Value
+				value = fv.Value
 			}
-			data["MetaValue"] = formattedValue
+			data["MetaValue"] = fv
 			data["Value"] = value
 		}
 		data["InputId"] = strings.ReplaceAll(strings.Join(mctx.Context.MetaStack.Path(), "_"), ".", "_")

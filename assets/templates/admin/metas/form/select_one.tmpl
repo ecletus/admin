@@ -1,20 +1,21 @@
 {{- $current_value := .MetaValue.Raw -}}
-{{- $is_existing_record := (not (.Meta.IsNewRecord $current_value)) -}}
+{{ $meta := .Meta }}
+{{- $is_existing_record := (not ($meta.IsNewRecord $current_value)) -}}
 {{- if and (not .Value) $current_value -}}
     {{- .ReloadValue -}}
 {{- end -}}
 {{- if .ReadOnly -}}
-    <div class="qor-field" {{if and .Meta.Resource $current_value}}data-input-name="{{.InputName}}" data-input-value="{{.Meta.Resource.GetKey $current_value}}"{{end}}>
+    <div class="qor-field" {{if and $meta.Resource $current_value}}data-input-name="{{.InputName}}" data-input-value="{{$meta.Resource.GetKey $current_value}}"{{end}}>
         {{if not .ModeSingle}}
             <label class="qor-field__label">
-                {{meta_record_label .Meta .Record}}{{if and not_show .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+                {{meta_record_label $meta .Record}}{{if and not_show $meta.Required}} <i class="required-asterisk">*</i>{{end}}
             </label>
         {{end}}
         <div class="qor-field__value">
-            {{if and $current_value (defined_resource_show_page .Meta.Resource)}}
-                {{$url := (.Meta.URLFor (admin_context) $current_value)}}
+            {{if and $current_value (defined_resource_show_page $meta.Resource)}}
+                {{$url := ($meta.URLFor (admin_context) $current_value)}}
                 {{if $url}}
-                    {{if not (.Meta.IsNewRecord $current_value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
+                    {{if not ($meta.IsNewRecord $current_value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
                 {{else}}
                     {{.Value}}
                 {{end}}
@@ -27,10 +28,10 @@
     <div class="qor-field">
       {{if not .ModeSingle}}
           <label class="qor-field__label" for="{{.InputId}}">
-            {{meta_record_label .Meta .Record}}{{if and (not .ReadOnly) .Meta.Required}} <i class="required-asterisk">*</i>{{end}}
+            {{meta_record_label $meta .Record}}{{if and (not .ReadOnly) $meta.Required}} <i class="required-asterisk">*</i>{{end}}
           </label>
 
-          {{$help := meta_record_help .Meta .Record}}
+          {{$help := meta_record_help $meta .Record}}
           {{if $help}}
             <div class="qor-field__help">{{$help}}</div>
           {{end}}
@@ -38,12 +39,12 @@
 
       <div class="qor-field__show">
           {{$value := $current_value -}}
-            {{if .Meta.Resource -}}
-                {{if .Meta.Resource.GetKey $value}}
-                  {{if (defined_resource_show_page .Meta.Resource)}}
-                      {{$url := (.Meta.URLFor (admin_context) $value)}}
+            {{if $meta.Resource -}}
+                {{if $meta.Resource.GetKey $value}}
+                  {{if (defined_resource_show_page $meta.Resource)}}
+                      {{$url := ($meta.URLFor (admin_context) $value)}}
                       {{if $url}}
-                          {{if not (.Meta.IsNewRecord $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
+                          {{if not ($meta.IsNewRecord $value)}}<a data-url="{{$url}}" href="{{$url}}">{{.Value}}</a>{{end}}
                       {{else}}
                           {{.Value}}
                       {{end}}
@@ -56,19 +57,19 @@
             {{- end -}}
       </div>
 
-      <div class="{{if not .ModeSingle}}qor-field__block {{end}}qor-field__edit  qor-field__selectone" {{if (eq .Meta.Config.SelectMode "bottom_sheet")}} data-toggle="qor.selectone"{{end}}
-              {{- if .Meta.Config.BottomSheetSelectedTemplateJS}} data-selected-render="{{.Meta.Config.BottomSheetSelectedTemplateJS.String | b64}}"{{end}}
-           {{$style := .Meta.UITags.GetString "STYLE"}}{{if $style}}style="{{$style}}"{{end}}>
-          {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
+      <div class="{{if not .ModeSingle}}qor-field__block {{end}}qor-field__edit  qor-field__selectone" {{if (eq $meta.Config.SelectMode "bottom_sheet")}} data-toggle="qor.selectone"{{end}}
+              {{- if $meta.Config.BottomSheetSelectedTemplateJS}} data-selected-render="{{$meta.Config.BottomSheetSelectedTemplateJS.String | b64}}"{{end}}
+           {{$style := $meta.UITags.GetString "STYLE"}}{{if $style}}style="{{$style}}"{{end}}>
+          {{if (eq $meta.Config.SelectMode "bottom_sheet")}}
             <template name="select-one-selected-template" type="x-tmpl-mustache">
               <p class="qor-field__selected" data-primary-key="[[ primaryKey ]]">
                 <span class="qor-selected__change word-wrap">
-                {{- if .Meta.Config.BottomSheetSelectedTemplateJS -}}
+                {{- if $meta.Config.BottomSheetSelectedTemplateJS -}}
                     [[ displayText ]]
-                {{- else if .Meta.Config.BottomSheetSelectedTemplate -}}
-                    {{.Meta.Config.BottomSheetSelectedTemplate}}
+                {{- else if $meta.Config.BottomSheetSelectedTemplate -}}
+                    {{$meta.Config.BottomSheetSelectedTemplate}}
                 {{- else -}}
-                    [[ {{if .Meta.Config.DisplayField}}{{.Meta.Config.DisplayField}}{{else}}displayText{{end}} ]]
+                    [[ {{if $meta.Config.DisplayField}}{{$meta.Config.DisplayField}}{{else}}displayText{{end}} ]]
                 {{- end}}</span>
                 <a href="#" class="qor-selected__remove"><i class="material-icons">remove_circle_outline</i></a>
               </p>
@@ -88,15 +89,15 @@
             <a href="javascript://" {{if $is_existing_record}}style="display:none"{{end}}
               class="mdl-button mdl-button--colored qor-field__selectone-trigger"
               data-select-modal="one" {{if .InputId}}data-select-id="#{{.InputId}}"{{end}}
-              data-selectone-url="{{url_for .Meta.Config}}"
-              data-select-listing-url="{{url_for .Meta.Config}}"
-              {{if .Meta.Config.RemoteDataResource.RecordeUrl}}data-remote-recorde-url="{{url_for .Meta.Config.RemoteDataResource.RecordeUrl}}"{{end}}
-              {{if has_create_permission .Meta.Config.RemoteDataResource.Resource}} data-select-creating-url="{{new_resource_path .Meta.Config.RemoteDataResource.Resource}}"
-              data-select-default-creating="{{.Meta.Config.DefaultCreating}}"{{end}}
-              {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
-              {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
-              {{if .Meta.Config.IconField}}data-remote-data-icon-key="{{.Meta.Config.IconField}}"{{end}}
-              {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}><i class="material-icons">add</i></a>
+              data-selectone-url="{{url_for $meta.Config}}"
+              data-select-listing-url="{{url_for $meta.Config}}"
+              {{if $meta.Config.RemoteDataResource.RecordeUrl}}data-remote-recorde-url="{{url_for $meta.Config.RemoteDataResource.RecordeUrl}}"{{end}}
+              {{if has_create_permission $meta.Config.RemoteDataResource.Resource}} data-select-creating-url="{{new_resource_path $meta.Config.RemoteDataResource.Resource}}"
+              data-select-default-creating="{{$meta.Config.DefaultCreating}}"{{end}}
+              {{if $meta.Config.PrimaryField}}data-remote-data-primary-key="{{$meta.Config.PrimaryField}}"{{end}}
+              {{if $meta.Config.DisplayField}}data-remote-data-display-key="{{$meta.Config.DisplayField}}"{{end}}
+              {{if $meta.Config.IconField}}data-remote-data-icon-key="{{$meta.Config.IconField}}"{{end}}
+              {{if $meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}><i class="material-icons">add</i></a>
 
             <select id="{{.InputId}}" class="qor-field__input qor-field__selectone-input hidden" name="{{.InputName}}">
               <option></option>
@@ -105,50 +106,50 @@
               {{end}}
             </select>
           {{else}}
-            {{if .Meta.Config.Select2ResultTemplate}}
-              {{if .Meta.Config.Select2ResultTemplate.Raw}}
+            {{if $meta.Config.Select2ResultTemplate}}
+              {{if $meta.Config.Select2ResultTemplate.Raw}}
                 <script name="select2-result-template" data-raw="true" type="text/plain">
-                    {{.Meta.Config.Select2ResultTemplate.Data}}
+                    {{$meta.Config.Select2ResultTemplate.Data}}
                 </script>
               {{else}}
                   <template name="select2-result-template">
-                    {{.Meta.Config.Select2ResultTemplate.Data}}
+                    {{$meta.Config.Select2ResultTemplate.Data}}
                   </template>
               {{end}}
             {{end}}
-            {{if .Meta.Config.Select2SelectionTemplate}}
-              {{if .Meta.Config.Select2SelectionTemplate.Raw}}
+            {{if $meta.Config.Select2SelectionTemplate}}
+              {{if $meta.Config.Select2SelectionTemplate.Raw}}
                   <script name="select2-selection-template" data-raw="true" type="text/plain">
-                      {{.Meta.Config.Select2SelectionTemplate.Data}}
+                      {{$meta.Config.Select2SelectionTemplate.Data}}
                   </script>
               {{else}}
                   <template name="select2-selection-template">
-                      {{.Meta.Config.Select2SelectionTemplate.Data}}
+                      {{$meta.Config.Select2SelectionTemplate.Data}}
                   </template>
               {{end}}
             {{end}}
             <select id="{{.InputId}}" class="qor-field__input hidden"
-              {{if .Meta.Config.RemoteDataResource}}{{if $is_existing_record}}chooser-selected="true"{{end}}{{end}}
+              {{if $meta.Config.RemoteDataResource}}{{if $is_existing_record}}chooser-selected="true"{{end}}{{end}}
               data-toggle="qor.chooser"
-              data-placeholder="{{meta_placeholder .Meta .Context "Select an Option"}}"
+              data-placeholder="{{meta_placeholder $meta .Context "Select an Option"}}"
               name="{{.InputName}}"
-              {{if .Meta.Config.AllowBlank}}data-allow-clear="true"{{end}}
-              {{if .Meta.Config.IsRemote -}}
+              {{if $meta.Config.AllowBlank}}data-allow-clear="true"{{end}}
+              {{if $meta.Config.IsRemote -}}
                 data-remote-data="true"
-                data-ajax-url="{{url_for .Meta.Config}}"
-                {{if .Meta.Config.PrimaryField}}data-remote-data-primary-key="{{.Meta.Config.PrimaryField}}"{{end}}
-                {{if .Meta.Config.DisplayField}}data-remote-data-display-key="{{.Meta.Config.DisplayField}}"{{end}}
-                {{if .Meta.Config.IconField}}data-remote-data-icon-key="{{.Meta.Config.IconField}}"{{end}}
-                {{if .Meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}
+                data-ajax-url="{{url_for $meta.Config}}"
+                {{if $meta.Config.PrimaryField}}data-remote-data-primary-key="{{$meta.Config.PrimaryField}}"{{end}}
+                {{if $meta.Config.DisplayField}}data-remote-data-display-key="{{$meta.Config.DisplayField}}"{{end}}
+                {{if $meta.Config.IconField}}data-remote-data-icon-key="{{$meta.Config.IconField}}"{{end}}
+                {{if $meta.Config.RemoteNoCache}}data-remote-data-cache="false"{{end}}
               {{end}}>
               <option></option>
-              {{if .Meta.Config.RemoteDataResource}}
+              {{if $meta.Config.RemoteDataResource}}
                 {{if $is_existing_record}}
                   <option value="{{primary_key_of $current_value}}" selected>{{.Value}}</option>
                 {{end}}
               {{else}}
-                {{range $values := (.Meta.Config.GetCollection .Record .Context)}}
-                  {{if (is_equal $current_value (index $values 0))}}
+                {{range $values := ($meta.Config.GetCollection .Record .Context)}}
+                  {{if ($meta.Config.Eq $current_value (index $values 0))}}
                     <option value="{{index $values 0}}" selected>{{index $values 1}}</option>
                   {{else}}
                     <option value="{{index $values 0}}" data-cv="{{$current_value}}">{{index $values 1}}</option>

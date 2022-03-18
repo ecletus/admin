@@ -156,6 +156,7 @@ type SelectOneConfig struct {
 	SelfFilterParam      string
 	meta                 *Meta
 	BlankFormattedValuer func(ctx *Context, record interface{}) template.HTML
+	EqFunc               func(a interface{}, b string) bool
 }
 
 func (cfg *SelectOneConfig) PrepareMetaContext(ctx *MetaContext, record interface{}) {
@@ -167,6 +168,13 @@ func (cfg *SelectOneConfig) PrepareMetaContext(ctx *MetaContext, record interfac
 			})
 		}
 	}
+}
+
+func (cfg *SelectOneConfig) Eq(a interface{}, b string) bool {
+	if cfg.EqFunc == nil {
+		return fmt.Sprint(a) == b
+	}
+	return cfg.EqFunc(a, b)
 }
 
 func (cfg *SelectOneConfig) basic() {
@@ -757,6 +765,17 @@ func (cfg *SelectOneConfig) prepareDataSource(field *aorm.StructField, res *Reso
 					label = cloneContext.Resource.GetDefinedMeta(BASIC_META_LABEL).Value(cloneContext.Context, value)
 				)
 				results = append(results, []string{aorm.IdOf(value).String(), label.(string)})
+			}
+			return
+		}
+	}
+
+	// Set GetCollection if normal select mode
+	if cfg.EqFunc == nil && field != nil {
+		switch t := reflect.New(indirectType(field.Struct.Type)).Interface().(type) {
+		case SelectEqualer:
+			cfg.EqFunc = func(a interface{}, b string) bool {
+				return t.SelectOneItemEq(a, b)
 			}
 			return
 		}

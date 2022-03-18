@@ -1,5 +1,9 @@
 package admin
 
+type SelectEqualer interface {
+	SelectOneItemEq(a interface{}, b string) bool
+}
+
 type SelectCollectionProvider interface {
 	GetCollection() [][]string
 }

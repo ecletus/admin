@@ -37,6 +37,14 @@ func (f *FieldFilter) FormatTerm(term interface{}) interface{} {
 	if f.TermFormatterFunc != nil {
 		return f.TermFormatterFunc(term)
 	}
+
+	if s, ok := term.(string); ok {
+		if reflect.PtrTo(f.Struct.Struct.Type).Implements(reflect.TypeOf((*aorm.StringParser)(nil)).Elem()) {
+			v := reflect.New(f.Struct.Struct.Type)
+			_ = v.Interface().(aorm.StringParser).ParseString(s)
+			term = v.Elem().Interface()
+		}
+	}
 	return term
 }
 

@@ -32,7 +32,7 @@ func (this *StringConfig) ConfigureQorMeta(metaor resource.Metaor) {
 
 	if this.MaxLen > 0 {
 		meta.Validator(func(record interface{}, values *resource.MetaValue, ctx *core.Context) (err error) {
-			if v := values.FirstStringValue(); v != "" && len(v) > int(this.MaxLen) {
+			if v := values.StringValue(); v != "" && len(v) > int(this.MaxLen) {
 				msg := fmt.Sprintf(ctx.Ts(I18NGROUP+".errors.validations.too_long_text"), this.MaxLen)
 				return resource.ErrField(ctx, record, values.Meta.GetFieldName(), values.Meta.GetRecordLabelC(ctx, record))(msg)
 			}

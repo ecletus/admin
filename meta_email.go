@@ -26,9 +26,9 @@ func (e *EmailConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	e.StringConfig.MaxLen = types.EmailSize
 	e.StringConfig.ConfigureQorMeta(metaor)
 	m.Validator(func(record interface{}, values *resource.MetaValue, ctx *core.Context) (err error) {
-		if v := values.FirstStringValue(); v != "" {
+		if v := values.StringValue(); v != "" {
 			v = strings.ToLower(v)
-			values.Value.([]string)[0] = v
+			values.SetStringValue(v)
 			doErr := resource.ErrField(ctx, record, values.Meta.GetFieldName(), values.Meta.GetRecordLabelC(ctx, record))
 			if checkmail.ValidateFormat(v) != nil {
 				return doErr(fmt.Sprintf(ctx.Ts(I18NGROUP+".errors.validations.email.bad_format"), v))

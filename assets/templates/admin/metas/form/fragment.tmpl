@@ -2,10 +2,10 @@
     {{if (.MetaValue.Raw.OnlyEnabledField .Context)}}
         <div class="qor-field">
             <label class="mdl-switch mdl-js-switch mdl-js-ripple-effect" {{if .InputId}}for="{{.InputId}}"{{end}}>
-                <input type="checkbox" {{if .InputId}}id="{{.InputId}}"{{end}} name="{{.InputName}}.FragmentEnabled" class="mdl-switch__input"
-                       type="checkbox" {{if .MetaValue.Raw.EnabledFieldValue}}checked{{end}}>
-                <span class="qor-field__label mdl-switch__label">{{t .MetaValue.Raw.Resource.SingularLabelKey}}</span>
                 <input type="hidden" name="{{.InputName}}.FragmentEnabled" value="{{if .MetaValue.Raw.EnabledFieldValue}}true{{end}}">
+                <input type="checkbox" {{if .InputId}}id="{{.InputId}}"{{end}} name="{{.InputName}}.FragmentEnabled" class="mdl-switch__input"
+                       {{if .MetaValue.Raw.EnabledFieldValue}}checked{{end}}>
+                <span class="qor-field__label mdl-switch__label">{{t .MetaValue.Raw.Resource.SingularLabelKey}}</span>
             </label>
         </div>
     {{else}}

@@ -121,7 +121,7 @@ defaults:
 						return
 					}
 				} else if v := filterArgument.Value.Get("Value"); v != nil {
-					filterArgument.GoValue = v.FirstStringValue()
+					filterArgument.GoValue = v.StringValue()
 				}
 				this.Filters[filter.ID] = filterArgument
 				db = filter.Handler(db, filterArgument)

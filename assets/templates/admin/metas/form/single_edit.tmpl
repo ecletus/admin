@@ -38,10 +38,10 @@
                   {{if not .Meta.HiddenLabel}}
                       {{if and (not .ReadOnly) (not $required) (not (.Meta.Tags.Flag "DEFAULT"))}}
                           <label class="mdl-switch mdl-js-switch mdl-js-ripple-effect">
+                              <input type="hidden" name="{{.InputName}}.@enabled" value="false">
                               <input type="checkbox" name="{{.InputName}}.@enabled" class="mdl-switch__input"
                                      type="checkbox" {{if .Value}}checked{{end}} data-toggle="single_edit">
                               <span class="qor-field__label mdl-switch__label">{{meta_record_label .Meta .Record}}</span>
-                              <input type="hidden" name="{{.InputName}}.@enabled" value="false">
                           </label>
                       {{else}}
                           <span class="qor-field__label" for="{{.InputId}}">

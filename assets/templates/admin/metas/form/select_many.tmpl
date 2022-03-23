@@ -96,6 +96,9 @@
     {{end}}
 
     <div class="qor-field__edit qor-field__block qor-field__selectmany" {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}data-toggle="qor.selectmany"{{end}} {{if not (has_update_permission .Meta)}}data-disabled="disabled"{{end}}>
+      {{if .Meta.Config.AllowBlank}}
+        <input type="hidden" name="{{.InputName}}" />
+      {{end}}
       {{if (eq .Meta.Config.SelectMode "bottom_sheet")}}
         <ul class="qor-field__selected-many">
           {{range $value := $current_values}}
@@ -149,9 +152,6 @@
             {{end}}
           {{end}}
         </select>
-      {{end}}
-      {{if .Meta.Config.AllowBlank}}
-        <input type="hidden" name="{{.InputName}}" />
       {{end}}
     </div>
   </div>

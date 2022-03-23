@@ -74,7 +74,7 @@ func (this *UintConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	if meta.Setter == nil {
 		meta.Meta.Setter = resource.SingleFieldSetter(meta.FieldName, func(ptr bool, field reflect.Value, metaValue *resource.MetaValue, ctx *core.Context, record interface{}) (err error) {
 			var (
-				v = metaValue.FirstStringValue()
+				v = metaValue.StringValue()
 				i uint64
 			)
 			if v != "" {

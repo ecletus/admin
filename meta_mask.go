@@ -38,7 +38,7 @@ func (this *MaskConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	meta.Type = "string_mask"
 	if meta.Setter == nil && this.Unmask != nil {
 		meta.Meta.Setter = resource.SingleFieldSetter(meta.FieldName, func(_ bool, field reflect.Value, metaValue *resource.MetaValue, context *core.Context, record interface{}) (err error) {
-			if value := metaValue.FirstStringValue(); value == "" {
+			if value := metaValue.LastStringValue(); value == "" {
 				value = this.Unmask(context, record, value)
 				utils.SetNonZero(field, value)
 			} else {

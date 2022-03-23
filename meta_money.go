@@ -149,7 +149,7 @@ func (this *MoneyConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	if meta.Setter == nil || this.NewValue != nil {
 		setter := func(_ bool, field reflect.Value, metaValue *resource.MetaValue, context *core.Context, record interface{}) (err error) {
 			var values []money.Money
-			if values, err = this.Parse(context, record, metaValue.FirstStringValue()); err != nil {
+			if values, err = this.Parse(context, record, metaValue.StringValue()); err != nil {
 				return err
 			}
 			v := values[0]

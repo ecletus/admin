@@ -559,7 +559,7 @@ func (cfg *SelectOneConfig) FilterValue(filter *Filter, context *Context) interf
 		return nil
 	}
 
-	keyword = arg.Value.Values[0].FirstStringValue()
+	keyword = arg.Value.Values[0].StringValue()
 
 	if keyword != "" && cfg.RemoteDataResource != nil {
 		result := cfg.RemoteDataResource.Resource.NewStruct(context.Context.Site)

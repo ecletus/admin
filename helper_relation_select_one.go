@@ -171,7 +171,7 @@ func DoSelectOption(many bool, baseOpt SelectConfigOption, r *Resource, names ..
 					}()
 
 					var (
-						v  = metaValue.FirstStringValue()
+						v  = metaValue.StringValue()
 						ID aorm.ID
 					)
 

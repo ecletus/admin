@@ -129,7 +129,7 @@ func (this *Resource) SetupMetas() {
 					},
 					Type: "hidden_primary_key",
 					Setter: func(record interface{}, metaValue *resource.MetaValue, context *core.Context) error {
-						if v := metaValue.FirstStringValue(); v != "" {
+						if v := metaValue.StringValue(); v != "" {
 							if ID, err := this.ParseID(v); err != nil {
 								return err
 							} else {

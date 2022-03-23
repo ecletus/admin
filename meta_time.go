@@ -121,7 +121,7 @@ func (this *TimeConfig) ConfigureQorMeta(metaor resource.Metaor) {
 	if meta.Setter == nil {
 		meta.Meta.Setter = resource.SingleFieldSetter(meta.FieldName, func(_ bool, field reflect.Value, metaValue *resource.MetaValue, context *core.Context, record interface{}) (err error) {
 			var times []time.Time
-			if times, err = this.Parse(context, metaValue.FirstStringValue()); err != nil {
+			if times, err = this.Parse(context, metaValue.StringValue()); err != nil {
 				return err
 			}
 			utils.SetNonZero(field, times[0])

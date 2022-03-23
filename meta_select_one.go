@@ -172,6 +172,9 @@ func (cfg *SelectOneConfig) PrepareMetaContext(ctx *MetaContext, record interfac
 
 func (cfg *SelectOneConfig) Eq(a interface{}, b string) bool {
 	if cfg.EqFunc == nil {
+		if rv := reflect.ValueOf(a); rv.Kind() == reflect.String {
+			return rv.String() == b
+		}
 		return fmt.Sprint(a) == b
 	}
 	return cfg.EqFunc(a, b)

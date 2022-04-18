@@ -13,7 +13,6 @@
     'use strict';
 
     let _ = window._,
-        FormData = window.FormData,
         NAMESPACE = 'qor.bottomsheets',
         EVENT_CLICK = 'click.' + NAMESPACE,
         EVENT_SUBMIT = 'submit.' + NAMESPACE,
@@ -376,7 +375,7 @@
                 $form = $(form),
                 _this = this,
                 url = $form.prop('action'),
-                formData = new FormData(form),
+                formData = QOR.FormData(form).formData(),
                 $bottomsheets = $form.closest('.qor-bottomsheets'),
                 resourseData = $bottomsheets.data(),
                 ajaxType = resourseData.ajaxType,

@@ -89,6 +89,9 @@ func (this *TimeConfig) FormattedValue(meta *Meta, record interface{}, context *
 			}
 			t = date
 		default:
+			if date == nil {
+				return nil
+			}
 			panic("bad time value")
 		}
 	}

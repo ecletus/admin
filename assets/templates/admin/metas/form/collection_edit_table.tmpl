@@ -49,7 +49,7 @@
                         {{render_meta_with_path_ctx $itemContext "{{index}}" $meta $typ "mode-single"}}
                     </td>
                 {{end}}
-                <td class="mdl-data-table__cell--non-numeric"><button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
+                <td><button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
                         <i class="material-icons md-18">delete</i>
                     </button></td>
             </tr>
@@ -90,10 +90,10 @@
                                 {{if .Meta}}
                                     {{$m := .Meta}}
                                     {{if $m.Icon}}
-                                        <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}} class="mdl-data-table__cell--non-numeric qor-table__icon-header"></th>
+                                        <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}} class="qor-table__icon-header"></th>
                                     {{else}}
                                         {{$style := $m.UITags.GetString "STYLE"}}
-                                        <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}} {{if $style}}style="{{$style}}" {{end}} class="mdl-data-table__cell--non-numeric" data-heading="{{$m.Name}}">{{$title}}{{if and $this.NotReadOnly $m.Required}} <i class="required-asterisk">*</i>{{end}}
+                                        <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}} {{if $style}}style="{{$style}}" {{end}}data-heading="{{$m.Name}}">{{$title}}{{if and $this.NotReadOnly $m.Required}} <i class="required-asterisk">*</i>{{end}}
                                             {{- if $helpEnabled -}}
                                                 {{$help := meta_help_ctx $child $m}}
                                                 {{if $help}}

@@ -496,7 +496,7 @@ func (this *Resource) configureRestorer() {
 			scheme.DefaultFilter(&DBFilter{
 				Name: "deleted",
 				Handler: func(_ *Context, db *aorm.DB) (*aorm.DB, error) {
-					return db.Where(aorm.IQ("{}.deleted_at IS NOT NULL")).Unscoped(), nil
+					return db.Where(aorm.IQ("_.deleted_at IS NOT NULL")).Unscoped(), nil
 				},
 			})
 			scheme.NotMount = true

@@ -12,7 +12,7 @@
         {{range $index, $h := $metas.Headers}}
             <tr>
                 {{if and (eq $index 0) (not (($context.Request.URL.Query).Get ":no_actions"))}}
-                    <th rowspan="{{len $metas.Headers}}" scope="row" class="mdl-data-table__cell--non-numeric qor-table__actions"></th>
+                    <th rowspan="{{len $metas.Headers}}" scope="row" class="qor-table__actions"></th>
                 {{end}}
 
                 {{range $h}}
@@ -20,13 +20,13 @@
                     {{if .Meta}}
                         {{$meta := .Meta}}
                         {{if $meta.Icon}}
-                            <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}} class="mdl-data-table__cell--non-numeric qor-table__icon-header"></th>
+                            <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}} class="qor-table__icon-header"></th>
                         {{else}}
                             {{$is_sorted := eq $order_by $meta.FieldName}}
                             {{$is_desc_sorted := eq $order_by (print $meta.FieldName ":desc")}}
                             {{$sortable := $context.Scheme.IsSortableMeta $meta.Name}}
                             <th{{if .RowSpan}} rowspan="{{.RowSpan}}"{{end}}{{if .ColSpan}} colspan="{{.ColSpan}}"{{end}}
-                                class="mdl-data-table__cell--non-numeric {{if $sortable}}{{if (or $is_sorted $is_desc_sorted)}}is-sorted{{else}}is-not-sorted{{end}}{{end}}"
+                                class="{{if $sortable}}{{if (or $is_sorted $is_desc_sorted)}}is-sorted{{else}}is-not-sorted{{end}}{{end}}"
                                 data-heading="{{$meta.Name}}"
                                 {{if $sortable}}{{if $is_sorted}}data-order-by="{{$meta.FieldName}}:desc"
                                 {{else}}data-order-by="{{$meta.FieldName}}"{{end}}{{end}}>{{meta_label $meta}}

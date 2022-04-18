@@ -12,8 +12,7 @@
 })(function ($) {
     'use strict';
 
-    let FormData = window.FormData,
-        NAMESPACE = 'qor.selectcore',
+    let NAMESPACE = 'qor.selectcore',
         EVENT_SELECTCORE_BEFORESEND = 'selectcoreBeforeSend.' + NAMESPACE,
         EVENT_ONSELECT = 'afterSelected.' + NAMESPACE,
         EVENT_ONSUBMIT = 'afterSubmitted.' + NAMESPACE,
@@ -115,68 +114,66 @@
 
             $(document).trigger(EVENT_SELECTCORE_BEFORESEND);
 
-            if (FormData) {
-                e.preventDefault();
+            e.preventDefault();
 
-                $.ajax($form.prop('action'), {
-                    method: $form.prop('method'),
-                    data: new FormData(form),
-                    dataType: 'json',
-                    processData: false,
-                    contentType: false,
-                    headers: {
-                        'X-Layout': 'lite',
-                        'X-Redirection-Disabled': true
-                    },
-                    beforeSend: function () {
-                        $form
-                            .parent()
-                            .find('.qor-error')
-                            .remove();
-                        $submit.prop('disabled', true);
-                    },
-                    success: function (json) {
-                        data = json;
-                        data.primaryKey = data.ID;
+            $.ajax($form.prop('action'), {
+                method: $form.prop('method'),
+                data: QOR.FormData(form).formData(),
+                dataType: 'json',
+                processData: false,
+                contentType: false,
+                headers: {
+                    'X-Layout': 'lite',
+                    'X-Redirection-Disabled': true
+                },
+                beforeSend: function () {
+                    $form
+                        .parent()
+                        .find('.qor-error')
+                        .remove();
+                    $submit.prop('disabled', true);
+                },
+                success: function (json) {
+                    data = json;
+                    data.primaryKey = data.ID;
 
-                        $('.qor-error').remove();
+                    $('.qor-error').remove();
 
-                        if (onSubmit && $.isFunction(onSubmit)) {
-                            onSubmit(data, e);
-                            $(document).trigger(EVENT_ONSUBMIT);
-                        } else {
-                            _this.refresh();
-                        }
-                    },
-                    error: function (xhr, textStatus, errorThrown) {
-                        let error;
+                    if (onSubmit && $.isFunction(onSubmit)) {
+                        onSubmit(data, e);
+                        $(document).trigger(EVENT_ONSUBMIT);
+                    } else {
+                        _this.refresh();
+                    }
+                },
+                error: function (xhr, textStatus, errorThrown) {
+                    let error;
 
-                        if (xhr.responseJSON) {
-                            error = `<ul class="qor-error">
+                    if (xhr.responseJSON) {
+                        error = `<ul class="qor-error">
                                         <li><label>
                                             <i class="material-icons">error</i>
                                             <span>${xhr.responseJSON.errors[0]}</span>
                                         </label></li>
                                     </ul>`;
-                        } else {
-                            error = `<ul class="qor-error">${$(xhr.responseText)
-                                .find('#errors')
-                                .html()}</ul>`;
-                        }
-
-                        $('.qor-bottomsheets .qor-page__body').scrollTop(0);
-
-                        if (xhr.status === 422 && error) {
-                            $form.before(error);
-                        } else {
-                            window.alert([textStatus, errorThrown].join(': '));
-                        }
-                    },
-                    complete: function () {
-                        $submit.prop('disabled', false);
+                    } else {
+                        error = `<ul class="qor-error">${$(xhr.responseText)
+                            .find('#errors')
+                            .html()}</ul>`;
                     }
-                });
-            }
+
+                    $('.qor-bottomsheets .qor-page__body').scrollTop(0);
+
+                    if (xhr.status === 422 && error) {
+                        $form.before(error);
+                    } else {
+                        window.alert([textStatus, errorThrown].join(': '));
+                    }
+                },
+                complete: function () {
+                    $submit.prop('disabled', false);
+                }
+            });
         },
 
         refresh: function () {

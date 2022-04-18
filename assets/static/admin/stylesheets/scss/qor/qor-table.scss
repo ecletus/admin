@@ -1,0 +1,117 @@
+.qor-table {
+  border-collapse: separate;
+  border-spacing: 0;
+
+  td {
+    border-top: 0;
+    border-bottom-color: $color-dash;
+    border-left: 1px solid $color-dash;
+
+    &:last-of-type {
+      border-right: 1px solid $color-dash;
+    }
+
+    &:is([scope=row].qor-table__actions) {
+      > button.mdl-button--icon {
+        height: 24px;
+        width: 24px;
+        min-width: 24px;
+      }
+    }
+  }
+
+  thead {
+    position: -webkit-sticky;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    @include shadow-2dp();
+
+    // position: relative;
+
+    th {
+      background-color: $table-header-bg;
+      font-size: 12px;
+      font-weight: 400;
+      text-align: center;
+      background-clip: padding-box;
+      border-left: 1px solid $color-dash;
+      border-bottom: 1px solid $color-dash;
+
+      &.qor-table__actions {
+        width: 80px;
+      }
+    }
+
+    tr:first-child th {
+      border-top: 1px solid $color-dash;
+    }
+
+    tr th:last-child {
+      border-right: 1px solid $color-dash;
+    }
+  }
+
+  a:not([class*='mdl-button']) {
+    color: unquote('rgba(#{$color-black}, 0.87)');
+    font-weight: 400;
+  }
+
+  tbody {
+    tr {
+      // position: static;
+      &:hover td {
+        background-color: rgba(253, 228, 0, 0.5);
+      }
+
+      &.is-selected td {
+        background-color: rgba(250, 39, 64, 0.32);
+        font-weight: bold;
+      }
+    }
+  }
+
+  img:not([data-cropper]) {
+    width: auto !important;
+    height: 24px !important;
+    max-height: 24px !important;
+    max-width: 54px !important;
+  }
+
+  &.is-sortable > thead > tr > th {
+    &[data-order-by] {
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    &.is-sorted, &.is-not-sorted {
+      color: unquote('rgb(#{$color-black})');
+      font-weight: 500;
+
+      &[data-order-by]::after {
+        margin-left: 8px;
+        font-size: 14px;
+        content: '\e164';
+        vertical-align: middle;
+        @extend .material-icons;
+      }
+    }
+
+    &.is-sorted {
+      &[data-order-by]::after {
+        content: '\e164';
+      }
+
+      &[data-order-by*=':desc']::after {
+        transform: scaleY(-1);
+      }
+    }
+
+    &.is-not-sorted {
+      &[data-order-by]::after {
+        color: unquote('rgb(#{$palette-grey-500})');
+        content: '\e8d5';
+      }
+    }
+  }
+}

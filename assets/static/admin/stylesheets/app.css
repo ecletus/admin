@@ -184,8 +184,6 @@
 [mdl-icon-name] > a::after,
 [mdl-icon-name] > span::before,
 [mdl-icon-name] > span::after,
-.qor-table.is-sortable > thead > tr > th.is-sorted[data-order-by]::after,
-.qor-table.is-sortable > thead > tr > th.is-not-sorted[data-order-by]::after,
 [qor-icon-name] > a::before,
 [qor-icon-name] > a::after,
 [qor-icon-name] > span::before,
@@ -222,8 +220,6 @@
   [mdl-icon-name] > a.md-14::after,
   [mdl-icon-name] > span.md-14::before,
   [mdl-icon-name] > span.md-14::after,
-  .qor-table.is-sortable > thead > tr > th.md-14.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-14.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-14::before,
   [qor-icon-name] > a.md-14::after,
   [qor-icon-name] > span.md-14::before,
@@ -238,8 +234,6 @@
   [mdl-icon-name] > a.md-18::after,
   [mdl-icon-name] > span.md-18::before,
   [mdl-icon-name] > span.md-18::after,
-  .qor-table.is-sortable > thead > tr > th.md-18.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-18.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-18::before,
   [qor-icon-name] > a.md-18::after,
   [qor-icon-name] > span.md-18::before,
@@ -254,8 +248,6 @@
   [mdl-icon-name] > a.md-24::after,
   [mdl-icon-name] > span.md-24::before,
   [mdl-icon-name] > span.md-24::after,
-  .qor-table.is-sortable > thead > tr > th.md-24.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-24.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-24::before,
   [qor-icon-name] > a.md-24::after,
   [qor-icon-name] > span.md-24::before,
@@ -270,8 +262,6 @@
   [mdl-icon-name] > a.md-36::after,
   [mdl-icon-name] > span.md-36::before,
   [mdl-icon-name] > span.md-36::after,
-  .qor-table.is-sortable > thead > tr > th.md-36.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-36.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-36::before,
   [qor-icon-name] > a.md-36::after,
   [qor-icon-name] > span.md-36::before,
@@ -286,8 +276,6 @@
   [mdl-icon-name] > a.md-48::after,
   [mdl-icon-name] > span.md-48::before,
   [mdl-icon-name] > span.md-48::after,
-  .qor-table.is-sortable > thead > tr > th.md-48.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-48.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-48::before,
   [qor-icon-name] > a.md-48::after,
   [qor-icon-name] > span.md-48::before,
@@ -302,8 +290,6 @@
   [mdl-icon-name] > a.md-dark::after,
   [mdl-icon-name] > span.md-dark::before,
   [mdl-icon-name] > span.md-dark::after,
-  .qor-table.is-sortable > thead > tr > th.md-dark.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-dark.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-dark::before,
   [qor-icon-name] > a.md-dark::after,
   [qor-icon-name] > span.md-dark::before,
@@ -318,8 +304,6 @@
   [mdl-icon-name] > a.md-dark.md-inactive::after,
   [mdl-icon-name] > span.md-dark.md-inactive::before,
   [mdl-icon-name] > span.md-dark.md-inactive::after,
-  .qor-table.is-sortable > thead > tr > th.md-dark.md-inactive.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-dark.md-inactive.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-dark.md-inactive::before,
   [qor-icon-name] > a.md-dark.md-inactive::after,
   [qor-icon-name] > span.md-dark.md-inactive::before,
@@ -334,8 +318,6 @@
   [mdl-icon-name] > a.md-light::after,
   [mdl-icon-name] > span.md-light::before,
   [mdl-icon-name] > span.md-light::after,
-  .qor-table.is-sortable > thead > tr > th.md-light.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-light.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-light::before,
   [qor-icon-name] > a.md-light::after,
   [qor-icon-name] > span.md-light::before,
@@ -350,8 +332,6 @@
   [mdl-icon-name] > a.md-light.md-inactive::after,
   [mdl-icon-name] > span.md-light.md-inactive::before,
   [mdl-icon-name] > span.md-light.md-inactive::after,
-  .qor-table.is-sortable > thead > tr > th.md-light.md-inactive.is-sorted[data-order-by]::after,
-  .qor-table.is-sortable > thead > tr > th.md-light.md-inactive.is-not-sorted[data-order-by]::after,
   [qor-icon-name] > a.md-light.md-inactive::before,
   [qor-icon-name] > a.md-light.md-inactive::after,
   [qor-icon-name] > span.md-light.md-inactive::before,
@@ -6798,13 +6778,15 @@
   background: rgb(255,255,255);
 }
 .qor-layout .mdl-layout-text {
-  color: rgba(255,255,255, .54);
+    color: rgba(255, 255, 255, .54);
 }
-.qor-layout .mdl-navigation__link > .material-icons, .qor-layout .mdl-navigation__link[mdl-icon-name] > a::before, .qor-layout .mdl-navigation__link[mdl-icon-name] > a::after, .qor-layout .mdl-navigation__link[mdl-icon-name] > span::before, .qor-layout .mdl-navigation__link[mdl-icon-name] > span::after, .qor-layout .qor-table.is-sortable > thead > tr.mdl-navigation__link > th.is-sorted[data-order-by]::after, .qor-layout .qor-table.is-sortable > thead > tr.mdl-navigation__link > th.is-not-sorted[data-order-by]::after, .qor-layout .mdl-navigation__link[qor-icon-name] > a::before, .qor-layout .mdl-navigation__link[qor-icon-name] > a::after, .qor-layout .mdl-navigation__link[qor-icon-name] > span::before, .qor-layout .mdl-navigation__link[qor-icon-name] > span::after, .qor-layout [data-toggle='qor.tab'] .mdl-navigation__link > .qor-layout__tab-right:after, [data-toggle='qor.tab'] .qor-layout .mdl-navigation__link > .qor-layout__tab-right:after, .qor-layout [data-toggle='qor.tab'] .mdl-navigation__link > .qor-layout__tab-left:after, [data-toggle='qor.tab'] .qor-layout .mdl-navigation__link > .qor-layout__tab-left:after {
-  vertical-align: middle;
+
+.qor-layout .mdl-navigation__link > .material-icons, .qor-layout .mdl-navigation__link[mdl-icon-name] > a::before, .qor-layout .mdl-navigation__link[mdl-icon-name] > a::after, .qor-layout .mdl-navigation__link[mdl-icon-name] > span::before, .qor-layout .mdl-navigation__link[mdl-icon-name] > span::after, .qor-layout .mdl-navigation__link[qor-icon-name] > a::before, .qor-layout .mdl-navigation__link[qor-icon-name] > a::after, .qor-layout .mdl-navigation__link[qor-icon-name] > span::before, .qor-layout .mdl-navigation__link[qor-icon-name] > span::after, .qor-layout [data-toggle='qor.tab'] .mdl-navigation__link > .qor-layout__tab-right:after, [data-toggle='qor.tab'] .qor-layout .mdl-navigation__link > .qor-layout__tab-right:after, .qor-layout [data-toggle='qor.tab'] .mdl-navigation__link > .qor-layout__tab-left:after, [data-toggle='qor.tab'] .qor-layout .mdl-navigation__link > .qor-layout__tab-left:after {
+    vertical-align: middle;
 }
+
 .qor-layout .mdl-layout__drawer {
-  background-color: #fff;
+    background-color: #fff;
 }
 .qor-layout .mdl-layout__drawer .sidebar-header {
   display: flex;
@@ -7452,16 +7434,18 @@ button.qor-fieldset__add:hover, button.qor-fieldset__add:active, button.qor-fiel
 .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected > span {
   font-size: 12px;
 }
+
 .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove {
-  position: relative;
-  z-index: 100; 
-  margin-left: 0;
+    position: relative;
+    margin-left: 0;
 }
-.qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove > .material-icons, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[mdl-icon-name] > a::before, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[mdl-icon-name] > a::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[mdl-icon-name] > span::before, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[mdl-icon-name] > span::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-table.is-sortable > thead > tr.qor-selected__remove > th.is-sorted[data-order-by]::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-table.is-sortable > thead > tr.qor-selected__remove > th.is-not-sorted[data-order-by]::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[qor-icon-name] > a::before, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[qor-icon-name] > a::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[qor-icon-name] > span::before, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[qor-icon-name] > span::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected [data-toggle='qor.tab'] .qor-selected__remove > .qor-layout__tab-right:after, [data-toggle='qor.tab'] .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove > .qor-layout__tab-right:after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected [data-toggle='qor.tab'] .qor-selected__remove > .qor-layout__tab-left:after, [data-toggle='qor.tab'] .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove > .qor-layout__tab-left:after {
-  font-size: 16px;
+
+.qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove > .material-icons, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[mdl-icon-name] > a::before, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[mdl-icon-name] > a::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[mdl-icon-name] > span::before, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[mdl-icon-name] > span::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[qor-icon-name] > a::before, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[qor-icon-name] > a::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[qor-icon-name] > span::before, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove[qor-icon-name] > span::after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected [data-toggle='qor.tab'] .qor-selected__remove > .qor-layout__tab-right:after, [data-toggle='qor.tab'] .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove > .qor-layout__tab-right:after, .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected [data-toggle='qor.tab'] .qor-selected__remove > .qor-layout__tab-left:after, [data-toggle='qor.tab'] .qor-field.collection-edit-tabled .collection-edit-table td .qor-field__selected .qor-selected__remove > .qor-layout__tab-left:after {
+    font-size: 16px;
 }
+
 .qor-field.collection-edit-tabled .collection-edit-table td textarea {
-  min-width: 230px;
+    min-width: 230px;
 }
 .qor-field.collection-edit-tabled .collection-edit-table td .qor-file {
   margin-top: 0;
@@ -8038,122 +8022,6 @@ table {
 
 .qor-table {
   box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .14), 0 3px 1px -2px rgba(0, 0, 0, .2), 0 1px 5px 0 rgba(0, 0, 0, .12);
-  /* &::before {
-        content: ' ';
-        position: absolute;
-        z-index: 0;
-        top: -5px;
-        left: -5px;
-        right: -5px;
-        height: 54px;
-        background-color: $table-header-bg;
-    } */
-  /* Fixed Headers */
-  /*
-    th[scope=row] {
-        z-index: 4;
-    }
-
-    td[scope=row] {
-        background-color: #F2F2F2;
-        z-index: 2;
-    }
-
-    td[scope=row],th[scope=row] {
-        position: -webkit-sticky;
-        position: sticky;
-        left: 0;
-    }
-
-    td:not([scope=row]):first-child,th:not([scope=row]):first-child {
-        left: 0;
-        z-index: 3;
-    }
-
-    tr > th:first-child:is([scope=row].qor-table__actions) {
-        max-width: 36px;
-
-        >.mdl-menu__container {
-            z-index: 1;
-        }
-    }
-    */
-}
-.qor-table td {
-  border-top-color: #bbb;
-  border-bottom-color: #bbb;
-  border-left: 1px solid #bbb;
-}
-.qor-table td:last-of-type {
-  border-right: 1px solid #bbb;
-}
-.qor-table td:is([scope=row].qor-table__actions) > button.mdl-button--icon {
-  width: 24px;
-  min-width: 24px; 
-  height: 24px;
-}
-.qor-table thead {
-  position: -webkit-sticky;
-  position:         sticky;
-  top: 0;
-  z-index: 10;
-  box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .14), 0 3px 1px -2px rgba(0, 0, 0, .2), 0 1px 5px 0 rgba(0, 0, 0, .12);
-}
-.qor-table thead th {
-  font-size: 12px;
-  font-weight: 400;
-  text-align: center;
-  background-color: #eee;
-  background-clip: padding-box; 
-  border: 1px solid #bbb;
-}
-.qor-table thead th.qor-table__actions {
-  width: 80px;
-}
-.qor-table thead th:last-of-type {
-  border-right: 1px solid #bbb;
-}
-.qor-table a:not([class*='mdl-button']) {
-  font-weight: 400; 
-  color: rgba(0,0,0, .87);
-}
-.qor-table tbody tr:hover td {
-  background-color: rgba(253, 228, 0, .5);
-}
-.qor-table tbody tr.is-selected td {
-  font-weight: bold; 
-  background-color: rgba(250, 39, 64, .32);
-}
-.qor-table img:not([data-cropper]) {
-  width: auto !important;
-  max-width: 54px !important; 
-  height: 24px !important;
-  max-height: 24px !important;
-}
-.qor-table.is-sortable > thead > tr > th[data-order-by] {
-  text-decoration: underline;
-  cursor: pointer;
-}
-.qor-table.is-sortable > thead > tr > th.is-sorted, .qor-table.is-sortable > thead > tr > th.is-not-sorted {
-  font-weight: 500; 
-  color: rgb(0,0,0);
-}
-.qor-table.is-sortable > thead > tr > th.is-sorted[data-order-by]::after, .qor-table.is-sortable > thead > tr > th.is-not-sorted[data-order-by]::after {
-  margin-left: 8px;
-  font-size: 14px;
-  vertical-align: middle; 
-  content: '\e164';
-}
-.qor-table.is-sortable > thead > tr > th.is-sorted[data-order-by]::after {
-  content: '\e164';
-}
-.qor-table.is-sortable > thead > tr > th.is-sorted[data-order-by*=':desc']::after {
-  -webkit-transform: scaleY(-1);
-          transform: scaleY(-1);
-}
-.qor-table.is-sortable > thead > tr > th.is-not-sorted[data-order-by]::after {
-  color: rgb(158,158,158);
-  content: '\e8d5';
 }
 
 .qor-theme-publish .qor-table {
@@ -8185,17 +8053,19 @@ table {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .qor-table__content p {
-  max-width: 3000px;
-  max-height: 24px;
-  overflow: hidden;
-  font-size: 13px; 
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    max-width: 3000px;
+    max-height: 24px;
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.qor-table__content > .material-icons, .qor-table__content[mdl-icon-name] > a::before, .qor-table__content[mdl-icon-name] > a::after, .qor-table__content[mdl-icon-name] > span::before, .qor-table__content[mdl-icon-name] > span::after, .qor-table.is-sortable > thead > tr.qor-table__content > th.is-sorted[data-order-by]::after, .qor-table.is-sortable > thead > tr.qor-table__content > th.is-not-sorted[data-order-by]::after, .qor-table__content[qor-icon-name] > a::before, .qor-table__content[qor-icon-name] > a::after, .qor-table__content[qor-icon-name] > span::before, .qor-table__content[qor-icon-name] > span::after, [data-toggle='qor.tab'] .qor-table__content > .qor-layout__tab-right:after, [data-toggle='qor.tab'] .qor-table__content > .qor-layout__tab-left:after {
-  display: inherit;
-  font-size: 20px;
+
+.qor-table__content > .material-icons, .qor-table__content[mdl-icon-name] > a::before, .qor-table__content[mdl-icon-name] > a::after, .qor-table__content[mdl-icon-name] > span::before, .qor-table__content[mdl-icon-name] > span::after, .qor-table__content[qor-icon-name] > a::before, .qor-table__content[qor-icon-name] > a::after, .qor-table__content[qor-icon-name] > span::before, .qor-table__content[qor-icon-name] > span::after, [data-toggle='qor.tab'] .qor-table__content > .qor-layout__tab-right:after, [data-toggle='qor.tab'] .qor-table__content > .qor-layout__tab-left:after {
+    display: inherit;
+    font-size: 20px;
 }
 
 .qor-page .qor-table__actions, .qor-slideout .qor-table__actions {
@@ -8952,20 +8822,23 @@ tr td[data-heading="TREE_NODE_DEPTH_STRING"] pre {
   margin: 0 16px;
   box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .14), 0 3px 1px -2px rgba(0, 0, 0, .2), 0 1px 5px 0 rgba(0, 0, 0, .12);
 }
+
 .qor-pagination > li {
-  display: inline;
+    display: inline;
 }
-.qor-pagination > li .material-icons, .qor-pagination > li [mdl-icon-name] > a::before, .qor-pagination > li [mdl-icon-name] > a::after, .qor-pagination > li [mdl-icon-name] > span::before, .qor-pagination > li [mdl-icon-name] > span::after, .qor-pagination > li .qor-table.is-sortable > thead > tr > th.is-sorted[data-order-by]::after, .qor-pagination > li .qor-table.is-sortable > thead > tr > th.is-not-sorted[data-order-by]::after, .qor-pagination > li [qor-icon-name] > a::before, .qor-pagination > li [qor-icon-name] > a::after, .qor-pagination > li [qor-icon-name] > span::before, .qor-pagination > li [qor-icon-name] > span::after, .qor-pagination > li [data-toggle='qor.tab'] .qor-layout__tab-right:after, [data-toggle='qor.tab'] .qor-pagination > li .qor-layout__tab-right:after, .qor-pagination > li [data-toggle='qor.tab'] .qor-layout__tab-left:after, [data-toggle='qor.tab'] .qor-pagination > li .qor-layout__tab-left:after {
-  line-height: 32px;
+
+.qor-pagination > li .material-icons, .qor-pagination > li [mdl-icon-name] > a::before, .qor-pagination > li [mdl-icon-name] > a::after, .qor-pagination > li [mdl-icon-name] > span::before, .qor-pagination > li [mdl-icon-name] > span::after, .qor-pagination > li [qor-icon-name] > a::before, .qor-pagination > li [qor-icon-name] > a::after, .qor-pagination > li [qor-icon-name] > span::before, .qor-pagination > li [qor-icon-name] > span::after, .qor-pagination > li [data-toggle='qor.tab'] .qor-layout__tab-right:after, [data-toggle='qor.tab'] .qor-pagination > li .qor-layout__tab-right:after, .qor-pagination > li [data-toggle='qor.tab'] .qor-layout__tab-left:after, [data-toggle='qor.tab'] .qor-pagination > li .qor-layout__tab-left:after {
+    line-height: 32px;
 }
+
 .qor-pagination > li > a,
-    .qor-pagination > li > span {
-  position: relative;
-  float: left;
-  min-width: 32px;
-  height: 32px;
-  font-size: 14px;
-  line-height: 32px;
+.qor-pagination > li > span {
+    position: relative;
+    float: left;
+    min-width: 32px;
+    height: 32px;
+    font-size: 14px;
+    line-height: 32px;
   color: #333;
   text-align: center;
   text-decoration: none;

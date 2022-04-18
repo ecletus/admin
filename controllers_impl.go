@@ -77,7 +77,7 @@ func ReadControllerRead(context *Context) (recorde interface{}) {
 				return
 			}
 			err := context.DB().Model(res.Value).
-				Where("deleted_at IS NOT NULL").
+				Where("_.deleted_at IS NOT NULL").
 				Where(query, key...).
 				Count(&qnt).Error
 			if err != nil {

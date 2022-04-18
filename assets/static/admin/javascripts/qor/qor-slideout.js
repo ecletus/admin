@@ -13,7 +13,6 @@
     'use strict';
 
     let $document = $(document),
-        FormData = window.FormData,
         _ = window._,
         NAMESPACE = 'qor.slideout',
         EVENT_KEYUP = 'keyup.' + NAMESPACE,
@@ -218,7 +217,7 @@
                 form = e.target,
                 $form = $(form),
                 $submit = $form.find(':submit'),
-                formData = new FormData(form);
+                formData = QOR.FormData(form, e.originalEvent ? e.originalEvent.submitter : null).formData();
 
             if (e.originalEvent && e.originalEvent.constructor === SubmitEvent) {
                 const $submitter = $(e.originalEvent.submitter),

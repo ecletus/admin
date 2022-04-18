@@ -28,6 +28,117 @@
     };
     window.QOR = QOR;
 
+    QOR.FormData = function (form, submitEl) {
+        function Values(data) {
+            this.values = data;
+            this.formData = function () {
+                const fd = new FormData();
+                for (let key of Object.keys(this.values)) {
+                    for (let v of this.values[key]) {
+                        fd.append(key, v)
+                    }
+                }
+                return fd
+            }
+        }
+
+        const empties = {},
+            submits = [],
+            values = {},
+            tgs = {
+                'INPUT': function () {
+                    let v = '';
+                    if (this.type === 'submit') {
+                        submits.push(this)
+                        return undefined;
+                    } else if (this.type === 'checkbox') {
+                        v = this.checked.toString()
+                    } else if (this.type === 'radio') {
+                        if (this.checked) {
+                            v = $(this).val()
+                        }
+                    } else if (this.type === 'file') {
+                        if (this.files.length)
+                            v = this.files
+                    } else {
+                        v = $(this).val()
+                    }
+                    return v;
+                },
+                'SELECT': function () {
+                    return $(this).val()
+                },
+                'TEXTAREA': function () {
+                    return $(this).val()
+                },
+                'BUTTON': function () {
+                    if (this.type === 'submit') {
+                        submits.push(this)
+                        return undefined;
+                    } else {
+                        return $(this).val()
+                    }
+                }
+            },
+            walk = function (el) {
+                const cb = tgs[el.tagName];
+                if (cb && el.name) {
+                    let append = /\[\]$/.test(el.name),
+                        v = cb.call(el);
+                    if (v !== undefined) {
+                        if (v === '') {
+                            if (!(el.name in values)) {
+                                empties[el.name] = true
+                            }
+                        } else if (append) {
+                            delete (empties[el.name])
+                            if ((el.name in values)) {
+                                if (v.constructor === FileList) {
+                                    for (let i = 0; i < v.length; i++) {
+                                        values[el.name].push(v[i])
+                                    }
+                                } else {
+                                    values[el.name].push(v)
+                                }
+                            } else {
+                                values[el.name] = [v]
+                            }
+                        } else {
+                            delete (empties[el.name]);
+                            if (v.constructor === FileList) {
+                                const items = [];
+                                for (let i = 0; i < v.length; i++) {
+                                    items[items.length] = v[i]
+                                }
+                                values[el.name] = items;
+                            } else {
+                                values[el.name] = [v]
+                            }
+                        }
+                    }
+                } else if (el.childNodes) {
+                    el.childNodes.forEach(walk)
+                }
+            };
+
+        walk(form);
+
+        if (submitEl && submitEl.name && submitEl.type === 'submit') {
+            submits.forEach((e) => {
+                if (e === submitEl) {
+                    values[submitEl.name] = [submitEl.value];
+                }
+            })
+        }
+
+        for (let key of Object.keys(empties)) {
+            if (!/\[\]$/.test(key))
+                values[key] = [''];
+        }
+
+        return new Values(values);
+    };
+
     QOR.showDialog = function (options, msg) {
         options = $.extend({
             ok: true,

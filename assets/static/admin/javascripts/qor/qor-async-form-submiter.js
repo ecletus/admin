@@ -1,4 +1,4 @@
-(function(factory) {
+(function (factory) {
     if (typeof define === 'function' && define.amd) {
         // AMD. Register as anonymous module.
         define(['jquery'], factory);
@@ -9,7 +9,7 @@
         // Browser globals.
         factory(jQuery);
     }
-})(function($) {
+})(function ($) {
     'use strict';
 
     let NAMESPACE = 'qor.asyncFormSubmiter',
@@ -26,7 +26,7 @@
     QorAsyncFormSubmiter.prototype = {
         constructor: QorAsyncFormSubmiter,
 
-        init: function() {
+        init: function () {
             this.bind();
             this.successCallbacks = [];
         },
@@ -35,20 +35,20 @@
             this.successCallbacks.push(cb);
         },
 
-        bind: function() {
+        bind: function () {
             this.$el.bind(EVENT_SUBMIT, this.submit.bind(this))
         },
 
-        unbind: function() {
+        unbind: function () {
             this.$el.off(EVENT_SUBMIT);
         },
 
-        destroy: function() {
+        destroy: function () {
             this.unbind();
             this.$el.removeData(NAMESPACE);
         },
 
-        updateOptions: function(options) {
+        updateOptions: function (options) {
             this.options = $.extend(this.options, options);
         },
 
@@ -60,178 +60,40 @@
                 submitSuccess = this.options.onSubmitSuccess,
                 openPage = this.options.openPage;
 
-            if (window.FormData) {
-                e.preventDefault();
-                let action = $form.prop('action'),
-                    continueEditing = /[?|&]continue_editing=true/.test(action),
-                    formData = new FormData(form),
-                    cfg;
+            e.preventDefault();
+            let action = $form.prop('action'),
+                continueEditing = /[?|&]continue_editing=true/.test(action),
+                formData = QOR.FormData(form, e.originalEvent ? e.originalEvent.submitter : null).formData(),
+                cfg;
 
+            QOR.prepareFormData(formData)
 
-                if (e.originalEvent && e.originalEvent.constructor === SubmitEvent) {
-                    const $submitter = $(e.originalEvent.submitter),
-                        name = $submitter.attr('name'),
-                        val = $submitter.attr('value');
+            if (continueEditing) {
+                action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
+            }
 
-                    if (name && val) {
-                        formData.append(name, val);
-                    }
-                }
+            cfg = {
+                continueEditing: continueEditing,
+                method: $form.prop('method'),
+                data: formData,
+                dataType: 'html',
+                processData: false,
+                contentType: false,
+                headers: {
+                    'X-Layout': 'lite'
+                },
+                beforeSend: function (jqXHR, cfg) {
+                    $submit.prop('disabled', true);
+                },
+                success: function (html, statusText, jqXHR) {
+                    $form.parent().find('.qor-error').trigger('disable').remove();
+                    $form.closest('.qor-page__body').children('#flashes,.qor-error').trigger('disable').remove();
 
-                QOR.prepareFormData(formData)
-
-                if (continueEditing) {
-                    action = action.replace(/([?|&]continue_editing)=true/, '$1_url=true')
-                }
-
-                cfg = {
-                    continueEditing: continueEditing,
-                    method: $form.prop('method'),
-                    data: formData,
-                    dataType: 'html',
-                    processData: false,
-                    contentType: false,
-                    headers: {
-                        'X-Layout': 'lite'
-                    },
-                    beforeSend: function (jqXHR, cfg) {
-                        $submit.prop('disabled', true);
-                    },
-                    success: function (html, statusText, jqXHR) {
-                        $form.parent().find('.qor-error').trigger('disable').remove();
-                        $form.closest('.qor-page__body').children('#flashes,.qor-error').trigger('disable').remove();
-
-                        if (jqXHR.getResponseHeader('X-Frame-Reload') === 'render-body') {
-                            if ($form.closest('.qor-slideout').length) {
-                                $form.closest('.qor-page__body').trigger('disable').html(html).trigger('enable');
-                            } else {
-                                const $error = $(html).find('.qor-error');
-                                $form.before($error);
-
-                                $error.find('> li > label').each(function () {
-                                    let $label = $(this),
-                                        id = $label.attr('for');
-
-                                    if (id) {
-                                        $form
-                                            .find('#' + id)
-                                            .closest('.qor-field')
-                                            .addClass('is-error')
-                                            .append($label.clone().addClass('qor-field__error'));
-                                    }
-                                });
-
-                                const $messages = $form.closest('.qor-page__body').find('#flashes,.qor-error').eq(0);
-                                if ($messages.length) {
-                                    const $scroller = $messages.scrollParent();
-                                    $scroller.scrollTop($messages.scrollTop() + $messages.offset().top)
-                                }
-
-
-                                html = $(html).find('.qor-page__body form:eq(0)').html();
-                                $form.children().trigger('disable').remove();
-                                $form.html(html).children().trigger('enable');
-                            }
-                            return
-                        }
-
-                        // handle file download from form submit
-                        let disposition = jqXHR.getResponseHeader('Content-Disposition');
-                        if (disposition && disposition.indexOf('attachment') !== -1) {
-                            let fileNameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
-                                matches = fileNameRegex.exec(disposition),
-                                contentType = jqXHR.getResponseHeader('Content-Type'),
-                                fileName = '';
-
-                            if (matches != null && matches[1]) {
-                                fileName = matches[1].replace(/['"]/g, '');
-                            }
-
-                            window.QOR.qorAjaxHandleFile(action, contentType, fileName, formData);
-                            $submit.prop('disabled', false);
-
-                            return;
-                        }
-
-                        let xLocation = jqXHR.getResponseHeader('X-Location'),
-                            wLocation = jqXHR.getResponseHeader('X-Location-Window');
-
-                        if (wLocation) {
-                            window.location.href = wLocation;
-                            return
-                        }
-
-                        if (xLocation) {
-                            if ($.isFunction(openPage)) {
-                                openPage(xLocation)
-                                return;
-                            }
-                            window.location.href = xLocation;
-                            return
-                        }
-
-                        let returnUrl = $form.data('returnUrl'),
-                            refreshUrl = $form.data('refreshUrl');
-
-                        if (refreshUrl) {
-                            window.location.href = refreshUrl;
-                            return;
-                        }
-
-                        if (returnUrl) {
-                            if ($.isFunction(openPage)) {
-                                openPage(returnUrl)
-                                return;
-                            }
-                            location.href = returnUrl
-                            return;
-                        }
-
-                        if ($.isFunction(submitSuccess)) {
-                            submitSuccess(html, statusText, jqXHR);
-                            this.successCallbacks.forEach(cb => (cb(html, statusText, jqXHR)));
-                            return;
-                        }
-
-                        let prefix = '/' + location.pathname.split('/')[1],
-                            flashStructs = [];
-
-                        $(html)
-                            .find('.qor-alert')
-                            .each(function (i, e) {
-                                let message = $(e)
-                                    .find('.qor-alert-message')
-                                    .text()
-                                    .trim(),
-                                    type = $(e).data('type');
-                                if (message !== '') {
-                                    flashStructs.push({
-                                        Type: type,
-                                        Message: message,
-                                        Keep: true
-                                    });
-                                }
-                            });
-                        if (flashStructs.length > 0) {
-                            document.cookie = 'qor-flashes=' + btoa(unescape(encodeURIComponent(JSON.stringify(flashStructs)))) + '; path=' + prefix;
-                        }
-
-                        this.successCallbacks.forEach(cb => (cb(html, statusText, jqXHR)));
-                    }.bind(this),
-                    error: function (xhr, textStatus, errorThrown) {
-                        $form.parent().find('.qor-error').remove();
-                        $form.closest('.qor-page__body').children('#flashes,.qor-error').remove();
-
-                        let $error;
-
-                        if (xhr.status === 422) {
-                            $form
-                                .find('.qor-field')
-                                .removeClass('is-error')
-                                .find('.qor-field__error')
-                                .remove();
-
-                            $error = $(xhr.responseText).find('.qor-error');
+                    if (jqXHR.getResponseHeader('X-Frame-Reload') === 'render-body') {
+                        if ($form.closest('.qor-slideout').length) {
+                            $form.closest('.qor-page__body').trigger('disable').html(html).trigger('enable');
+                        } else {
+                            const $error = $(html).find('.qor-error');
                             $form.before($error);
 
                             $error.find('> li > label').each(function () {
@@ -252,29 +114,154 @@
                                 const $scroller = $messages.scrollParent();
                                 $scroller.scrollTop($messages.scrollTop() + $messages.offset().top)
                             }
-                        } else {
-                            QOR.ajaxError.apply(this, arguments)
+
+
+                            html = $(html).find('.qor-page__body form:eq(0)').html();
+                            $form.children().trigger('disable').remove();
+                            $form.html(html).children().trigger('enable');
                         }
-                    }.bind(this),
-                    complete: function () {
-                        $submit.prop('disabled', false);
+                        return
                     }
-                };
 
-                if ($.isFunction(beforeSubmit)) {
-                    beforeSubmit(this, cfg);
+                    // handle file download from form submit
+                    let disposition = jqXHR.getResponseHeader('Content-Disposition');
+                    if (disposition && disposition.indexOf('attachment') !== -1) {
+                        let fileNameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
+                            matches = fileNameRegex.exec(disposition),
+                            contentType = jqXHR.getResponseHeader('Content-Type'),
+                            fileName = '';
+
+                        if (matches != null && matches[1]) {
+                            fileName = matches[1].replace(/['"]/g, '');
+                        }
+
+                        window.QOR.qorAjaxHandleFile(action, contentType, fileName, formData);
+                        $submit.prop('disabled', false);
+
+                        return;
+                    }
+
+                    let xLocation = jqXHR.getResponseHeader('X-Location'),
+                        wLocation = jqXHR.getResponseHeader('X-Location-Window');
+
+                    if (wLocation) {
+                        window.location.href = wLocation;
+                        return
+                    }
+
+                    if (xLocation) {
+                        if ($.isFunction(openPage)) {
+                            openPage(xLocation)
+                            return;
+                        }
+                        window.location.href = xLocation;
+                        return
+                    }
+
+                    let returnUrl = $form.data('returnUrl'),
+                        refreshUrl = $form.data('refreshUrl');
+
+                    if (refreshUrl) {
+                        window.location.href = refreshUrl;
+                        return;
+                    }
+
+                    if (returnUrl) {
+                        if ($.isFunction(openPage)) {
+                            openPage(returnUrl)
+                            return;
+                        }
+                        location.href = returnUrl
+                        return;
+                    }
+
+                    if ($.isFunction(submitSuccess)) {
+                        submitSuccess(html, statusText, jqXHR);
+                        this.successCallbacks.forEach(cb => (cb(html, statusText, jqXHR)));
+                        return;
+                    }
+
+                    let prefix = '/' + location.pathname.split('/')[1],
+                        flashStructs = [];
+
+                    $(html)
+                        .find('.qor-alert')
+                        .each(function (i, e) {
+                            let message = $(e)
+                                    .find('.qor-alert-message')
+                                    .text()
+                                    .trim(),
+                                type = $(e).data('type');
+                            if (message !== '') {
+                                flashStructs.push({
+                                    Type: type,
+                                    Message: message,
+                                    Keep: true
+                                });
+                            }
+                        });
+                    if (flashStructs.length > 0) {
+                        document.cookie = 'qor-flashes=' + btoa(unescape(encodeURIComponent(JSON.stringify(flashStructs)))) + '; path=' + prefix;
+                    }
+
+                    this.successCallbacks.forEach(cb => (cb(html, statusText, jqXHR)));
+                }.bind(this),
+                error: function (xhr, textStatus, errorThrown) {
+                    $form.parent().find('.qor-error').remove();
+                    $form.closest('.qor-page__body').children('#flashes,.qor-error').remove();
+
+                    let $error;
+
+                    if (xhr.status === 422) {
+                        $form
+                            .find('.qor-field')
+                            .removeClass('is-error')
+                            .find('.qor-field__error')
+                            .remove();
+
+                        $error = $(xhr.responseText).find('.qor-error');
+                        $form.before($error);
+
+                        $error.find('> li > label').each(function () {
+                            let $label = $(this),
+                                id = $label.attr('for');
+
+                            if (id) {
+                                $form
+                                    .find('#' + id)
+                                    .closest('.qor-field')
+                                    .addClass('is-error')
+                                    .append($label.clone().addClass('qor-field__error'));
+                            }
+                        });
+
+                        const $messages = $form.closest('.qor-page__body').find('#flashes,.qor-error').eq(0);
+                        if ($messages.length) {
+                            const $scroller = $messages.scrollParent();
+                            $scroller.scrollTop($messages.scrollTop() + $messages.offset().top)
+                        }
+                    } else {
+                        QOR.ajaxError.apply(this, arguments)
+                    }
+                }.bind(this),
+                complete: function () {
+                    $submit.prop('disabled', false);
                 }
+            };
 
-                $.ajax(action, cfg);
+            if ($.isFunction(beforeSubmit)) {
+                beforeSubmit(this, cfg);
             }
+
+            $.ajax(action, cfg);
         }
     };
 
     QorAsyncFormSubmiter.DEFAULTS = {};
 
-    QorAsyncFormSubmiter.plugin = function(options) {
+    QorAsyncFormSubmiter.plugin = function (options) {
         let args = Array.prototype.slice.call(arguments, 1);
-        return this.each(function() {
+        return this.each(function () {
             let $this = $(this),
                 data = $this.data(NAMESPACE),
                 fn = null;
@@ -309,19 +296,19 @@
         return $form.length > 0 && $form.parents('.qor-slideout').length === 0;
     }
 
-    $(function() {
+    $(function () {
         let selector = 'form[data-async="true"]',
             options = {};
 
         $(document)
-            .on(EVENT_DISABLE, function(e) {
+            .on(EVENT_DISABLE, function (e) {
                 let $form = $(selector, e.target);
                 if (!accept($form)) {
                     return
                 }
                 QorAsyncFormSubmiter.plugin.call($form, 'destroy');
             })
-            .on(EVENT_ENABLE, function(e) {
+            .on(EVENT_ENABLE, function (e) {
                 let $form = $(selector, e.target);
                 if (!accept($form)) {
                     return

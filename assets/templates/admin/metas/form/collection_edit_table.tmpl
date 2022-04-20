@@ -107,7 +107,7 @@
                                 {{end}}
                             {{end}}
                             {{if and (eq $index 0) (not $readOnly)}}
-                                <th class="mdl-data-table__cell--non-numeric"> </th>
+                                <th rowspan="{{len $mt.Headers}}"></th>
                             {{end}}
                             </tr>
                         {{end}}
@@ -137,15 +137,16 @@
                             </td>
                         {{end}}
                         {{if not $readOnly}}
-                            <td class="mdl-data-table__cell--non-numeric">
+                            <td>
                                 {{if and (has_delete_permission $meta) ($meta.CanDeleteItem $this.Context $this.Record $item)}}
                                     <button class="mdl-button qor-button--muted mdl-button--icon mdl-js-button qor-fieldset__delete" type="button">
                                             <i class="material-icons md-18">delete</i>
                                     </button>
                                 {{end}}
                             </td>
+
+                            {{if and ($this.Context.Type.HasS "edit") $primaryKey}}<input type="hidden" name="{{$this.InputName}}.{{$index}}.id" value="{{$primaryKey}}" />{{end}}
                         {{end}}
-                        {{if and (not $readOnly) ($this.Context.Type.HasS "edit") $primaryKey}}<input type="hidden" name="{{$this.InputName}}.{{$index}}.id" value="{{$primaryKey}}" />{{end}}
                     </tr>
                 {{end}}
                 </tbody>

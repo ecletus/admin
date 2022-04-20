@@ -7,7 +7,7 @@ import (
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/responder"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 	"github.com/moisespsena-go/httpu"
 
 	"github.com/ecletus/core/resource"

@@ -9,7 +9,7 @@ import (
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/core/utils"
 	"github.com/ecletus/fragment"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 type Fragments struct {

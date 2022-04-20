@@ -7,7 +7,7 @@ import (
 
 	"github.com/ecletus/responder"
 
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 // Delete delete data

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/ecletus/helpers"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 	"github.com/moisespsena-go/maps"
 	"github.com/pkg/errors"
 

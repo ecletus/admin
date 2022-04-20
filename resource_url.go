@@ -8,7 +8,7 @@ import (
 	"github.com/moisespsena-go/maps"
 
 	"github.com/ecletus/core/utils"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 type ResourceURL struct {

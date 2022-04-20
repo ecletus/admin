@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ecletus/common"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 // SettingsStorageInterface settings storage interface

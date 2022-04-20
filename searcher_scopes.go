@@ -2,7 +2,7 @@ package admin
 
 import (
 	"github.com/ecletus/core"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 
 	"regexp"
 

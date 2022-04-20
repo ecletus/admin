@@ -1,6 +1,6 @@
 package admin
 
-import "github.com/moisespsena-go/aorm"
+import "github.com/go-aorm/aorm"
 
 func (this *Resource) CreateMenu(plural bool) *Menu {
 	menuName := this.Name

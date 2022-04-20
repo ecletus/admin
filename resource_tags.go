@@ -8,7 +8,7 @@ import (
 
 	"github.com/moisespsena/template/text/template"
 
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 	tag_scanner "github.com/unapu-go/tag-scanner"
 )
 

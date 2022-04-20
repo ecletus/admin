@@ -9,7 +9,7 @@ import (
 	"github.com/go-errors/errors"
 
 	"github.com/ecletus/core"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 var NotFragmentableError = errors.New("Not fragmentable")

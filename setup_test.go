@@ -3,9 +3,9 @@ package admin_test
 import (
 	"net/http/httptest"
 
-	"github.com/moisespsena-go/aorm"
 	"github.com/ecletus/admin"
 	. "github.com/ecletus/admin/tests/dummy"
+	"github.com/go-aorm/aorm"
 )
 
 var (

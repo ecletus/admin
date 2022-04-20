@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/ecletus/core"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 	"github.com/moisespsena-go/httpu"
 
 	"github.com/ecletus/roles"

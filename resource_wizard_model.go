@@ -5,8 +5,8 @@ import (
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
-	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena-go/aorm/types"
+	"github.com/go-aorm/aorm"
+	"github.com/go-aorm/aorm/types"
 )
 
 type WizardModel struct {

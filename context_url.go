@@ -3,7 +3,7 @@ package admin
 import (
 	"path"
 
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 // RoutePrefix return route prefix of resource

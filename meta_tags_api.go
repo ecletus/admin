@@ -1,6 +1,6 @@
 package admin
 
-import "github.com/moisespsena-go/aorm"
+import "github.com/go-aorm/aorm"
 
 type DefaultMetaTagger interface {
 	AdminDefaultMetaTags() Tags

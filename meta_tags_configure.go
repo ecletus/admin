@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/ecletus/core"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 var MetaConfigureTagsHandlers []func(meta *Meta, tags *MetaTags)

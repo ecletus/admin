@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/ecletus/core/resource"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 	"github.com/moisespsena-go/bintb"
 	"github.com/moisespsena-go/maps"
 )

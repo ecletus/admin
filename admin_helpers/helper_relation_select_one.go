@@ -10,7 +10,7 @@ import (
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 
 	path_helpers "github.com/moisespsena-go/path-helpers"
 

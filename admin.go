@@ -19,7 +19,7 @@ import (
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/helpers"
 	"github.com/ecletus/sites"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 	"github.com/moisespsena/template/html/template"
 )
 

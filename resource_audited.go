@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 func (this *Resource) configureAudited() {

@@ -7,9 +7,9 @@ import (
 
 	"github.com/ecletus/core/helpers"
 	"github.com/ecletus/validations"
+	"github.com/go-aorm/aorm"
+	"github.com/go-aorm/aorm/types/money"
 	"github.com/leekchan/accounting"
-	"github.com/moisespsena-go/aorm"
-	"github.com/moisespsena-go/aorm/types/money"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"golang.org/x/text/message"

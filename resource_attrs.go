@@ -3,7 +3,7 @@ package admin
 import (
 	"reflect"
 
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 func (this *Resource) allAttrs() []string {

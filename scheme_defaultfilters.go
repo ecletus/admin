@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 type DBFilterFunc func(context *Context, db *aorm.DB) (DB *aorm.DB, err error)

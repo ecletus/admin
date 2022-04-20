@@ -6,7 +6,7 @@ import (
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/utils"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 type MetaFilterConfig struct {

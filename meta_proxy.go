@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/resource"

@@ -7,7 +7,7 @@ import (
 
 	"github.com/ecletus/core/resource"
 	"github.com/ecletus/roles"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 type MetaConfig struct {

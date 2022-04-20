@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/ecletus/core/resource"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 type SearchTermHandler = func(searcher *Searcher, db *aorm.DB, keyword string) (_ *aorm.DB, err error)

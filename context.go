@@ -17,7 +17,7 @@ import (
 	"github.com/moisespsena-go/i18n-modular/i18nmod"
 
 	"github.com/ecletus/core/utils"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 
 	"github.com/ecletus/render"
 

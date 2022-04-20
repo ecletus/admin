@@ -20,7 +20,7 @@ import (
 
 	"github.com/ecletus/core"
 	"github.com/ecletus/core/utils"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 var TemplateExecutorMetaValue = template.Must(template.New(PKG + ".meta_value").Parse(`{{if and .MetaValue .MetaValue.Severity -}}

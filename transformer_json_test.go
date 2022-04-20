@@ -6,10 +6,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/moisespsena-go/aorm"
-	"github.com/jinzhu/now"
 	"github.com/ecletus/admin"
 	. "github.com/ecletus/admin/tests/dummy"
+	"github.com/go-aorm/aorm"
+	"github.com/jinzhu/now"
 	"github.com/theplant/testingutils"
 )
 

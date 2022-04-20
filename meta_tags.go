@@ -6,7 +6,7 @@ import (
 
 	tag_scanner "github.com/unapu-go/tag-scanner"
 
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 )
 
 type Tags = tag_scanner.Map

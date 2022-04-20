@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/ecletus/core/resource"
-	"github.com/moisespsena-go/aorm"
+	"github.com/go-aorm/aorm"
 	"github.com/moisespsena-go/maps"
 
 	"github.com/ecletus/roles"
